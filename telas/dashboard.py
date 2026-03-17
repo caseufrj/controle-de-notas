@@ -1,73 +1,89 @@
-# dashboard.py
+# telas/dashboard.py
 import tkinter as tk
-from tkinter import ttk
-from banco import conectar
+from tkinter import ttk, messagebox
+import banco
 
-BODY_BG = "#efefef"
-CARD_BG = "#ffffff"
 
 class Dashboard(tk.Frame):
     def __init__(self, master):
-        super().__init__(master, bg=BODY_BG)
+        super().__init__(master, bg="white")
+        banco.criar_tabelas()
 
-        tk.Label(self, text="Dashboard", font=("Segoe UI Semibold", 18), bg=BODY_BG).pack(anchor="w", padx=20, pady=(20, 10))
+        # Topo: seleção de fornecedor
+        topo = tk.Frame(self, bg="white")
+        topo.pack(fill="x", padx=16, pady=12)
 
-        cards = tk.Frame(self, bg=BODY_BG)
-        cards.pack(anchor="w", padx=20)
+        tk.Label(topo, text="Fornecedor:", bg="white").pack(side="left")
+        self.cb_fornec = ttk.Combobox(topo, state="readonly", width=50)
+        self.cb_fornec.pack(side="left", padx=8)
+        self.cb_fornec.bind("<<ComboboxSelected>>", lambda e: self.atualizar_listas())
 
-        total_fornec = self._scalar("SELECT COUNT(1) FROM fornecedores")
-        total_notas  = self._scalar("SELECT COUNT(1) FROM notas")
-        total_empenhos = self._scalar("SELECT COUNT(1) FROM empenhos")
+        btn_refresh = ttk.Button(topo, text="Atualizar", command=self.atualizar_listas)
+        btn_refresh.pack(side="left", padx=8)
 
-        self._card(cards, "Fornecedores", total_fornec).grid(row=0, column=0, padx=(0,12), pady=6)
-        self._card(cards, "Notas", total_notas).grid(row=0, column=1, padx=(0,12), pady=6)
-        self._card(cards, "Empenhos", total_empenhos).grid(row=0, column=2, padx=(0,12), pady=6)
+        # Split: Saldos Ata / Saldos Empenho
+        split = tk.Frame(self, bg="white")
+        split.pack(fill="both", expand=True, padx=16, pady=8)
 
-        # Saldo de exemplos
-        sec = tk.LabelFrame(self, text="Saldos (amostra)", bg=BODY_BG)
-        sec.pack(fill="x", padx=20, pady=(16, 20))
+        # ---- Saldos Ata ----
+        lf_ata = ttk.LabelFrame(split, text="Saldo de ATA (quantidade)")
+        lf_ata.pack(side="left", fill="both", expand=True, padx=(0,8))
 
-        cols = ("tipo", "id", "fornecedor", "cod_aghu", "saldo")
-        tree = ttk.Treeview(sec, columns=cols, show="headings", height=8)
-        for c in cols:
-            tree.heading(c, text=c.upper())
-            tree.column(c, width=140, stretch=True)
-        tree.pack(fill="both", expand=True)
+        cols_ata = ("pregao","cod_aghu","nome_item","qtde_total","qtde_usada","qtde_saldo")
+        self.tv_ata = ttk.Treeview(lf_ata, columns=cols_ata, show="headings", height=12)
+        for c in cols_ata:
+            self.tv_ata.heading(c, text=c)
+            self.tv_ata.column(c, width=120, anchor="w")
+        self.tv_ata.pack(fill="both", expand=True)
 
-        # Preenche com saldo de ata e empenho (TOP 10)
-        with conectar() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT 'ATA' AS tipo, a.ata_id AS id, f.nome AS fornecedor, a.cod_aghu,
-                       a.qtde_saldo AS saldo
-                FROM vw_saldo_ata a
-                JOIN fornecedores f ON f.id = a.fornecedor_id
-                ORDER BY a.qtde_saldo ASC
-                LIMIT 5
-            """)
-            for r in cur.fetchall():
-                tree.insert("", "end", values=r)
-            cur.execute("""
-                SELECT 'EMPENHO' AS tipo, e.empenho_id AS id, f.nome AS fornecedor, e.cod_aghu,
-                       e.valor_saldo AS saldo
-                FROM vw_saldo_empenho e
-                JOIN fornecedores f ON f.id = e.fornecedor_id
-                ORDER BY e.valor_saldo ASC
-                LIMIT 5
-            """)
-            for r in cur.fetchall():
-                tree.insert("", "end", values=r)
+        # ---- Saldos Empenho ----
+        lf_emp = ttk.LabelFrame(split, text="Saldo de Empenhos (valor)")
+        lf_emp.pack(side="left", fill="both", expand=True, padx=(8,0))
 
-    def _scalar(self, sql):
-        with conectar() as conn:
-            cur = conn.cursor()
-            cur.execute(sql)
-            r = cur.fetchone()
-            return r[0] if r else 0
+        cols_emp = ("cod_aghu","nome_item","vl_total","valor_consumido","valor_saldo")
+        self.tv_emp = ttk.Treeview(lf_emp, columns=cols_emp, show="headings", height=12)
+        for c in cols_emp:
+            self.tv_emp.heading(c, text=c)
+            self.tv_emp.column(c, width=140, anchor="w")
+        self.tv_emp.pack(fill="both", expand=True)
 
-    def _card(self, master, titulo, valor):
-        frame = tk.Frame(master, bg=CARD_BG, highlightbackground="#ddd", highlightthickness=1, width=220, height=90)
-        frame.grid_propagate(False)
-        tk.Label(frame, text=titulo, bg=CARD_BG, fg="#666").grid(row=0, column=0, sticky="w", padx=12, pady=(12,0))
-        tk.Label(frame, text=str(valor), bg=CARD_BG, fg="#222", font=("Segoe UI Semibold", 18)).grid(row=1, column=0, sticky="w", padx=12, pady=(6,10))
-        return frame  
+        self._carregar_fornecedores()
+
+    def _carregar_fornecedores(self):
+        fornecedores = banco.fornecedores_listar()
+        self.map_forn = {f["nome"]: f["id"] for f in fornecedores}
+        self.cb_fornec["values"] = list(self.map_forn.keys())
+        if fornecedores:
+            self.cb_fornec.current(0)
+            self.atualizar_listas()
+
+    def atualizar_listas(self):
+        nome = self.cb_fornec.get()
+        if not nome:
+            return
+        forn_id = self.map_forn[nome]
+
+        # ATA
+        for i in self.tv_ata.get_children():
+            self.tv_ata.delete(i)
+        for r in banco.saldo_ata_por_fornecedor(forn_id):
+            self.tv_ata.insert("", "end", values=(
+                r.get("pregao",""),
+                r.get("cod_aghu",""),
+                r.get("nome_item",""),
+                r.get("qtde_total",0),
+                r.get("qtde_usada",0),
+                r.get("qtde_saldo",0),
+            ))
+
+        # Empenho
+        for i in self.tv_emp.get_children():
+            self.tv_emp.delete(i)
+        for r in banco.saldo_empenho_por_fornecedor(forn_id):
+            self.tv_emp.insert("", "end", values=(
+                r.get("cod_aghu",""),
+                r.get("nome_item",""),
+                f'{r.get("vl_total",0):.2f}',
+                f'{r.get("valor_consumido",0):.2f}',
+                f'{r.get("valor_saldo",0):.2f}',
+            ))
