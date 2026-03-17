@@ -2,6 +2,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import banco
+import utils  # <--- adicionar
 
 
 class TelaOrcamento(tk.Frame):
@@ -92,13 +93,169 @@ class TelaOrcamento(tk.Frame):
 
     # ---------- Placeholders a implementar ----------
     def _exportar_excel(self):
-        # Próxima etapa: gerar .xlsx com pandas
-        arq = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel", "*.xlsx")], title="Salvar orçamento")
+        # Monta uma lista de linhas com os dados da tabela
+        linhas = []
+        for iid in self.tv.get_children():
+            v = self.tv.item(iid, "values")
+            # ("cod","nome","qt","vu","emp","obs","vl_total")
+            linhas.append({
+                "Cód AGHU": v[0],
+                "Nome": v[1],
+                "Qtde": float(v[2]),
+                "Valor Unitário": float(v[3]),
+                "Nº Empenho": v[4],
+                "Observação": v[5],
+                "Valor Total": float(v[6]),
+            })
+
+        if not linhas:
+            messagebox.showinfo("Exportação", "Não há itens na tabela para exportar.")
+            return
+
+        # Seleciona arquivo
+        arq = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel", "*.xlsx")],
+            title="Salvar orçamento"
+        )
         if not arq:
             return
-        # Aqui vamos montar um DataFrame e salvar — implemento quando você der o OK.
-        messagebox.showinfo("Exportação", f"Planilha será salva em:\n{arq}\n(Implementaremos na próxima etapa)")
+
+        try:
+            df = utils.tabela_para_dataframe(linhas, [
+                "Cód AGHU","Nome","Qtde","Valor Unitário","Valor Total","Nº Empenho","Observação"
+            ])
+            utils.exportar_excel({"Orcamento": df}, arq)
+            messagebox.showinfo("Exportação", f"Planilha salva em:\n{arq}")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao exportar para Excel: {e}")
 
     def _enviar_email(self):
-        # Próxima etapa: enviar via smtplib, usando e-mail do fornecedor (cadastro) e a mensagem.
-        messagebox.showinfo("E-mail", "Envio por e-mail será implementado na próxima etapa.\nIncluiremos configuração SMTP e corpo da mensagem.")
+        # Coleta destinatário a partir do fornecedor
+        forn_nome = self.cb_fornec.get()
+        if not forn_nome:
+            messagebox.showwarning("Validação", "Selecione o fornecedor.")
+            return
+
+        # Buscar fornecedor para pegar e-mail
+        fornecedor = None
+        for f in banco.fornecedores_listar():
+            if f["nome"] == forn_nome:
+                fornecedor = f
+                break
+
+        if not fornecedor:
+            messagebox.showwarning("Validação", "Fornecedor não encontrado no cadastro.")
+            return
+
+        destinatario = (fornecedor.get("email") or "").strip()
+        if not destinatario:
+            messagebox.showwarning("Validação", "O fornecedor selecionado não possui e-mail cadastrado.")
+            return
+
+        # Monta tabela HTML do orçamento
+        linhas = []
+        total_geral = 0.0
+        for iid in self.tv.get_children():
+            v = self.tv.item(iid, "values")
+            # ("cod","nome","qt","vu","emp","obs","vl_total")
+            linhas.append({
+                "cod": v[0],
+                "nome": v[1],
+                "qt": float(v[2]),
+                "vu": float(v[3]),
+                "emp": v[4],
+                "obs": v[5],
+                "vt": float(v[6]),
+            })
+            total_geral += float(v[6])
+
+        if not linhas:
+            messagebox.showinfo("E-mail", "Não há itens na tabela para enviar.")
+            return
+
+        # Corpo HTML
+        msg_user = self.txt_msg.get("1.0", "end").strip()
+        html_rows = ""
+        for l in linhas:
+            html_rows += f"""
+                <tr>
+                  <td>{l['cod']}</td>
+                  <td>{l['nome']}</td>
+                  <td style="text-align:right">{l['qt']}</td>
+                  <td style="text-align:right">{l['vu']:.2f}</td>
+                  <td style="text-align:right">{l['vt']:.2f}</td>
+                  <td>{l['emp']}</td>
+                  <td>{l['obs']}</td>
+                </tr>
+            """
+
+        corpo_html = f"""
+        <html>
+          <body>
+            <p>Prezados,</p>
+            <p>{msg_user or 'Segue orçamento conforme itens abaixo.'}</p>
+            <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:Segoe UI,Arial,sans-serif;font-size:12px;">
+              <thead style="background:#eee;">
+                <tr>
+                  <th>Cód AGHU</th>
+                  <th>Nome</th>
+                  <th>Qtde</th>
+                  <th>Valor Unitário</th>
+                  <th>Valor Total</th>
+                  <th>Nº Empenho</th>
+                  <th>Observação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {html_rows}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="4" style="text-align:right"><b>Total geral</b></td>
+                  <td style="text-align:right"><b>{total_geral:.2f}</b></td>
+                  <td colspan="2"></td>
+                </tr>
+              </tfoot>
+            </table>
+            <p>Atenciosamente,</p>
+          </body>
+        </html>
+        """
+
+        # (Opcional) gerar e anexar Excel no e-mail
+        anexos = []
+        try:
+            import tempfile
+            tmp = tempfile.NamedTemporaryFile(prefix="orcamento_", suffix=".xlsx", delete=False)
+            tmp.close()
+            df = utils.tabela_para_dataframe(
+                [
+                    {
+                        "Cód AGHU": l["cod"],
+                        "Nome": l["nome"],
+                        "Qtde": l["qt"],
+                        "Valor Unitário": l["vu"],
+                        "Valor Total": l["vt"],
+                        "Nº Empenho": l["emp"],
+                        "Observação": l["obs"]
+                    } for l in linhas
+                ],
+                ["Cód AGHU","Nome","Qtde","Valor Unitário","Valor Total","Nº Empenho","Observação"]
+            )
+            utils.exportar_excel({"Orcamento": df}, tmp.name)
+            anexos.append(tmp.name)
+        except Exception as e:
+            # Se falhar o anexo, ainda assim enviamos o corpo HTML.
+            print("Falha ao gerar anexo Excel:", e)
+
+        try:
+            utils.enviar_email(
+                destinatarios=[destinatario],
+                assunto=f"Orçamento - {forn_nome}",
+                corpo_html=corpo_html,
+                anexos=anexos
+            )
+            messagebox.showinfo("E-mail", f"E-mail enviado com sucesso para: {destinatario}")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao enviar e-mail: {e}")
