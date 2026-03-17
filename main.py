@@ -112,20 +112,20 @@ class Sistema(tk.Tk):
                     f"Um log foi salvo em:\n{log_path}"
                 )
     
-        def abrir_dashboard(self):
-            self._abrir_tela(Dashboard, "Dashboard")
-    
-        def abrir_fornecedores(self):
-            self._abrir_tela(TelaFornecedores, "Fornecedores")
-    
-        def abrir_atas_empenhos(self):
-            self._abrir_tela(TelaAtasEmpenhos, "Ata/Empenho")
-    
-        def abrir_notas(self):
-            self._abrir_tela(TelaNotas, "Notas")
-    
-        def abrir_orcamento(self):
-            self._abrir_tela(TelaOrcamento, "Orçamento")
+    def abrir_dashboard(self):
+        self._abrir_tela(Dashboard, "Dashboard")
+
+    def abrir_fornecedores(self):
+        self._abrir_tela(TelaFornecedores, "Fornecedores")
+
+    def abrir_atas_empenhos(self):
+        self._abrir_tela(TelaAtasEmpenhos, "Ata/Empenho")
+
+    def abrir_notas(self):
+        self._abrir_tela(TelaNotas, "Notas")
+
+    def abrir_orcamento(self):
+        self._abrir_tela(TelaOrcamento, "Orçamento")
 
 
 if __name__ == "__main__":
