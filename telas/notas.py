@@ -1,257 +1,218 @@
-# notas.py
+# telas/notas.py
 import tkinter as tk
 from tkinter import ttk, messagebox
-from banco import conectar
+import banco
+from datetime import date
 
-BODY_BG = "#efefef"
-
-def _combo_fornecedores(parent):
-    with conectar() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT id, nome FROM fornecedores ORDER BY nome;")
-        rows = cur.fetchall()
-    mapa = {f"{r[1]} (id {r[0]})": r[0] for r in rows}
-    var = tk.StringVar()
-    cb = ttk.Combobox(parent, state="readonly", values=list(mapa.keys()), width=42, textvariable=var)
-    return cb, var, mapa
 
 class TelaNotas(tk.Frame):
     def __init__(self, master):
-        super().__init__(master, bg=BODY_BG)
-        tk.Label(self, text="Cadastro de Notas", font=("Segoe UI Semibold", 16), bg=BODY_BG)\
-            .pack(anchor="w", padx=20, pady=(20, 10))
+        super().__init__(master, bg="white")
+        banco.criar_tabelas()
 
-        self.nota_sel_id = None
+        topo = tk.Frame(self, bg="white")
+        topo.pack(fill="x", padx=12, pady=10)
 
-        frm = tk.LabelFrame(self, text="Dados da Nota", bg=BODY_BG)
-        frm.pack(fill="x", padx=20)
+        # Fornecedor
+        tk.Label(topo, text="Fornecedor:", bg="white").grid(row=0, column=0, sticky="w")
+        self.cb_fornec = ttk.Combobox(topo, state="readonly", width=50)
+        self.cb_fornec.grid(row=0, column=1, padx=6, pady=2, sticky="w")
+        self.cb_fornec.bind("<<ComboboxSelected>>", lambda e: self._recarregar_vinculos())
 
-        cb, self.for_var, self.map_for = _combo_fornecedores(frm)
-        tk.Label(frm, text="Fornecedor", bg=BODY_BG).grid(row=0, column=0, sticky="e", padx=(10,6), pady=4)
-        cb.grid(row=0, column=1, sticky="w", padx=(0,12), pady=4)
+        self._carregar_fornecedores()
 
-        self.vars = {k: tk.StringVar() for k in [
-            "numero","data_expedicao","vl_total","codigo_sei","data_envio_processo","observacao"
-        ]}
+        # Dados da nota
+        tk.Label(topo, text="Número+Série*:", bg="white").grid(row=1, column=0, sticky="w")
+        self.e_numero = ttk.Entry(topo, width=30)
+        self.e_numero.grid(row=1, column=1, sticky="w", padx=6, pady=2)
 
-        def row(r, rot, chave, w=30):
-            tk.Label(frm, text=rot, bg=BODY_BG).grid(row=r, column=2, sticky="e", padx=(10,6), pady=4)
-            tk.Entry(frm, textvariable=self.vars[chave], width=w).grid(row=r, column=3, sticky="w", padx=(0,10), pady=4)
+        tk.Label(topo, text="Data expedição* (YYYY-MM-DD):", bg="white").grid(row=1, column=2, sticky="w")
+        self.e_data = ttk.Entry(topo, width=18)
+        self.e_data.grid(row=1, column=3, sticky="w", padx=6, pady=2)
+        self.e_data.insert(0, date.today().isoformat())
 
-        row(0,"Número + Série", "numero", 20)
-        row(1,"Data de expedição (AAAA-MM-DD)", "data_expedicao", 22)
-        row(2,"Valor total da nota", "vl_total", 16)
-        row(3,"Código SEI", "codigo_sei", 22)
-        row(4,"Data de envio do processo", "data_envio_processo", 22)
-        tk.Label(frm, text="Observação", bg=BODY_BG).grid(row=5, column=2, sticky="e", padx=(10,6), pady=4)
-        tk.Entry(frm, textvariable=self.vars["observacao"], width=60).grid(row=5, column=3, sticky="w", padx=(0,10), pady=4)
+        tk.Label(topo, text="Valor total*:", bg="white").grid(row=2, column=0, sticky="w")
+        self.e_total = ttk.Entry(topo, width=18)
+        self.e_total.grid(row=2, column=1, sticky="w", padx=6, pady=2)
 
-        act = tk.Frame(self, bg=BODY_BG); act.pack(fill="x", padx=20, pady=8)
-        tk.Button(act, text="Nova", command=self.nova).pack(side="left")
-        tk.Button(act, text="Salvar", command=self.salvar).pack(side="left", padx=(8,0))
-        tk.Button(act, text="Atualizar", command=self.atualizar).pack(side="left", padx=(8,0))
-        tk.Button(act, text="Excluir", command=self.excluir).pack(side="left", padx=(8,0))
+        tk.Label(topo, text="Código SEI:", bg="white").grid(row=2, column=2, sticky="w")
+        self.e_sei = ttk.Entry(topo, width=24)
+        self.e_sei.grid(row=2, column=3, sticky="w", padx=6, pady=2)
 
-        # Lista de notas
-        cols = ("id","fornecedor","numero","data_expedicao","vl_total")
-        self.tree = ttk.Treeview(self, columns=cols, show="headings", height=7)
-        for c in cols:
-            self.tree.heading(c, text=c.upper()); self.tree.column(c, width=160, anchor="w")
-        self.tree.column("id", width=60)
-        self.tree.pack(fill="x", padx=20, pady=(0,8))
-        self.tree.bind("<<TreeviewSelect>>", self.on_select)
+        tk.Label(topo, text="Envio processo (YYYY-MM-DD):", bg="white").grid(row=3, column=0, sticky="w")
+        self.e_envio = ttk.Entry(topo, width=18)
+        self.e_envio.grid(row=3, column=1, sticky="w", padx=6, pady=2)
 
-        # ------- Itens da Nota -------
-        itens = tk.LabelFrame(self, text="Itens da Nota", bg=BODY_BG)
-        itens.pack(fill="both", expand=True, padx=20, pady=(0,20))
+        tk.Label(topo, text="Observação:", bg="white").grid(row=3, column=2, sticky="w")
+        self.e_obs = ttk.Entry(topo, width=40)
+        self.e_obs.grid(row=3, column=3, sticky="w", padx=6, pady=2)
 
-        self.item = {k: tk.StringVar() for k in ["cod_aghu","data_uso","vl_unit","qtde","vl_total","qtde_consumida"]}
-        def irow(r, rot, chave, w=20):
-            tk.Label(itens, text=rot, bg=BODY_BG).grid(row=r, column=0, sticky="e", padx=(10,6), pady=4)
-            tk.Entry(itens, textvariable=self.item[chave], width=w).grid(row=r, column=1, sticky="w", padx=(0,12), pady=4)
+        self.btn_salvar_nota = ttk.Button(topo, text="Salvar Nota", command=self._salvar_nota)
+        self.btn_salvar_nota.grid(row=0, column=3, sticky="e")
 
-        irow(0,"Código AGHU", "cod_aghu", 18)
-        irow(0,"Data de uso (AAAA-MM-DD)", "data_uso", 18)
-        irow(1,"Valor unitário", "vl_unit", 12)
-        irow(1,"Qtde do item", "qtde", 12)
-        irow(1,"Valor total do item", "vl_total", 12)
-        irow(2,"Qtde consumida", "qtde_consumida", 12)
+        # Área itens
+        area = ttk.LabelFrame(self, text="Itens da Nota")
+        area.pack(fill="both", expand=True, padx=12, pady=10)
 
-        act2 = tk.Frame(itens, bg=BODY_BG); act2.grid(row=3, column=0, columnspan=2, sticky="w", padx=10, pady=6)
-        tk.Button(act2, text="Adicionar item", command=self.item_add).pack(side="left")
-        tk.Button(act2, text="Remover selecionado", command=self.item_remove).pack(side="left", padx=(8,0))
-        # tabela de itens
-        self.items_cols = ("id","cod_aghu","data_uso","vl_unit","qtde","vl_total","qtde_consumida")
-        self.items_tree = ttk.Treeview(itens, columns=self.items_cols, show="headings", height=8)
-        for c in self.items_cols:
-            self.items_tree.heading(c, text=c.upper()); self.items_tree.column(c, width=130, anchor="w")
-        self.items_tree.column("id", width=60)
-        self.items_tree.grid(row=4, column=0, columnspan=4, sticky="nsew", padx=10, pady=6)
-        itens.grid_columnconfigure(3, weight=1)
-        itens.grid_rowconfigure(4, weight=1)
+        grid = tk.Frame(area)
+        grid.pack(fill="x", padx=8, pady=6)
 
-        self.carregar_notas()
+        # Combos de vínculo (populam quando seleciona fornecedor)
+        tk.Label(grid, text="Vínculo ATA:").grid(row=0, column=0, sticky="w")
+        self.cb_ata = ttk.Combobox(grid, state="readonly", width=40)
+        self.cb_ata.grid(row=0, column=1, padx=6, pady=2, sticky="w")
 
-    # -------- Notas --------
-    def nova(self):
-        self.nota_sel_id = None
-        for v in self.vars.values(): v.set("")
-        self.for_var.set("")
-        for i in self.items_tree.get_children(): self.items_tree.delete(i)
-        self.tree.selection_remove(*self.tree.selection())
+        tk.Label(grid, text="Vínculo Empenho:").grid(row=0, column=2, sticky="w")
+        self.cb_emp = ttk.Combobox(grid, state="readonly", width=40)
+        self.cb_emp.grid(row=0, column=3, padx=6, pady=2, sticky="w")
 
-    def _nota_parse(self):
-        try:
-            return {
-                "fornecedor_id": self.map_for[self.for_var.get()],
-                "numero": self.vars["numero"].get().strip(),
-                "data_expedicao": self.vars["data_expedicao"].get().strip(),
-                "vl_total": float(self.vars["vl_total"].get() or 0),
-                "codigo_sei": self.vars["codigo_sei"].get().strip(),
-                "data_envio_processo": self.vars["data_envio_processo"].get().strip(),
-                "observacao": self.vars["observacao"].get().strip()
-            }
-        except Exception:
-            messagebox.showwarning("Validação", "Verifique os campos numéricos.")
-            return None
+        # Campos do item
+        labels = ["Cód AGHU*", "Data uso (YYYY-MM-DD)", "Vlr Unit*", "Qtde*", "Vlr Total*", "Qtde consumida"]
+        self.ent_item = []
+        for i, lb in enumerate(labels, start=1):
+            tk.Label(grid, text=lb).grid(row=i, column=0, sticky="w")
+            e = ttk.Entry(grid, width=20)
+            e.grid(row=i, column=1, sticky="w", padx=6, pady=2)
+            self.ent_item.append(e)
+        # Nome do item (exibido; você pediu na nota só por cod, mas mantive campo opcional)
+        tk.Label(grid, text="Nome item (opcional)").grid(row=1, column=2, sticky="w")
+        self.e_nome_item = ttk.Entry(grid, width=40)
+        self.e_nome_item.grid(row=1, column=3, sticky="w", padx=6, pady=2)
 
-    def salvar(self):
-        d = self._nota_parse()
-        if not d: return
-        if not d["numero"] or not d["data_expedicao"]:
-            messagebox.showwarning("Validação", "Informe Número+Série e Data de expedição.")
+        self.btn_add_item = ttk.Button(grid, text="Adicionar item", command=self._adicionar_item_na_tabela, state="disabled")
+        self.btn_add_item.grid(row=6, column=3, sticky="e", pady=4)
+
+        # Tabela de itens (pendentes de salvar)
+        cols = ("cod_aghu","data_uso","vl_unit","qtde","vl_total","qtde_consumida","ata_item_id","empenho_id","ata_leg","emp_leg")
+        self.tv = ttk.Treeview(area, columns=cols, show="headings", height=10)
+        heads = ("Cód AGHU","Data uso","Vlr Unit","Qtde","Vlr Total","Qtde cons.","ID ATA","ID Emp","ATA","Empenho")
+        widths = (100,100,90,70,100,100,60,60,160,160)
+        for c, h, w in zip(cols, heads, widths):
+            self.tv.heading(c, text=h)
+            self.tv.column(c, width=w, anchor="w")
+        self.tv.pack(fill="both", expand=True, padx=8, pady=6)
+
+        # Rodapé
+        rod = tk.Frame(self, bg="white")
+        rod.pack(fill="x", padx=12, pady=(0,10))
+        self.btn_salvar_itens = ttk.Button(rod, text="Salvar Itens na Nota", command=self._salvar_itens, state="disabled")
+        self.btn_salvar_itens.pack(side="right")
+
+        # Estado da tela
+        self.nota_id = None
+        self.map_fornec = {}
+        self.map_ata = {}   # label -> id
+        self.map_emp = {}   # label -> id
+
+    # ---------- Carregamentos ----------
+    def _carregar_fornecedores(self):
+        fs = banco.fornecedores_listar()
+        self.map_fornec = {f["nome"]: f["id"] for f in fs}
+        self.cb_fornec["values"] = list(self.map_fornec.keys())
+        if fs:
+            self.cb_fornec.current(0)
+            self._recarregar_vinculos()
+
+    def _recarregar_vinculos(self):
+        nome = self.cb_fornec.get()
+        if not nome:
+            self.cb_ata["values"] = []
+            self.cb_emp["values"] = []
             return
-        with conectar() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                INSERT INTO notas (fornecedor_id, numero, data_expedicao, vl_total, codigo_sei, data_envio_processo, observacao)
-                VALUES (:fornecedor_id, :numero, :data_expedicao, :vl_total, :codigo_sei, :data_envio_processo, :observacao)
-            """, d)
-            self.nota_sel_id = cur.lastrowid
-            conn.commit()
-        messagebox.showinfo("OK", "Nota salva. Agora adicione os itens se necessário.")
-        self.carregar_notas()
+        fid = self.map_fornec[nome]
+        # ATA
+        atas = banco.ata_itens_listar(fornecedor_id=fid)
+        self.map_ata = {f'{a["pregao"]} | {a["cod_aghu"]} | {a["nome_item"]}': a["id"] for a in atas}
+        self.cb_ata["values"] = list(self.map_ata.keys())
+        # Empenho
+        emps = banco.empenhos_listar(fornecedor_id=fid)
+        self.map_emp = {f'{(e["numero_empenho"] or "-")} | {e["cod_aghu"]} | {e["nome_item"]}': e["id"] for e in emps}
+        self.cb_emp["values"] = list(self.map_emp.keys())
 
-    def atualizar(self):
-        if not self.nota_sel_id:
-            messagebox.showinfo("Info", "Selecione uma nota.")
+    # ---------- Nota ----------
+    def _salvar_nota(self):
+        nome = self.cb_fornec.get()
+        if not nome:
+            messagebox.showwarning("Validação","Selecione o fornecedor.")
             return
-        d = self._nota_parse()
-        if not d: return
-        d["id"] = self.nota_sel_id
-        with conectar() as conn:
-            conn.execute("""
-                UPDATE notas SET
-                    fornecedor_id=:fornecedor_id, numero=:numero, data_expedicao=:data_expedicao,
-                    vl_total=:vl_total, codigo_sei=:codigo_sei, data_envio_processo=:data_envio_processo,
-                    observacao=:observacao, atualizado_em=datetime('now','localtime')
-                WHERE id=:id
-            """, d)
-            conn.commit()
-        messagebox.showinfo("OK", "Nota atualizada.")
-        self.carregar_notas()
-
-    def excluir(self):
-        if not self.nota_sel_id:
-            messagebox.showinfo("Info", "Selecione uma nota.")
-            return
-        if not messagebox.askyesno("Confirmar", "Excluir nota e itens?"): return
-        with conectar() as conn:
-            conn.execute("DELETE FROM notas WHERE id=?", (self.nota_sel_id,))
-            conn.commit()
-        self.nova()
-        self.carregar_notas()
-
-    def carregar_notas(self):
-        with conectar() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT n.id, f.nome AS fornecedor, n.numero, n.data_expedicao, n.vl_total
-                FROM notas n
-                JOIN fornecedores f ON f.id = n.fornecedor_id
-                ORDER BY n.data_expedicao DESC, n.id DESC
-            """)
-            rows = cur.fetchall()
-        for i in self.tree.get_children():
-            self.tree.delete(i)
-        for r in rows:
-            self.tree.insert("", "end", values=r)
-
-        # Carrega itens da nota atual
-        self.carregar_itens()
-
-    def on_select(self, _e):
-        sel = self.tree.selection()
-        if not sel: return
-        self.nota_sel_id = self.tree.item(sel[0])["values"][0]
-        with conectar() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT * FROM notas WHERE id=?", (self.nota_sel_id,))
-            r = cur.fetchone()
-            cols = [d[0] for d in cur.description]
-            d = dict(zip(cols, r))
-        # seta form
-        for rot, idv in self.map_for.items():
-            if idv == d["fornecedor_id"]:
-                self.for_var.set(rot); break
-        self.vars["numero"].set(d["numero"])
-        self.vars["data_expedicao"].set(d["data_expedicao"])
-        self.vars["vl_total"].set(d["vl_total"])
-        self.vars["codigo_sei"].set(d["codigo_sei"] or "")
-        self.vars["data_envio_processo"].set(d["data_envio_processo"] or "")
-        self.vars["observacao"].set(d["observacao"] or "")
-
-        self.carregar_itens()
-
-    # -------- Itens --------
-    def item_add(self):
-        if not self.nota_sel_id:
-            messagebox.showinfo("Info", "Salve a nota antes de incluir itens.")
+        d = {
+            "fornecedor_id": self.map_fornec[nome],
+            "numero": self.e_numero.get().strip(),
+            "data_expedicao": self.e_data.get().strip(),
+            "vl_total": float(self.e_total.get() or 0),
+            "codigo_sei": self.e_sei.get().strip(),
+            "data_envio_processo": self.e_envio.get().strip(),
+            "observacao": self.e_obs.get().strip()
+        }
+        if not (d["numero"] and d["data_expedicao"] and d["vl_total"]):
+            messagebox.showwarning("Validação","Preencha número, data e valor total.")
             return
         try:
-            d = {
-                "nota_id": self.nota_sel_id,
-                "cod_aghu": self.item["cod_aghu"].get().strip(),
-                "data_uso": self.item["data_uso"].get().strip(),
-                "vl_unit": float(self.item["vl_unit"].get() or 0),
-                "qtde": float(self.item["qtde"].get() or 0),
-                "vl_total": float(self.item["vl_total"].get() or 0),
-                "qtde_consumida": float(self.item["qtde_consumida"].get() or 0)
-            }
-        except Exception:
-            messagebox.showwarning("Validação", "Verifique valores numéricos do item.")
-            return
-        if not d["cod_aghu"]:
-            messagebox.showwarning("Validação", "Informe o Código AGHU do item.")
-            return
-        with conectar() as conn:
-            conn.execute("""
-                INSERT INTO notas_itens (nota_id, cod_aghu, data_uso, vl_unit, qtde, vl_total, qtde_consumida)
-                VALUES (:nota_id, :cod_aghu, :data_uso, :vl_unit, :qtde, :vl_total, :qtde_consumida)
-            """, d)
-            conn.commit()
-        self.carregar_itens()
-        for v in self.item.values(): v.set("")
+            self.nota_id = banco.nota_inserir(d)
+            messagebox.showinfo("OK", f"Nota salva (ID {self.nota_id}). Agora adicione os itens.")
+            self.btn_add_item.config(state="normal")
+            self.btn_salvar_itens.config(state="normal")
+            # Congela cabeçalho para evitar mudança indevida após inserir itens
+            self.cb_fornec.config(state="disabled")
+            self.e_numero.config(state="disabled")
+            self.e_data.config(state="disabled")
+            self.e_total.config(state="disabled")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao salvar nota: {e}")
 
-    def item_remove(self):
-        sel = self.items_tree.selection()
-        if not sel: return
-        iid = self.items_tree.item(sel[0])["values"][0]
-        with conectar() as conn:
-            conn.execute("DELETE FROM notas_itens WHERE id=?", (iid,))
-            conn.commit()
-        self.carregar_itens()
-
-    def carregar_itens(self):
-        for i in self.items_tree.get_children():
-            self.items_tree.delete(i)
-        if not self.nota_sel_id:
+    # ---------- Itens ----------
+    def _adicionar_item_na_tabela(self):
+        if not self.nota_id:
+            messagebox.showwarning("Atenção","Salve a nota antes de incluir itens.")
             return
-        with conectar() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT id, cod_aghu, data_uso, vl_unit, qtde, vl_total, qtde_consumida
-                FROM notas_itens WHERE nota_id=? ORDER BY id
-            """, (self.nota_sel_id,))
-            for r in cur.fetchall():
-                self.items_tree.insert("", "end", values=r)
+
+        cod = self.ent_item[0].get().strip()
+        data_uso = self.ent_item[1].get().strip()
+        vl_unit = float(self.ent_item[2].get() or 0)
+        qtde = float(self.ent_item[3].get() or 0)
+        vl_total = float(self.ent_item[4].get() or 0)
+        qtde_cons = float(self.ent_item[5].get() or 0)
+
+        if not (cod and vl_unit and qtde and vl_total):
+            messagebox.showwarning("Validação","Preencha código, valor unitário, quantidade e valor total.")
+            return
+
+        ata_leg = self.cb_ata.get() or ""
+        emp_leg = self.cb_emp.get() or ""
+        ata_id = self.map_ata.get(ata_leg)
+        emp_id = self.map_emp.get(emp_leg)
+
+        self.tv.insert("", "end", values=(
+            cod, data_uso, f"{vl_unit:.2f}", f"{qtde}", f"{vl_total:.2f}", f"{qtde_cons}",
+            ata_id or "", emp_id or "", ata_leg, emp_leg
+        ))
+
+        # limpa campos do item (mantém vínculos para próxima linha)
+        for e in self.ent_item:
+            e.delete(0, "end")
+        self.e_nome_item.delete(0, "end")
+
+    def _salvar_itens(self):
+        if not self.nota_id:
+            return
+        itens = []
+        for iid in self.tv.get_children():
+            v = self.tv.item(iid, "values")
+            itens.append({
+                "cod_aghu": v[0],
+                "data_uso": v[1] or None,
+                "vl_unit": float(v[2]),
+                "qtde": float(v[3]),
+                "vl_total": float(v[4]),
+                "qtde_consumida": float(v[5] or 0),
+                "ata_item_id": int(v[6]) if str(v[6]).isdigit() else None,
+                "empenho_id": int(v[7]) if str(v[7]).isdigit() else None
+            })
+        try:
+            banco.nota_itens_inserir(self.nota_id, itens)
+            messagebox.showinfo("OK","Itens salvos na nota. Saldos já atualizados.")
+            # Limpa tabela de pendências
+            for i in self.tv.get_children():
+                self.tv.delete(i)
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao salvar itens: {e}")
