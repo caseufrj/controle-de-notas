@@ -1,22 +1,24 @@
+# main.py
 import tkinter as tk
 from tkinter import ttk
+import tkinter.font as tkfont
 import sys
 import os
 
-# Módulos de telas
+# Importa as telas
 from telas.dashboard import Dashboard
 from telas.fornecedores import TelaFornecedores
 from telas.atas_empenhos import TelaAtasEmpenhos
 from telas.notas import TelaNotas
 from telas.orcamento import TelaOrcamento
 
-# Corrige caminho quando vira EXE
+# Corrige caminho quando vira EXE (PyInstaller)
 if getattr(sys, 'frozen', False):
-    base_path = sys._MEIPASS
+    BASE_PATH = sys._MEIPASS  # type: ignore[attr-defined]
 else:
-    base_path = os.path.dirname(__file__)
+    BASE_PATH = os.path.dirname(__file__)
 
-sys.path.append(base_path)
+sys.path.append(BASE_PATH)
 
 
 class Sistema(tk.Tk):
@@ -35,10 +37,15 @@ class Sistema(tk.Tk):
         self.abrir_dashboard()
 
     def _estilos(self):
-        try:
-            self.option_add("*Font", "Segoe UI 10")
-        except Exception:
-            pass
+        """
+        Opção A: configura a fonte padrão via TkDefaultFont (evita o erro 'expected integer but got "UI"').
+        """
+        # Ajusta a fonte padrão de toda a aplicação
+        default_font = tkfont.nametofont("TkDefaultFont")
+        default_font.configure(family="Segoe UI", size=10)
+        self.option_add("*Font", default_font)
+
+        # Tema ttk
         style = ttk.Style(self)
         if "vista" in style.theme_names():
             style.theme_use("vista")
@@ -50,10 +57,19 @@ class Sistema(tk.Tk):
         self.menu.pack(side="left", fill="y")
 
         def btn(text, cmd):
-            b = tk.Button(self.menu, text=text, command=cmd,
-                          bg="#34495e", fg="white", bd=0, padx=12, pady=12,
-                          activebackground="#3d566e", activeforeground="white",
-                          anchor="w")
+            b = tk.Button(
+                self.menu,
+                text=text,
+                command=cmd,
+                bg="#34495e",
+                fg="white",
+                bd=0,
+                padx=12,
+                pady=12,
+                activebackground="#3d566e",
+                activeforeground="white",
+                anchor="w",
+            )
             b.pack(fill="x")
             return b
 
