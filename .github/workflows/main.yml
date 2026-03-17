@@ -1,0 +1,51 @@
+name: Build Windows EXE (PyInstaller)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if (Test-Path requirements.txt) { pip install -r requirements.txt }
+          pip install pyinstaller
+
+      - name: Show tree
+        run: |
+          Get-ChildItem -Recurse | Format-List
+
+      - name: Build EXE with PyInstaller
+        run: |
+          # Ajuste o nome do executável conforme quiser (ControleNotas.exe)
+          # --onefile para um único executável
+          # --noconsole se não quiser console; comente se preferir console visível
+          # --add-data para incluir a pasta "telas" no executável
+          pyinstaller ^
+            --name "ControleNotas" ^
+            --onefile ^
+            --noconsole ^
+            --add-data "telas;telas" ^
+            main.py
+
+      - name: Archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ControleNotas-win
+          path: |
+            dist/ControleNotas.exe
