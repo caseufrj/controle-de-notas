@@ -1,136 +1,104 @@
-# orcamento.py
+# telas/orcamento.py
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-import pandas as pd
-from banco import conectar
-from utils import exportar_excel, enviar_email
+import banco
 
-BODY_BG = "#efefef"
-
-def _combo_fornecedores(parent):
-    with conectar() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT id, nome, email FROM fornecedores ORDER BY nome;")
-        rows = cur.fetchall()
-    mapa = {f"{r[1]} (id {r[0]})": (r[0], r[2] or "") for r in rows}
-    var = tk.StringVar()
-    cb = ttk.Combobox(parent, state="readonly", values=list(mapa.keys()), width=42, textvariable=var)
-    return cb, var, mapa
 
 class TelaOrcamento(tk.Frame):
     def __init__(self, master):
-        super().__init__(master, bg=BODY_BG)
-        tk.Label(self, text="Orçamento para Fornecedor", font=("Segoe UI Semibold", 16), bg=BODY_BG)\
-            .pack(anchor="w", padx=20, pady=(20, 10))
+        super().__init__(master, bg="white")
+        banco.criar_tabelas()
 
-        sec = tk.LabelFrame(self, text="Itens utilizados na cirurgia (preencher)", bg=BODY_BG)
-        sec.pack(fill="x", padx=20)
+        topo = tk.Frame(self, bg="white")
+        topo.pack(fill="x", padx=12, pady=10)
 
-        self.vars = {k: tk.StringVar() for k in ["cod_aghu","nome_item","qtde","vl_unit","numero_empenho","observacao"]}
-        cb, self.for_var, self.map_for = _combo_fornecedores(sec)
+        tk.Label(topo, text="Fornecedor:", bg="white").pack(side="left")
+        self.cb_fornec = ttk.Combobox(topo, state="readonly", width=50)
+        self.cb_fornec.pack(side="left", padx=6)
 
-        tk.Label(sec, text="Fornecedor", bg=BODY_BG).grid(row=0, column=0, sticky="e", padx=(10,6), pady=4)
-        cb.grid(row=0, column=1, sticky="w", padx=(0,10), pady=4)
+        self._carregar_fornecedores()
 
-        def row(r, rot, chave, w=30):
-            tk.Label(sec, text=rot, bg=BODY_BG).grid(row=r, column=2, sticky="e", padx=(10,6), pady=4)
-            tk.Entry(sec, textvariable=self.vars[chave], width=w).grid(row=r, column=3, sticky="w", padx=(0,10), pady=4)
+        form = ttk.LabelFrame(self, text="Lançar itens para Orçamento")
+        form.pack(fill="x", padx=12, pady=8)
 
-        row(0,"Código AGHU", "cod_aghu", 18)
-        row(0,"Nome do item", "nome_item", 40)
-        row(1,"Qtde", "qtde", 10)
-        row(1,"Valor unitário", "vl_unit", 12)
-        row(2,"Número do empenho", "numero_empenho", 20)
-        row(2,"Observação", "observacao", 50)
+        def r(lbl, col, row, width=28):
+            tk.Label(form, text=lbl).grid(column=col, row=row, sticky="w", padx=6, pady=3)
+            e = ttk.Entry(form, width=width)
+            e.grid(column=col+1, row=row, sticky="w", padx=6, pady=3)
+            return e
 
-        act = tk.Frame(self, bg=BODY_BG); act.pack(fill="x", padx=20, pady=8)
-        tk.Button(act, text="Adicionar", command=self.adicionar).pack(side="left")
-        tk.Button(act, text="Remover", command=self.remover).pack(side="left", padx=(8,0))
-        tk.Button(act, text="Exportar Excel", command=self.exportar).pack(side="left", padx=(8,0))
-        tk.Button(act, text="Enviar por e-mail", command=self.enviar_email_orc).pack(side="left", padx=(8,0))
+        self.e_cod = r("Cód AGHU*:", 0, 0)
+        self.e_nome = r("Nome item*:", 0, 1, 40)
+        self.e_qt = r("Qtde*:", 2, 0, 12)
+        self.e_vu = r("Vlr Unit*:", 2, 1, 12)
+        self.e_emp = r("Nº Empenho:", 4, 0)
+        tk.Label(form, text="Observação:").grid(column=4, row=1, sticky="w", padx=6, pady=3)
+        self.e_obs = ttk.Entry(form, width=40)
+        self.e_obs.grid(column=5, row=1, sticky="w", padx=6, pady=3)
 
-        cols = ("cod_aghu","nome_item","qtde","vl_unit","vl_total","numero_empenho","observacao")
-        self.tree = ttk.Treeview(self, columns=cols, show="headings", height=12)
-        for c in cols:
-            self.tree.heading(c, text=c.upper()); self.tree.column(c, width=150, anchor="w")
-        self.tree.pack(fill="both", expand=True, padx=20, pady=(0,20))
+        tk.Label(form, text="Mensagem p/ e-mail:").grid(column=0, row=3, sticky="nw", padx=6, pady=3)
+        self.txt_msg = tk.Text(form, width=80, height=4)
+        self.txt_msg.grid(column=1, row=3, columnspan=5, sticky="w", padx=6, pady=3)
 
-        # Mensagem para e-mail
-        msgf = tk.LabelFrame(self, text="Mensagem para o fornecedor (e-mail)", bg=BODY_BG)
-        msgf.pack(fill="x", padx=20, pady=(0, 20))
-        self.msg_txt = tk.Text(msgf, height=6)
-        self.msg_txt.pack(fill="x", padx=10, pady=8)
+        btns = tk.Frame(form)
+        btns.grid(column=5, row=0, rowspan=2, sticky="e", padx=6)
+        ttk.Button(btns, text="Adicionar", command=self._adicionar).pack(side="top", pady=2)
 
-    def adicionar(self):
+        # Tabela temporária
+        cols = ("cod","nome","qt","vu","emp","obs","vl_total")
+        self.tv = ttk.Treeview(self, columns=cols, show="headings", height=12)
+        heads = ("Cód AGHU","Nome","Qtde","Vlr Unit","Nº Empenho","Obs","Vlr Total")
+        widths = (100,260,60,90,120,180,100)
+        for c, h, w in zip(cols, heads, widths):
+            self.tv.heading(c, text=h)
+            self.tv.column(c, width=w, anchor="w")
+        self.tv.pack(fill="both", expand=True, padx=12, pady=6)
+
+        rod = tk.Frame(self, bg="white")
+        rod.pack(fill="x", padx=12, pady=10)
+        ttk.Button(rod, text="Exportar para Excel", command=self._exportar_excel).pack(side="right", padx=6)
+        ttk.Button(rod, text="Enviar por e-mail", command=self._enviar_email).pack(side="right", padx=6)
+
+    def _carregar_fornecedores(self):
+        fs = banco.fornecedores_listar()
+        self.map_fornec = {f["nome"]: f["id"] for f in fs}
+        self.cb_fornec["values"] = list(self.map_fornec.keys())
+        if fs:
+            self.cb_fornec.current(0)
+
+    def _adicionar(self):
         try:
-            qtde = float(self.vars["qtde"].get() or 0)
-            vu = float(self.vars["vl_unit"].get() or 0)
-        except Exception:
-            messagebox.showwarning("Validação", "Qtde e Valor unitário devem ser números.")
+            qt = float(self.e_qt.get() or 0)
+            vu = float(self.e_vu.get() or 0)
+        except ValueError:
+            messagebox.showwarning("Validação","Digite números válidos em Qtde/Valor.")
             return
-        vt = qtde * vu
-        vals = (
-            self.vars["cod_aghu"].get().strip(),
-            self.vars["nome_item"].get().strip(),
-            qtde, vu, vt,
-            self.vars["numero_empenho"].get().strip(),
-            self.vars["observacao"].get().strip()
-        )
-        self.tree.insert("", "end", values=vals)
-        for v in self.vars.values(): v.set("")
-
-    def remover(self):
-        sel = self.tree.selection()
-        if sel:
-            self.tree.delete(sel[0])
-
-    def _df(self):
-        dados = []
-        for iid in self.tree.get_children():
-            dados.append(self.tree.item(iid)["values"])
-        cols = ["Código AGHU","Nome do Item","Qtde","Valor Unitário","Valor Total","Número do Empenho","Observação"]
-        return pd.DataFrame(dados, columns=cols)
-
-    def exportar(self):
-        if not self.tree.get_children():
-            messagebox.showinfo("Info", "Inclua itens antes de exportar.")
+        if not (self.e_cod.get().strip() and self.e_nome.get().strip() and qt and vu):
+            messagebox.showwarning("Validação","Preencha código, nome, qtde e valor unitário.")
             return
-        arq = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel","*.xlsx")], title="Salvar orçamento")
-        if not arq: return
-        df = self._df()
-        exportar_excel({"Orçamento": df}, arq)
-        messagebox.showinfo("OK", f"Arquivo exportado: {arq}")
+        vt = qt * vu
+        self.tv.insert("", "end", values=(
+            self.e_cod.get().strip(),
+            self.e_nome.get().strip(),
+            f"{qt}",
+            f"{vu:.2f}",
+            self.e_emp.get().strip(),
+            self.e_obs.get().strip(),
+            f"{vt:.2f}"
+        ))
+        # limpa campos
+        for e in (self.e_cod, self.e_nome, self.e_qt, self.e_vu, self.e_emp, self.e_obs):
+            e.delete(0, "end")
 
-    def enviar_email_orc(self):
-        if not self.tree.get_children():
-            messagebox.showinfo("Info", "Inclua itens antes de enviar.")
+    # ---------- Placeholders a implementar ----------
+    def _exportar_excel(self):
+        # Próxima etapa: gerar .xlsx com pandas
+        arq = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel", "*.xlsx")], title="Salvar orçamento")
+        if not arq:
             return
-        sel_for = self.for_var.get()
-        if not sel_for:
-            messagebox.showinfo("Info", "Selecione um fornecedor.")
-            return
-        fornecedor_id, email_for = self.map_for[sel_for]
-        if not email_for:
-            messagebox.showwarning("Atenção", "Fornecedor sem e-mail cadastrado.")
-            return
-        # Exporta temporário
-        df = self._df()
-        tmp = "orcamento_temp.xlsx"
-        exportar_excel({"Orçamento": df}, tmp)
+        # Aqui vamos montar um DataFrame e salvar — implemento quando você der o OK.
+        messagebox.showinfo("Exportação", f"Planilha será salva em:\n{arq}\n(Implementaremos na próxima etapa)")
 
-        msg = self.msg_txt.get("1.0", "end").strip() or "Segue orçamento para conferência."
-        corpo = f"""
-        <p>Prezados,</p>
-        <p>{msg}</p>
-        <p>Att.</p>
-        """
-        try:
-            from utils import enviar_email
-            enviar_email([email_for], "Orçamento - OPME", corpo_html=corpo, anexos=[tmp])
-            messagebox.showinfo("OK", "E-mail enviado ao fornecedor.")
-        except Exception as e:
-            messagebox.showerror("Erro", f"Falha ao enviar e-mail: {e}")
-        finally:
-            try:
-                import os; os.remove(tmp)
-            except: pass
+    def _enviar_email(self):
+        # Próxima etapa: enviar via smtplib, usando e-mail do fornecedor (cadastro) e a mensagem.
+        messagebox.showinfo("E-mail", "Envio por e-mail será implementado na próxima etapa.\nIncluiremos configuração SMTP e corpo da mensagem.")
