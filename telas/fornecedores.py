@@ -1,12 +1,12 @@
 # telas/fornecedores.py
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 import banco
 
-
-class TelaFornecedores(tk.Frame):
+class TelaFornecedores(tk.Frame):           # <<< herda de tk.Frame
     def __init__(self, master):
-        super().__init__(master, bg="white")
+        super().__init__(master, bg="white")  # <<< inicializa o Frame
         banco.criar_tabelas()
 
         # Esquerda: Lista / Busca
