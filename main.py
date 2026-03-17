@@ -5,6 +5,9 @@ import tkinter.font as tkfont
 import sys
 import os
 
+import traceback
+from tkinter import messagebox
+
 # Importa as telas
 from telas.dashboard import Dashboard
 from telas.fornecedores import TelaFornecedores
@@ -88,30 +91,41 @@ class Sistema(tk.Tk):
             widget.destroy()
 
     # --------- Navegação ----------
-    def abrir_dashboard(self):
-        self.limpar()
-        tela = Dashboard(self.container)
-        tela.pack(fill="both", expand=True)
-
-    def abrir_fornecedores(self):
-        self.limpar()
-        tela = TelaFornecedores(self.container)
-        tela.pack(fill="both", expand=True)
-
-    def abrir_atas_empenhos(self):
-        self.limpar()
-        tela = TelaAtasEmpenhos(self.container)
-        tela.pack(fill="both", expand=True)
-
-    def abrir_notas(self):
-        self.limpar()
-        tela = TelaNotas(self.container)
-        tela.pack(fill="both", expand=True)
-
-    def abrir_orcamento(self):
-        self.limpar()
-        tela = TelaOrcamento(self.container)
-        tela.pack(fill="both", expand=True)
+    
+    def _abrir_tela(self, classe_tela, nome_log="tela"):
+            self.limpar()
+            try:
+                tela = classe_tela(self.container)
+                tela.pack(fill="both", expand=True)
+            except Exception as e:
+                # Loga em arquivo para análise
+                log_path = os.path.join(os.path.expanduser("~"), "controle_notas_erro.log")
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write("\n" + "="*80 + "\n")
+                    f.write(f"Erro ao abrir {nome_log}:\n")
+                    f.write(traceback.format_exc())
+    
+                messagebox.showerror(
+                    "Erro",
+                    f"Ocorreu um erro ao abrir a tela '{nome_log}'.\n\n"
+                    f"{e}\n\n"
+                    f"Um log foi salvo em:\n{log_path}"
+                )
+    
+        def abrir_dashboard(self):
+            self._abrir_tela(Dashboard, "Dashboard")
+    
+        def abrir_fornecedores(self):
+            self._abrir_tela(TelaFornecedores, "Fornecedores")
+    
+        def abrir_atas_empenhos(self):
+            self._abrir_tela(TelaAtasEmpenhos, "Ata/Empenho")
+    
+        def abrir_notas(self):
+            self._abrir_tela(TelaNotas, "Notas")
+    
+        def abrir_orcamento(self):
+            self._abrir_tela(TelaOrcamento, "Orçamento")
 
 
 if __name__ == "__main__":
