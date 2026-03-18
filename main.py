@@ -130,9 +130,9 @@ class Sistema(tk.Tk):
         self._abrir_tela(TelaOrcamento, "Orçamento")
 
     def abrir_configuracoes(self):
-    self.limpar()
-    tela = TelaConfiguracoes(self.container)
-    tela.pack(fill="both", expand=True)
+        self.limpar()
+        tela = TelaConfiguracoes(self.container)
+        tela.pack(fill="both", expand=True)
 
 
 if __name__ == "__main__":
