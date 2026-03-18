@@ -29,7 +29,7 @@ class Sistema(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("Controle de Notas e Empenhos")
+        self.title("Controle de Notas e Empenhos - build 2026-03-18 11:04")
         self.geometry("1100x650")
         self.minsize(1000, 600)
 
