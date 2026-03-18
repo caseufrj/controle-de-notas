@@ -106,6 +106,28 @@ class TelaOrcamento(tk.Frame):
         barra_hist.pack(fill="x", padx=6, pady=(0,6))
         ttk.Button(barra_hist, text="Atualizar", command=self._carregar_salvos).pack(side="left")
         ttk.Button(barra_hist, text="Excluir selecionado", command=self._excluir_salvo).pack(side="left", padx=6)
+        ttk.Button(barra_hist, text="Exportar histórico (filtros)", command=self._exportar_historico).pack(side="left", padx=6)
+        
+        # paginação
+        pag = tk.Frame(lf_hist, bg="white")
+        pag.pack(fill="x", padx=6, pady=(0,6))
+        tk.Label(pag, text="Itens/página:").pack(side="left")
+        self.cb_page_size = ttk.Combobox(pag, state="readonly", width=5, values=[20,50,100,200])
+        self.cb_page_size.set(50)
+        self.cb_page_size.pack(side="left", padx=4)
+        self.cb_page_size.bind("<<ComboboxSelected>>", lambda e: self._resetar_paginacao())
+        
+        ttk.Button(pag, text="<<", command=lambda: self._ir_pagina("first")).pack(side="left", padx=2)
+        ttk.Button(pag, text="<",  command=lambda: self._ir_pagina("prev")).pack(side="left", padx=2)
+        ttk.Button(pag, text=">",  command=lambda: self._ir_pagina("next")).pack(side="left", padx=2)
+        ttk.Button(pag, text=">>", command=lambda: self._ir_pagina("last")).pack(side="left", padx=2)
+        
+        self.lbl_pag = tk.Label(pag, text="Página 1/1", bg="white")
+        self.lbl_pag.pack(side="left", padx=10)
+        
+        # estado da paginação
+        self._page = 1
+        self._total = 0
 
         # ---------- Mensagens (Modelos e Rascunhos) ----------
         lf_msg = ttk.LabelFrame(self, text="Mensagens (Modelos e Rascunhos)")
@@ -123,6 +145,18 @@ class TelaOrcamento(tk.Frame):
 
         nb = ttk.Notebook(lf_msg)
         nb.pack(fill="both", expand=True, padx=6, pady=6)
+
+        # Busca de mensagens
+        busca_bar = tk.Frame(lf_msg); busca_bar.pack(fill="x", padx=6, pady=(0,6))
+        tk.Label(busca_bar, text="Buscar (título/conteúdo):").pack(side="left")
+        self.e_msg_busca = ttk.Entry(busca_bar, width=40); self.e_msg_busca.pack(side="left", padx=6)
+        ttk.Button(busca_bar, text="Filtrar listas", command=self._carregar_msgs).pack(side="left")
+        
+        # Botões gerais de edição
+        msg_edit = tk.Frame(lf_msg); msg_edit.pack(fill="x", padx=6, pady=(0,6))
+        ttk.Button(msg_edit, text="Editar selecionada", command=self._editar_msg).pack(side="left")
+        ttk.Button(msg_edit, text="Salvar alterações", command=self._salvar_alteracoes_msg).pack(side="left", padx=6)
+        self._msg_editando_id = None  # controla edição em andamento
 
         # Aba Modelos
         aba_modelos = tk.Frame(nb)
@@ -233,42 +267,98 @@ class TelaOrcamento(tk.Frame):
         self.f_emp.delete(0, "end")
         self._carregar_salvos()
 
+    def _filtros_atual(self):
+    di = self.f_data_ini.get().strip() or None
+    df = self.f_data_fim.get().strip() or None
+    termo = self.f_busca.get().strip()
+    nem = self.f_emp.get().strip()
+    return di, df, termo, nem
+
+    def _resetar_paginacao(self):
+        self._page = 1
+        self._carregar_salvos()
+    
+    def _ir_pagina(self, qual: str):
+        page_size = int(self.cb_page_size.get() or 50)
+        total_pages = max(1, (self._total + page_size - 1) // page_size)
+        if qual == "first":
+            self._page = 1
+        elif qual == "prev":
+            self._page = max(1, self._page - 1)
+        elif qual == "next":
+            self._page = min(total_pages, self._page + 1)
+        elif qual == "last":
+            self._page = total_pages
+        self._carregar_salvos()
+    
     def _carregar_salvos(self):
         forn_id = self._fornecedor_id_atual()
         for i in self.tv_salvos.get_children():
             self.tv_salvos.delete(i)
         if not forn_id:
+            self._total, self._page = 0, 1
+            self.lbl_pag.config(text="Página 1/1")
             return
-
-        di = self.f_data_ini.get().strip() or None
-        df = self.f_data_fim.get().strip() or None
-        termo = self.f_busca.get().strip()
-        nem = self.f_emp.get().strip()
-
+    
+        di, df, termo, nem = self._filtros_atual()
+        page_size = int(self.cb_page_size.get() or 50)
+        offset = (self._page - 1) * page_size
+    
         try:
-            rows = banco.orcamentos_filtrar(
-                fornecedor_id=forn_id,
-                data_ini=di, data_fim=df,
-                termo=termo,
-                numero_empenho=nem
+            res = banco.orcamentos_filtrar_paginado(
+                fornecedor_id=forn_id, data_ini=di, data_fim=df,
+                termo=termo, numero_empenho=nem, limit=page_size, offset=offset
             )
+            rows, self._total = res["rows"], res["total"]
             for r in rows:
                 qt = float(r.get("qtde", 0) or 0)
                 vu = float(r.get("vl_unit", 0) or 0)
                 self.tv_salvos.insert("", "end", values=(
-                    r.get("id",""),
-                    r.get("criado_em",""),
-                    r.get("cod_aghu",""),
-                    r.get("nome_item",""),
-                    f"{qt}",
-                    f"{vu:.2f}",
-                    f"{qt*vu:.2f}",
-                    r.get("numero_empenho","") or "",
-                    r.get("observacao","") or "",
+                    r.get("id",""), r.get("criado_em",""), r.get("cod_aghu",""),
+                    r.get("nome_item",""), f"{qt}", f"{vu:.2f}", f"{qt*vu:.2f}",
+                    r.get("numero_empenho","") or "", r.get("observacao","") or ""
                 ))
+            total_pages = max(1, (self._total + page_size - 1) // page_size)
+            self._page = min(self._page, total_pages)
+            self.lbl_pag.config(text=f"Página {self._page}/{total_pages} — {self._total} registro(s)")
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao carregar orçamentos salvos:\n{e}")
-
+    
+    def _exportar_historico(self):
+        forn_id = self._fornecedor_id_atual()
+        if not forn_id:
+            messagebox.showwarning("Validação", "Selecione o fornecedor.")
+            return
+        di, df, termo, nem = self._filtros_atual()
+        try:
+            rows = banco.orcamentos_filtrar(fornecedor_id=forn_id, data_ini=di, data_fim=df, termo=termo, numero_empenho=nem)
+            if not rows:
+                messagebox.showinfo("Exportar histórico", "Nenhum registro para exportar com os filtros atuais.")
+                return
+            arq = filedialog.asksaveasfilename(defaultextension=".xlsx",
+                                               filetypes=[("Excel", "*.xlsx")],
+                                               title="Salvar histórico de orçamentos")
+            if not arq:
+                return
+            dados = []
+            for r in rows:
+                qt = float(r.get("qtde",0) or 0); vu = float(r.get("vl_unit",0) or 0)
+                dados.append({
+                    "Criado em": r.get("criado_em",""),
+                    "Cód AGHU": r.get("cod_aghu",""),
+                    "Item": r.get("nome_item",""),
+                    "Qtde": qt,
+                    "Vlr Unit": vu,
+                    "Vlr Total": qt*vu,
+                    "Nº Empenho": r.get("numero_empenho","") or "",
+                    "Obs": r.get("observacao","") or ""
+                })
+            import pandas as pd
+            df = pd.DataFrame(dados)
+            utils.exportar_excel({"Histórico": df}, arq)
+            messagebox.showinfo("Exportar histórico", f"Planilha salva em:\n{arq}")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao exportar histórico:\n{e}")
     def _excluir_salvo(self):
         sel = self.tv_salvos.selection()
         if not sel:
