@@ -2,6 +2,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import tempfile
+from datetime import datetime
 
 import banco
 import utils
@@ -108,8 +109,7 @@ class TelaOrcamento(tk.Frame):
         widths_s = (60, 140, 100, 260, 70, 90, 100, 120, 260)
         self.tv_salvos = ttk.Treeview(lf_hist, columns=cols_s, show="headings", height=8)
         for c, h, w in zip(cols_s, heads_s, widths_s):
-            self.tv_salvos.heading(c, text=h)
-            self.tv_salvos.column(c, width=w, anchor="w")
+            self.tv_salvos.heading(c, text=h); self.tv_salvos.column(c, width=w, anchor="w")
         self.tv_salvos.pack(fill="both", expand=True, padx=6, pady=(6, 2))
 
         barra_hist = tk.Frame(lf_hist, bg="white")
@@ -168,8 +168,6 @@ class TelaOrcamento(tk.Frame):
         # Notebook com as listas
         nb = ttk.Notebook(lf_msg)
         nb.pack(fill="both", expand=True, padx=6, pady=6)
-        lbl_debug = tk.Label(lf_msg, text="(DEBUG) Abas carregadas", fg="#27ae60", bg="white")
-        lbl_debug.pack(anchor="w", padx=6)
 
         # Aba Modelos
         aba_modelos = tk.Frame(nb)
@@ -438,6 +436,12 @@ class TelaOrcamento(tk.Frame):
             messagebox.showwarning("Validação", "Escreva o conteúdo da mensagem.")
             return
         forn_id = self._fornecedor_id_atual() if self.var_msg_forn.get() else None
+
+        # Se marcou vincular ao fornecedor, mas não há fornecedor selecionado
+        if self.var_msg_forn.get() and not forn_id:
+            messagebox.showwarning("Validação", "Selecione um fornecedor para vincular a mensagem.")
+            return
+
         try:
             mid = banco.mensagem_inserir({
                 "fornecedor_id": forn_id,
@@ -446,6 +450,9 @@ class TelaOrcamento(tk.Frame):
                 "tipo": tipo
             })
             self._msg_editando_id = mid  # passa a editar este
+            # Se for rascunho, o autosave deve continuar atualizando este mesmo registro
+            self._autosave_msg_id = mid if tipo == "rascunho" else None
+
             self._carregar_msgs()
             messagebox.showinfo("OK", f"Mensagem salva como {tipo.upper()}.\nEla aparece na lista da aba correspondente.")
         except Exception as e:
@@ -466,7 +473,11 @@ class TelaOrcamento(tk.Frame):
         if not msg:
             messagebox.showwarning("Aviso", "Mensagem não encontrada.")
             return
+
         self._msg_editando_id = mid
+        # Se for rascunho, autosave atualiza este. Se for modelo, autosave criará novo rascunho.
+        self._autosave_msg_id = mid if msg.get("tipo") == "rascunho" else None
+
         self.e_titulo_msg.delete(0, "end")
         self.e_titulo_msg.insert(0, msg.get("titulo", ""))
         self.txt_msg.delete("1.0", "end")
@@ -487,7 +498,10 @@ class TelaOrcamento(tk.Frame):
         if not msg:
             messagebox.showwarning("Aviso", "Mensagem não encontrada.")
             return
+
         self._msg_editando_id = mid
+        self._autosave_msg_id = mid if msg.get("tipo") == "rascunho" else None
+
         self.e_titulo_msg.delete(0, "end")
         self.e_titulo_msg.insert(0, msg.get("titulo", ""))
         self.txt_msg.delete("1.0", "end")
@@ -525,6 +539,9 @@ class TelaOrcamento(tk.Frame):
         try:
             banco.mensagem_excluir(mid)
             self._msg_editando_id = None
+            # Se estava autosalvando este registro, encerra o contexto
+            if self._autosave_msg_id == mid:
+                self._autosave_msg_id = None
             self._carregar_msgs()
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao excluir: {e}")
@@ -541,11 +558,15 @@ class TelaOrcamento(tk.Frame):
             return
         titulo = (self.e_titulo_msg.get() or "").strip()
         if not titulo:
-            titulo = f"Rascunho automático - {self.cb_fornec.get() or 'Global'}"
+            # Título mais informativo
+            titulo = f"Rascunho automático - {self.cb_fornec.get() or 'Global'} - {datetime.now():%d/%m %H:%M}"
+
         try:
             if self._autosave_msg_id:
+                # Atualiza o mesmo rascunho
                 banco.mensagem_atualizar(self._autosave_msg_id, titulo, conteudo)
             else:
+                # Cria um novo rascunho (quando veio de MODELO ou texto novo)
                 forn_id = self._fornecedor_id_atual() if self.var_msg_forn.get() else None
                 self._autosave_msg_id = banco.mensagem_inserir({
                     "fornecedor_id": forn_id,
