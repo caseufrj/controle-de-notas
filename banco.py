@@ -26,6 +26,42 @@ def conectar():
     # Mantém journal_mode em WAL quando local; em rede pode não ser suportado. Não forçamos aqui.
     return conn
 
+# logo após conectar:
+def conn():
+    c = sqlite3.connect(DB_PATH)
+    c.execute("PRAGMA foreign_keys = ON;")
+    return c
+
+def criar_tabelas():
+    with closing(conn()) as c, c:
+        cur = c.cursor()
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS notas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fornecedor_id INTEGER NOT NULL,
+            numero TEXT,
+            data TEXT NOT NULL, -- 'DD/MM/AAAA'
+            valor_total REAL NOT NULL,
+            observacao TEXT,
+            criado_em TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            atualizado_em TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS nota_itens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nota_id INTEGER NOT NULL,
+            cod_aghu TEXT NOT NULL,
+            nome_item TEXT NOT NULL,
+            qtde REAL NOT NULL,
+            vl_unit REAL NOT NULL,
+            vl_total REAL NOT NULL,
+            numero_empenho TEXT,
+            observacao TEXT,
+            FOREIGN KEY(nota_id) REFERENCES notas(id) ON DELETE CASCADE
+        );
+        """)
+
 # ---------- Helpers de migração ----------
 def _tabela_info(cur: sqlite3.Cursor, nome_tabela: str) -> List[sqlite3.Row]:
     cur.execute(f"PRAGMA table_info({nome_tabela})")
