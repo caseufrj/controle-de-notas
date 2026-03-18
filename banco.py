@@ -467,7 +467,7 @@ def saldo_empenho_por_fornecedor(fornecedor_id: int) -> List[Dict[str, Any]]:
     cur.execute("""
         SELECT * FROM vw_saldo_empenho
         WHERE fornecedor_id=?
-        ORDER BY valor_saldo ASC, id DESC
+        ORDER BY valor_saldo ASC, empenho_id DESC   -- <<< coluna correta
     """, (fornecedor_id,))
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
