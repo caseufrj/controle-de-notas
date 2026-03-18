@@ -472,3 +472,49 @@ def saldo_empenho_por_fornecedor(fornecedor_id: int) -> List[Dict[str, Any]]:
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
+
+# ------ Orçamentos ------
+def orcamento_inserir(d):
+    """
+    d = {
+      'fornecedor_id','cod_aghu','nome_item','qtde','vl_unit','numero_empenho',
+      'observacao','mensagem_email'
+    }
+    """
+    campos = ("fornecedor_id","cod_aghu","nome_item","qtde","vl_unit",
+              "numero_empenho","observacao","mensagem_email")
+    vals = tuple(d.get(k) for k in campos)
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute(f"""
+        INSERT INTO orcamentos ({",".join(campos)})
+        VALUES ({",".join(["?"]*len(campos))})
+    """, vals)
+    conn.commit()
+    novo_id = cur.lastrowid
+    conn.close()
+    return novo_id
+
+def orcamentos_listar(fornecedor_id=None, cod_aghu="", numero_empenho=""):
+    conn = conectar()
+    cur = conn.cursor()
+    sql = "SELECT * FROM orcamentos WHERE 1=1"
+    params = []
+    if fornecedor_id:
+        sql += " AND fornecedor_id=?"; params.append(fornecedor_id)
+    if cod_aghu:
+        sql += " AND cod_aghu LIKE ?"; params.append(f"%{cod_aghu}%")
+    if numero_empenho:
+        sql += " AND numero_empenho LIKE ?"; params.append(f"%{numero_empenho}%")
+    sql += " ORDER BY id DESC"
+    cur.execute(sql, tuple(params))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+def orcamento_excluir(id_):
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM orcamentos WHERE id=?", (id_,))
+    conn.commit()
+    conn.close()
