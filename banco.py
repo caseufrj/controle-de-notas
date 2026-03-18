@@ -177,6 +177,23 @@ def criar_tabelas():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_orc_fornec ON orcamentos(fornecedor_id);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_orc_cod ON orcamentos(cod_aghu);")
 
+    # ---------------- Índice auxiliar para histórico de orçamentos ----------------
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_orc_criado_em ON orcamentos(criado_em);")
+
+    # ---------------- Mensagens (Modelos & Rascunhos) ----------------
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS mensagens_padrao (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fornecedor_id INTEGER REFERENCES fornecedores(id) ON DELETE SET NULL,
+        titulo TEXT NOT NULL,
+        conteudo TEXT NOT NULL,
+        tipo TEXT NOT NULL DEFAULT 'modelo', -- 'modelo' | 'rascunho'
+        criado_em TEXT DEFAULT (datetime('now','localtime'))
+    );
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_msgs_tipo ON mensagens_padrao(tipo);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_msgs_forn ON mensagens_padrao(fornecedor_id);")
+
     # --------- Views de Saldos (recriadas) ---------
     # SLD ATA: por item de ata (id), considera SOMENTE itens de nota vinculados àquela ata_item_id
     if _view_existe(cur, "vw_saldo_ata"):
@@ -516,5 +533,106 @@ def orcamento_excluir(id_):
     conn = conectar()
     cur = conn.cursor()
     cur.execute("DELETE FROM orcamentos WHERE id=?", (id_,))
+    conn.commit()
+    conn.close()
+
+# ------ Orçamentos (filtros p/ histórico) ------
+def orcamentos_filtrar(
+    fornecedor_id: int | None = None,
+    data_ini: str | None = None,  # 'YYYY-MM-DD'
+    data_fim: str | None = None,  # 'YYYY-MM-DD'
+    termo: str = "",
+    numero_empenho: str = ""
+):
+    conn = conectar()
+    cur = conn.cursor()
+    sql = """
+        SELECT o.id, o.fornecedor_id, f.nome AS fornecedor_nome,
+               o.cod_aghu, o.nome_item, o.qtde, o.vl_unit,
+               o.numero_empenho, o.observacao, o.criado_em
+        FROM orcamentos o
+        LEFT JOIN fornecedores f ON f.id = o.fornecedor_id
+        WHERE 1=1
+    """
+    params: list = []
+    if fornecedor_id:
+        sql += " AND o.fornecedor_id=?"
+        params.append(fornecedor_id)
+    if data_ini:
+        sql += " AND date(o.criado_em) >= date(?)"
+        params.append(data_ini)
+    if data_fim:
+        sql += " AND date(o.criado_em) <= date(?)"
+        params.append(data_fim)
+    if termo:
+        sql += """ AND (
+            o.cod_aghu LIKE ? OR
+            o.nome_item LIKE ? OR
+            o.observacao LIKE ?
+        )"""
+        like = f"%{termo}%"
+        params.extend([like, like, like])
+    if numero_empenho:
+        sql += " AND IFNULL(o.numero_empenho,'') LIKE ?"
+        params.append(f"%{numero_empenho}%")
+
+    sql += " ORDER BY o.id DESC"
+    cur.execute(sql, tuple(params))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+# ------ Mensagens padrão / rascunhos ------
+def mensagem_inserir(d):
+    """
+    d = {'fornecedor_id': Optional[int], 'titulo': str, 'conteudo': str, 'tipo': 'modelo'|'rascunho'}
+    """
+    campos = ("fornecedor_id","titulo","conteudo","tipo")
+    vals = (d.get("fornecedor_id"), d["titulo"], d["conteudo"], d.get("tipo","modelo"))
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute(f"""
+        INSERT INTO mensagens_padrao ({",".join(campos)})
+        VALUES (?,?,?,?)
+    """, vals)
+    conn.commit()
+    novo_id = cur.lastrowid
+    conn.close()
+    return novo_id
+
+def mensagens_listar(tipo: str | None = None, fornecedor_id: int | None = None, busca: str = ""):
+    conn = conectar()
+    cur = conn.cursor()
+    sql = "SELECT * FROM mensagens_padrao WHERE 1=1"
+    params: list = []
+    if tipo:
+        sql += " AND tipo=?"; params.append(tipo)
+    if fornecedor_id is not None:
+        sql += " AND (fornecedor_id IS NULL OR fornecedor_id=?)"; params.append(fornecedor_id)
+    if busca:
+        sql += " AND (titulo LIKE ? OR conteudo LIKE ?)"
+        like = f"%{busca}%"
+        params.extend([like, like])
+    sql += " ORDER BY id DESC"
+    cur.execute(sql, tuple(params))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+def mensagem_excluir(id_: int):
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM mensagens_padrao WHERE id=?", (id_,))
+    conn.commit()
+    conn.close()
+
+def mensagem_atualizar(id_: int, novo_titulo: str, novo_conteudo: str):
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE mensagens_padrao
+           SET titulo=?, conteudo=?
+         WHERE id=?
+    """, (novo_titulo, novo_conteudo, id_))
     conn.commit()
     conn.close()
