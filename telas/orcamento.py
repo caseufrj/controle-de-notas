@@ -168,6 +168,8 @@ class TelaOrcamento(tk.Frame):
         # Notebook com as listas
         nb = ttk.Notebook(lf_msg)
         nb.pack(fill="both", expand=True, padx=6, pady=6)
+        lbl_debug = tk.Label(lf_msg, text="(DEBUG) Abas carregadas", fg="#27ae60", bg="white")
+        lbl_debug.pack(anchor="w", padx=6)
 
         # Aba Modelos
         aba_modelos = tk.Frame(nb)
