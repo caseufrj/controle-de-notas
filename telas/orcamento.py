@@ -153,9 +153,6 @@ class TelaOrcamento(tk.Frame):
         ttk.Button(msg_btns, text="Salvar como MODELO", command=lambda: self._salvar_mensagem("modelo")).pack(side="left")
         ttk.Button(msg_btns, text="Salvar como RASCUNHO", command=lambda: self._salvar_mensagem("rascunho")).pack(side="left", padx=6)
 
-        nb = ttk.Notebook(lf_msg)
-        nb.pack(fill="both", expand=True, padx=6, pady=6)
-
         # Busca de mensagens
         busca_bar = tk.Frame(lf_msg); busca_bar.pack(fill="x", padx=6, pady=(0, 6))
         tk.Label(busca_bar, text="Buscar (título/conteúdo):").pack(side="left")
@@ -167,6 +164,10 @@ class TelaOrcamento(tk.Frame):
         ttk.Button(msg_edit, text="Editar selecionada", command=self._editar_msg).pack(side="left")
         ttk.Button(msg_edit, text="Salvar alterações", command=self._salvar_alteracoes_msg).pack(side="left", padx=6)
         self._msg_editando_id = None  # controla edição em andamento
+
+        # Notebook com as listas
+        nb = ttk.Notebook(lf_msg)
+        nb.pack(fill="both", expand=True, padx=6, pady=6)
 
         # Aba Modelos
         aba_modelos = tk.Frame(nb)
