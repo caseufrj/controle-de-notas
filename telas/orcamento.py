@@ -45,9 +45,19 @@ class TelaOrcamento(tk.Frame):
         self.e_obs.grid(column=5, row=1, sticky="w", padx=6, pady=3)
 
         # Mensagem (corpo do e-mail)
-        tk.Label(form, text="Mensagem p/ e-mail:").grid(column=0, row=3, sticky="nw", padx=6, pady=3)
+        # 🔽 Seleção rápida de modelo
+        tk.Label(form, text="Modelo:").grid(column=0, row=3, sticky="w", padx=6, pady=3)
+        
+        self.cb_modelo = ttk.Combobox(form, state="readonly", width=50)
+        self.cb_modelo.grid(column=1, row=3, columnspan=3, sticky="w", padx=6, pady=3)
+        
+        ttk.Button(form, text="Carregar", command=self._carregar_modelo_rapido)\
+            .grid(column=4, row=3, padx=6)
+        
+        # Mensagem (corpo do e-mail)
+        tk.Label(form, text="Mensagem p/ e-mail:").grid(column=0, row=4, sticky="nw", padx=6, pady=3)
         self.txt_msg = tk.Text(form, width=80, height=4)
-        self.txt_msg.grid(column=1, row=3, columnspan=5, sticky="w", padx=6, pady=3)
+        self.txt_msg.grid(column=1, row=4, columnspan=5, sticky="w", padx=6, pady=3)
 
         # Auto-save rascunho da mensagem (debounce ~2s)
         self._autosave_job = None
@@ -200,6 +210,7 @@ class TelaOrcamento(tk.Frame):
 
         # Estado
         self.map_fornec = {}
+        self._modelos_cache = []
 
         # Inicializações
         self._carregar_fornecedores()
@@ -410,6 +421,8 @@ class TelaOrcamento(tk.Frame):
 
         try:
             modelos = banco.mensagens_listar(tipo="modelo", fornecedor_id=forn_id, busca=busca)
+            self._modelos_cache = modelos
+            self.cb_modelo["values"] = [m["titulo"] for m in modelos]
             for m in modelos:
                 escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
                 self.tv_modelos.insert("", "end",
@@ -425,6 +438,25 @@ class TelaOrcamento(tk.Frame):
                                     values=(m["id"], m["titulo"], escopo, m["criado_em"]))
         except Exception as e:
             print("Falha ao listar rascunhos:", e)
+
+    def _carregar_modelo_rapido(self):
+        titulo = self.cb_modelo.get()
+        if not titulo:
+            return
+    
+        for m in self._modelos_cache:
+            if m["titulo"] == titulo:
+                msg = banco.mensagem_obter(m["id"])
+                if msg:
+                    self.txt_msg.delete("1.0", "end")
+                    self.txt_msg.insert("1.0", msg.get("conteudo", ""))
+    
+                    self.e_titulo_msg.delete(0, "end")
+                    self.e_titulo_msg.insert(0, msg.get("titulo", ""))
+    
+                    # reseta autosave
+                    self._autosave_msg_id = None
+                break
 
     def _salvar_mensagem(self, tipo: str):
         titulo = (self.e_titulo_msg.get() or "").strip()
