@@ -19,8 +19,6 @@ class TelaNotas(tk.Frame):
         self.cb_fornec.grid(row=0, column=1, padx=6, pady=2, sticky="w")
         self.cb_fornec.bind("<<ComboboxSelected>>", lambda e: self._recarregar_vinculos())
 
-        self._carregar_fornecedores()
-
         # Dados da nota
         tk.Label(topo, text="Número+Série*:", bg="white").grid(row=1, column=0, sticky="w")
         self.e_numero = ttk.Entry(topo, width=30)
@@ -57,7 +55,7 @@ class TelaNotas(tk.Frame):
         grid = tk.Frame(area)
         grid.pack(fill="x", padx=8, pady=6)
 
-        # Combos de vínculo (populam quando seleciona fornecedor)
+        # >>> Primeiro crie as Combobox de vínculo
         tk.Label(grid, text="Vínculo ATA:").grid(row=0, column=0, sticky="w")
         self.cb_ata = ttk.Combobox(grid, state="readonly", width=40)
         self.cb_ata.grid(row=0, column=1, padx=6, pady=2, sticky="w")
@@ -74,7 +72,7 @@ class TelaNotas(tk.Frame):
             e = ttk.Entry(grid, width=20)
             e.grid(row=i, column=1, sticky="w", padx=6, pady=2)
             self.ent_item.append(e)
-        # Nome do item (exibido; você pediu na nota só por cod, mas mantive campo opcional)
+
         tk.Label(grid, text="Nome item (opcional)").grid(row=1, column=2, sticky="w")
         self.e_nome_item = ttk.Entry(grid, width=40)
         self.e_nome_item.grid(row=1, column=3, sticky="w", padx=6, pady=2)
@@ -82,7 +80,7 @@ class TelaNotas(tk.Frame):
         self.btn_add_item = ttk.Button(grid, text="Adicionar item", command=self._adicionar_item_na_tabela, state="disabled")
         self.btn_add_item.grid(row=6, column=3, sticky="e", pady=4)
 
-        # Tabela de itens (pendentes de salvar)
+        # Tabela de itens (pendentes)
         cols = ("cod_aghu","data_uso","vl_unit","qtde","vl_total","qtde_consumida","ata_item_id","empenho_id","ata_leg","emp_leg")
         self.tv = ttk.Treeview(area, columns=cols, show="headings", height=10)
         heads = ("Cód AGHU","Data uso","Vlr Unit","Qtde","Vlr Total","Qtde cons.","ID ATA","ID Emp","ATA","Empenho")
@@ -98,11 +96,14 @@ class TelaNotas(tk.Frame):
         self.btn_salvar_itens = ttk.Button(rod, text="Salvar Itens na Nota", command=self._salvar_itens, state="disabled")
         self.btn_salvar_itens.pack(side="right")
 
-        # Estado da tela
+        # Estado
         self.nota_id = None
         self.map_fornec = {}
-        self.map_ata = {}   # label -> id
-        self.map_emp = {}   # label -> id
+        self.map_ata = {}
+        self.map_emp = {}
+
+        # >>> Só agora carregue fornecedores (pois cb_ata/cb_emp já existem)
+        self._carregar_fornecedores()
 
     # ---------- Carregamentos ----------
     def _carregar_fornecedores(self):
@@ -112,14 +113,23 @@ class TelaNotas(tk.Frame):
         if fs:
             self.cb_fornec.current(0)
             self._recarregar_vinculos()
+        else:
+            # sem fornecedores, desabilita botões
+            self.btn_add_item.config(state="disabled")
+            self.btn_salvar_itens.config(state="disabled")
 
     def _recarregar_vinculos(self):
+        # Garante que os widgets existem
+        if not hasattr(self, "cb_ata") or not hasattr(self, "cb_emp"):
+            return
         nome = self.cb_fornec.get()
         if not nome:
             self.cb_ata["values"] = []
             self.cb_emp["values"] = []
             return
-        fid = self.map_fornec[nome]
+        fid = self.map_fornec.get(nome)
+        if not fid:
+            return
         # ATA
         atas = banco.ata_itens_listar(fornecedor_id=fid)
         self.map_ata = {f'{a["pregao"]} | {a["cod_aghu"]} | {a["nome_item"]}': a["id"] for a in atas}
@@ -135,11 +145,17 @@ class TelaNotas(tk.Frame):
         if not nome:
             messagebox.showwarning("Validação","Selecione o fornecedor.")
             return
+        try:
+            vl_total = float(self.e_total.get() or 0)
+        except ValueError:
+            messagebox.showwarning("Validação","Valor total inválido.")
+            return
+
         d = {
             "fornecedor_id": self.map_fornec[nome],
             "numero": self.e_numero.get().strip(),
             "data_expedicao": self.e_data.get().strip(),
-            "vl_total": float(self.e_total.get() or 0),
+            "vl_total": vl_total,
             "codigo_sei": self.e_sei.get().strip(),
             "data_envio_processo": self.e_envio.get().strip(),
             "observacao": self.e_obs.get().strip()
@@ -152,7 +168,7 @@ class TelaNotas(tk.Frame):
             messagebox.showinfo("OK", f"Nota salva (ID {self.nota_id}). Agora adicione os itens.")
             self.btn_add_item.config(state="normal")
             self.btn_salvar_itens.config(state="normal")
-            # Congela cabeçalho para evitar mudança indevida após inserir itens
+            # Congela cabeçalho
             self.cb_fornec.config(state="disabled")
             self.e_numero.config(state="disabled")
             self.e_data.config(state="disabled")
@@ -166,12 +182,18 @@ class TelaNotas(tk.Frame):
             messagebox.showwarning("Atenção","Salve a nota antes de incluir itens.")
             return
 
+        def _to_float(x):
+            try:
+                return float((x or "").replace(",", "."))
+            except Exception:
+                return 0.0
+
         cod = self.ent_item[0].get().strip()
         data_uso = self.ent_item[1].get().strip()
-        vl_unit = float(self.ent_item[2].get() or 0)
-        qtde = float(self.ent_item[3].get() or 0)
-        vl_total = float(self.ent_item[4].get() or 0)
-        qtde_cons = float(self.ent_item[5].get() or 0)
+        vl_unit = _to_float(self.ent_item[2].get())
+        qtde = _to_float(self.ent_item[3].get())
+        vl_total = _to_float(self.ent_item[4].get())
+        qtde_cons = _to_float(self.ent_item[5].get())
 
         if not (cod and vl_unit and qtde and vl_total):
             messagebox.showwarning("Validação","Preencha código, valor unitário, quantidade e valor total.")
@@ -187,7 +209,7 @@ class TelaNotas(tk.Frame):
             ata_id or "", emp_id or "", ata_leg, emp_leg
         ))
 
-        # limpa campos do item (mantém vínculos para próxima linha)
+        # limpa campos do item (mantém vínculos)
         for e in self.ent_item:
             e.delete(0, "end")
         self.e_nome_item.delete(0, "end")
@@ -201,10 +223,10 @@ class TelaNotas(tk.Frame):
             itens.append({
                 "cod_aghu": v[0],
                 "data_uso": v[1] or None,
-                "vl_unit": float(v[2]),
-                "qtde": float(v[3]),
-                "vl_total": float(v[4]),
-                "qtde_consumida": float(v[5] or 0),
+                "vl_unit": float(str(v[2]).replace(",", ".")),
+                "qtde": float(str(v[3]).replace(",", ".")),
+                "vl_total": float(str(v[4]).replace(",", ".")),
+                "qtde_consumida": float(str(v[5]).replace(",", ".")) if v[5] else 0.0,
                 "ata_item_id": int(v[6]) if str(v[6]).isdigit() else None,
                 "empenho_id": int(v[7]) if str(v[7]).isdigit() else None
             })
