@@ -4,6 +4,138 @@ from tkinter import ttk, messagebox
 import banco
 from datetime import date
 
+# --- Utilidades de formatação BR ---
+from decimal import Decimal, ROUND_HALF_UP
+import re
+
+def _to_decimal_safe(val) -> Decimal:
+    if isinstance(val, Decimal):
+        return val
+    if isinstance(val, (int, float)):
+        return Decimal(str(val))
+    s = str(val or "").strip()
+    # aceita formatos "R$ 1.234,56" / "1.234,56" / "1234,56" / "1234.56"
+    s = s.replace("R$", "").replace(" ", "")
+    s = s.replace(".", "").replace(",", ".")
+    try:
+        return Decimal(s)
+    except Exception:
+        return Decimal("0")
+
+def formatar_moeda_br(valor, com_prefixo=True) -> str:
+    d = _to_decimal_safe(valor).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    # separadores BR
+    inteira, frac = f"{d:.2f}".split(".")
+    inteira = f"{int(inteira):,}".replace(",", ".")  # milhar com ponto
+    s = f"{inteira},{frac}"
+    return f"R$ {s}" if com_prefixo else s
+
+def parse_moeda_br(texto) -> Decimal:
+    return _to_decimal_safe(texto)
+
+def mascarar_data_ddmmaa(s: str) -> str:
+    # mantém apenas dígitos e injeta "/"
+    d = re.sub(r"\D", "", s)[:8]  # até 8 dígitos
+    if len(d) > 4:
+        return f"{d[:2]}/{d[2:4]}/{d[4:]}"
+    elif len(d) > 2:
+        return f"{d[:2]}/{d[2:]}"
+    return d
+
+def validar_data_ddmmaa(s: str) -> bool:
+    s = mascarar_data_ddmmaa(s)
+    if len(s) != 10:
+        return False
+    try:
+        datetime.strptime(s, "%d/%m/%Y")
+        return True
+    except ValueError:
+        return False
+
+# --- Widgets com máscara: MoedaEntry e DataEntry ---
+class MoedaEntry(ttk.Entry):
+    """Entry que formata como moeda BR enquanto digita. value() retorna Decimal."""
+    def __init__(self, master=None, prefixo=True, **kw):
+        super().__init__(master, **kw)
+        self._prefixo = prefixo
+        self._sv = tk.StringVar()
+        self.configure(textvariable=self._sv)
+        self._sv.trace_add("write", self._on_write)
+        self.bind("<FocusIn>", self._on_focus_in)
+        self.bind("<FocusOut>", self._on_focus_out)
+        self._formatando = False
+
+    def _on_write(self, *_):
+        if self._formatando:
+            return
+        self._formatando = True
+        texto = self._sv.get()
+        # permite apagar completamente
+        if not texto.strip():
+            self._formatando = False
+            return
+        # mantém apenas dígitos e vírgulas/pontos usados pelo usuário; converte ao final
+        dec = parse_moeda_br(texto)
+        self._sv.set(formatar_moeda_br(dec, com_prefixo=self._prefixo))
+        self.icursor("end")
+        self._formatando = False
+
+    def _on_focus_in(self, *_):
+        # ao focar, remove prefixo para facilitar edição
+        txt = self._sv.get().replace("R$", "").strip()
+        self._sv.set(txt)
+
+    def _on_focus_out(self, *_):
+        # ao sair, formata bonitinho com prefixo
+        if not self._sv.get().strip():
+            return
+        dec = parse_moeda_br(self._sv.get())
+        self._sv.set(formatar_moeda_br(dec, com_prefixo=self._prefixo))
+
+    def value(self) -> Decimal:
+        return parse_moeda_br(self._sv.get())
+
+    def set_value(self, val):
+        self._sv.set(formatar_moeda_br(val, com_prefixo=self._prefixo))
+
+
+class DataEntry(ttk.Entry):
+    """Entry que mascara data DD/MM/AAAA; value() retorna 'DD/MM/AAAA' válido ou ''."""
+    def __init__(self, master=None, **kw):
+        super().__init__(master, **kw)
+        self._sv = tk.StringVar()
+        self.configure(textvariable=self._sv)
+        self._sv.trace_add("write", self._on_write)
+        self.bind("<FocusOut>", self._on_focus_out)
+        self.bind("<F4>", self._hoje)  # atalho: F4 = hoje
+
+    def _on_write(self, *_):
+        cur = self.index("insert")
+        antes = self._sv.get()
+        mas = mascarar_data_ddmmaa(antes)
+        self._sv.set(mas)
+        try:
+            # reposiciona cursor de maneira amigável
+            if cur in (2, 5): cur += 1
+            self.icursor(min(cur, len(mas)))
+        except Exception:
+            pass
+
+    def _on_focus_out(self, *_):
+        s = self._sv.get()
+        if s and not validar_data_ddmmaa(s):
+            messagebox.showwarning("Data", "Data inválida. Use DD/MM/AAAA.")
+            self.focus_set()
+
+    def _hoje(self, *_):
+        self._sv.set(datetime.now().strftime("%d/%m/%Y"))
+
+    def value(self) -> str:
+        return self._sv.get()
+
+    def set_value(self, s: str):
+        self._sv.set(mascarar_data_ddmmaa(s))
+
 
 class TelaNotas(tk.Frame):
     def __init__(self, master):
