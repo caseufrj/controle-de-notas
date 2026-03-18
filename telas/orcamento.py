@@ -25,6 +25,7 @@ class TelaOrcamento(tk.Frame):
             "<<ComboboxSelected>>",
             lambda e: (
                 self._reset_autosave_context(),
+                self._carregar_itens_rascunho(),   # <<< aqui
                 self._carregar_salvos(),
                 self._carregar_msgs(),
             ),
@@ -296,6 +297,7 @@ class TelaOrcamento(tk.Frame):
 
         # Inicializações
         self._carregar_fornecedores()
+        self._carregar_itens_rascunho()   # <<< NOVO: carrega itens persistidos
         self._carregar_salvos()
         self._carregar_msgs()
 
@@ -318,32 +320,45 @@ class TelaOrcamento(tk.Frame):
         self._autosave_msg_id = None
 
     def _adicionar(self):
-        # validação e inserção no rascunho (memória)
         try:
             qt = float(str(self.e_qt.get() or 0).replace(",", "."))
             vu = float(str(self.e_vu.get() or 0).replace(",", "."))
         except ValueError:
             messagebox.showwarning("Validação", "Digite números válidos em Qtde/Valor.")
             return
-
+    
         if not (self.e_cod.get().strip() and self.e_nome.get().strip() and qt and vu):
             messagebox.showwarning("Validação", "Preencha código, nome, qtde e valor unitário.")
             return
-
+    
+        # 1) Insere na Treeview (visual)
         vt = qt * vu
-        self.tv.insert(
-            "", "end",
-            values=(
-                self.e_cod.get().strip(),
-                self.e_nome.get().strip(),
-                f"{qt}",
-                f"{vu:.2f}",
-                self.e_emp.get().strip(),
-                self.e_obs.get().strip(),
-                f"{vt:.2f}",
-            ),
-        )
-        # limpa campos
+        self.tv.insert("", "end", values=(
+            self.e_cod.get().strip(),
+            self.e_nome.get().strip(),
+            f"{qt}",
+            f"{vu:.2f}",
+            self.e_emp.get().strip(),
+            self.e_obs.get().strip(),
+            f"{vt:.2f}"
+        ))
+    
+        # 2) Persiste no banco como item em rascunho
+        try:
+            forn_id = self._fornecedor_id_atual()  # None = Global
+            banco.itens_rascunho_inserir({
+                "fornecedor_id": forn_id,
+                "cod_aghu": self.e_cod.get().strip(),
+                "nome_item": self.e_nome.get().strip(),
+                "qtde": qt,
+                "vl_unit": vu,
+                "numero_empenho": self.e_emp.get().strip(),
+                "observacao": self.e_obs.get().strip()
+            })
+        except Exception as e:
+            messagebox.showwarning("Rascunho de itens", f"Não foi possível salvar o item em rascunho:\n{e}")
+    
+        # 3) Limpa campos
         for e in (self.e_cod, self.e_nome, self.e_qt, self.e_vu, self.e_emp, self.e_obs):
             e.delete(0, "end")
 
@@ -516,44 +531,75 @@ class TelaOrcamento(tk.Frame):
 
     # ---------- Mensagens: modelos & rascunhos ----------
     def _carregar_msgs(self):
+        """Carrega Modelos e Rascunhos combinando globais (fornecedor_id NULL) e do fornecedor atual."""
         forn_id = self._fornecedor_id_atual()
         busca = self.e_msg_busca.get().strip() if hasattr(self, "e_msg_busca") else ""
-
-        # limpar listas
+    
+        # Limpa UI
         if hasattr(self, "tv_modelos"):
             for i in self.tv_modelos.get_children():
                 self.tv_modelos.delete(i)
         if hasattr(self, "tv_rasc"):
             for i in self.tv_rasc.get_children():
                 self.tv_rasc.delete(i)
-
-        # Modelos: combo + lista
-        try:
-            modelos = banco.mensagens_listar(tipo="modelo", fornecedor_id=forn_id, busca=busca)
-            self._modelos_cache = modelos
-            self.cb_modelo["values"] = [m["titulo"] for m in modelos]
-            if hasattr(self, "tv_modelos"):
-                for m in modelos:
-                    escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
-                    self.tv_modelos.insert(
-                        "", "end",
-                        values=(m["id"], m["titulo"], escopo, m["criado_em"])
-                    )
-        except Exception as e:
-            print("Falha ao listar modelos:", e)
-
-        # Rascunhos: lista
-        try:
-            rascs = banco.mensagens_listar(tipo="rascunho", fornecedor_id=forn_id, busca=busca)
-            if hasattr(self, "tv_rasc"):
-                for m in rascs:
-                    escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
-                    self.tv_rasc.insert(
-                        "", "end",
-                        values=(m["id"], m["titulo"], escopo, m["criado_em"])
-                    )
-        except Exception as e:
-            print("Falha ao listar rascunhos:", e)
+        if hasattr(self, "cb_modelo"):
+            self.cb_modelo.set("")
+            self.cb_modelo["values"] = []
+    
+        def _safe_listar(tipo: str, fornecedor_id):
+            """Busca do fornecedor; se houver fornecedor, também junta globais."""
+            lst = []
+            try:
+                lst = banco.mensagens_listar(tipo=tipo, fornecedor_id=fornecedor_id, busca=busca) or []
+            except Exception as e:
+                print(f"Falha ao listar {tipo} (forn={fornecedor_id}):", e)
+    
+            # Se temos fornecedor, tenta também globais e junta
+            if fornecedor_id is not None:
+                try:
+                    glb = banco.mensagens_listar(tipo=tipo, fornecedor_id=None, busca=busca) or []
+                except Exception as e:
+                    print(f"Falha ao listar {tipo} globais:", e)
+                    glb = []
+    
+                # Merge evitando duplicados (por id)
+                seen = set(m.get("id") for m in lst)
+                for g in glb:
+                    if g.get("id") not in seen:
+                        lst.append(g)
+    
+            # Ordena (se seus campos forem string ISO-like, isso já funciona bem)
+            # Se seu banco tiver 'atualizado_em', pode ordenar por ele em vez de criado_em
+            try:
+                lst.sort(key=lambda m: (m.get("criado_em") or "", m.get("id") or 0), reverse=True)
+            except Exception:
+                pass
+    
+            return lst
+    
+        # ---- Modelos (combo + lista)
+        modelos = _safe_listar("modelo", forn_id)
+        self._modelos_cache = modelos[:]  # guarda para o "Carregar" rápido
+        if hasattr(self, "cb_modelo"):
+            self.cb_modelo["values"] = [m.get("titulo", "") for m in modelos]
+    
+        if hasattr(self, "tv_modelos"):
+            for m in modelos:
+                escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
+                self.tv_modelos.insert(
+                    "", "end",
+                    values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", ""))
+                )
+    
+        # ---- Rascunhos (lista)
+        rascs = _safe_listar("rascunho", forn_id)
+        if hasattr(self, "tv_rasc"):
+            for m in rascs:
+                escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
+                self.tv_rasc.insert(
+                    "", "end",
+                    values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", ""))
+                )
 
     def _carregar_modelo_rapido(self):
         titulo = self.cb_modelo.get()
@@ -755,56 +801,84 @@ class TelaOrcamento(tk.Frame):
         if not values_rows:
             messagebox.showinfo("Exportação", "Não há itens no rascunho para exportar.")
             return
-
-        # 1) SALVA
+    
+        # 1) SALVA no banco de orçamentos (histórico)
         try:
             self._salvar_orcamento_linhas(values_rows)
         except Exception as e:
             messagebox.showwarning(
-                "Salvar orçamento", f"Não foi possível salvar no banco antes de exportar:\n{e}"
+                "Salvar orçamento",
+                f"Não foi possível salvar no banco antes de exportar:\n{e}"
             )
-
-        # 2) Exporta
+            # Continua a exportação mesmo assim? Se não quiser, dê 'return' aqui.
+            # return
+    
+        # 2) Monta a estrutura para o Excel
         linhas = []
         for v in values_rows:
-            linhas.append(
-                {
-                    "Cód AGHU": v[0],
-                    "Nome": v[1],
-                    "Qtde": float(str(v[2]).replace(",", ".")),
-                    "Valor Unitário": float(str(v[3]).replace(",", ".")),
-                    "Nº Empenho": v[4],
-                    "Observação": v[5],
-                    "Valor Total": float(str(v[6]).replace(",", ".")),
-                }
-            )
-
+            linhas.append({
+                "Cód AGHU": v[0],
+                "Nome": v[1],
+                "Qtde": float(str(v[2]).replace(",", ".")),
+                "Valor Unitário": float(str(v[3]).replace(",", ".")),
+                "Nº Empenho": v[4],
+                "Observação": v[5],
+                "Valor Total": float(str(v[6]).replace(",", "."))
+            })
+    
         arq = filedialog.asksaveasfilename(
-            defaultextension=".xlsx", filetypes=[("Excel", "*.xlsx")], title="Salvar orçamento"
+            defaultextension=".xlsx",
+            filetypes=[("Excel", "*.xlsx")],
+            title="Salvar orçamento"
         )
         if not arq:
             return
-
+    
+        # 3) Exporta e, só em caso de sucesso, decide o que fazer com os rascunhos
         try:
             df = utils.tabela_para_dataframe(
                 linhas,
-                ["Cód AGHU", "Nome", "Qtde", "Valor Unitário", "Valor Total", "Nº Empenho", "Observação"],
+                ["Cód AGHU", "Nome", "Qtde", "Valor Unitário", "Valor Total", "Nº Empenho", "Observação"]
             )
             utils.exportar_excel({"Orcamento": df}, arq)
             messagebox.showinfo("Exportação", f"Planilha salva em:\n{arq}")
-            # limpa rascunho e recarrega histórico
-            for i in self.tv.get_children():
-                self.tv.delete(i)
+    
+            # Pergunta se deseja manter os itens em rascunho
+            manter = messagebox.askyesno(
+                "Itens em rascunho",
+                "Deseja manter os itens em rascunho para continuar depois?\n\n"
+                "Sim = mantém os itens.\nNão = limpa os itens desta grade e do rascunho."
+            )
+    
+            if not manter:
+                # 3.1) Limpa o rascunho no banco (escopo do fornecedor atual) ANTES de limpar a UI
+                try:
+                    fornecedor_id = self._fornecedor_id_atual()
+                    banco.itens_rascunho_limpar_por_fornecedor(fornecedor_id)
+                except Exception as e:
+                    print("Falha ao limpar itens rascunho após exportar:", e)
+    
+                # 3.2) Limpa grade e recarrega histórico
+                for iid in self.tv.get_children():
+                    self.tv.delete(iid)
+    
+            # Atualiza histórico e (se desejar) recarrega rascunhos da fonte
             self._carregar_salvos()
+            if not manter:
+                # Se removeu do banco, garante UI sincronizada
+                self._carregar_itens_rascunho()
+    
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao exportar para Excel: {e}")
+            # Em erro, NÃO mexe nos rascunhos (nem na UI nem no banco).
 
     def _enviar_email(self):
         forn_id = self._fornecedor_id_atual()
         if not forn_id:
             messagebox.showwarning("Validação", "Selecione o fornecedor.")
             return
-
+    
+        # Busca fornecedor
         fornecedor = None
         for f in banco.fornecedores_listar():
             if f["id"] == forn_id:
@@ -813,24 +887,27 @@ class TelaOrcamento(tk.Frame):
         if not fornecedor:
             messagebox.showwarning("Validação", "Fornecedor não encontrado no cadastro.")
             return
+    
         destinatario = (fornecedor.get("email") or "").strip()
         if not destinatario:
             messagebox.showwarning("Validação", "O fornecedor selecionado não possui e-mail cadastrado.")
             return
-
+    
+        # Coleta itens da grade
         values_rows = [self.tv.item(iid, "values") for iid in self.tv.get_children()]
         if not values_rows:
             messagebox.showinfo("E-mail", "Não há itens no rascunho para enviar.")
             return
-
-        # 1) SALVA
+    
+        # 1) Salva no histórico antes de enviar (não interrompe o fluxo se falhar)
         try:
             self._salvar_orcamento_linhas(values_rows)
         except Exception as e:
             messagebox.showwarning(
-                "Salvar orçamento", f"Não foi possível salvar no banco antes de enviar:\n{e}"
+                "Salvar orçamento",
+                f"Não foi possível salvar no banco antes de enviar:\n{e}"
             )
-
+    
         # 2) Monta HTML + anexo
         linhas = []
         total_geral = 0.0
@@ -842,12 +919,14 @@ class TelaOrcamento(tk.Frame):
                 "vu": float(str(v[3]).replace(",", ".")),
                 "emp": v[4],
                 "obs": v[5],
-                "vt": float(str(v[6]).replace(",", ".")),
+                "vt": float(str(v[6]).replace(",", "."))
             }
             linhas.append(l)
             total_geral += l["vt"]
-
+    
         msg_user = self.txt_msg.get("1.0", "end").strip()
+    
+        # <<< HTML CORRIGIDO (sem entidades) >>>
         html_rows = ""
         for l in linhas:
             html_rows += f"""
@@ -861,7 +940,7 @@ class TelaOrcamento(tk.Frame):
                   <td>{l['obs']}</td>
                 </tr>
             """
-
+    
         corpo_html = f"""
         <html>
           <body>
@@ -894,7 +973,8 @@ class TelaOrcamento(tk.Frame):
           </body>
         </html>
         """
-
+    
+        # Anexo Excel
         anexos = []
         try:
             tmp = tempfile.NamedTemporaryFile(prefix="orcamento_", suffix=".xlsx", delete=False)
@@ -908,34 +988,88 @@ class TelaOrcamento(tk.Frame):
                         "Valor Unitário": l["vu"],
                         "Valor Total": l["vt"],
                         "Nº Empenho": l["emp"],
-                        "Observação": l["obs"],
-                    }
-                    for l in linhas
+                        "Observação": l["obs"]
+                    } for l in linhas
                 ],
-                ["Cód AGHU", "Nome", "Qtde", "Valor Unitário", "Valor Total", "Nº Empenho", "Observação"],
+                ["Cód AGHU", "Nome", "Qtde", "Valor Unitário", "Valor Total", "Nº Empenho", "Observação"]
             )
             utils.exportar_excel({"Orcamento": df}, tmp.name)
             anexos.append(tmp.name)
         except Exception as e:
             print("Falha ao gerar anexo Excel:", e)
-
+    
         # 3) Envio com CC (email_alerta)
         try:
             cfg = utils.carregar_config()
             destinatarios = [destinatario]
             if cfg.get("email_alerta"):
                 destinatarios.append(cfg["email_alerta"])
-
+    
+            fornecedor_nome = fornecedor.get("nome") or self.cb_fornec.get() or "Fornecedor"
+            assunto = f"Orçamento - {fornecedor_nome} - {datetime.now():%d/%m/%Y}"
+    
             utils.enviar_email(
                 destinatarios=destinatarios,
-                assunto=f"Orçamento - {self.cb_fornec.get()}",
+                assunto=assunto,
                 corpo_html=corpo_html,
-                anexos=anexos,
+                anexos=anexos
             )
-            messagebox.showinfo("E-mail", f"E-mail enviado com sucesso para: {', '.join(destinatarios)}")
-            # Limpa rascunho e atualiza histórico
-            for i in self.tv.get_children():
-                self.tv.delete(i)
+            messagebox.showinfo(
+                "E-mail",
+                f"E-mail enviado com sucesso para: {', '.join(destinatarios)}"
+            )
+    
+            # Pergunta se deseja manter os itens em rascunho
+            manter = messagebox.askyesno(
+                "Itens em rascunho",
+                "Deseja manter os itens em rascunho para continuar depois?\n\n"
+                "Sim = mantém os itens.\nNão = limpa os itens desta grade e do rascunho."
+            )
+    
+            if not manter:
+                # Limpa rascunho no banco (escopo fornecedor atual) ANTES de limpar UI
+                try:
+                    banco.itens_rascunho_limpar_por_fornecedor(self._fornecedor_id_atual())
+                except Exception as e:
+                    print("Falha ao limpar itens rascunho após enviar:", e)
+    
+                # Limpa grade
+                for i in self.tv.get_children():
+                    self.tv.delete(i)
+    
+            # Sincroniza listas pós-envio
             self._carregar_salvos()
+            if not manter:
+                self._carregar_itens_rascunho()
+    
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao enviar e-mail: {e}")
+
+    def _carregar_itens_rascunho(self):
+        """Recarrega a grade 'Itens em rascunho' a partir da tabela persistida."""
+        # Limpa a treeview
+        for i in self.tv.get_children():
+            self.tv.delete(i)
+    
+        # Escopo: se quiser vincular itens por fornecedor, use o fornecedor atual;
+        # se quiser um rascunho global (sem fornecedor), defina fornecedor_id=None
+        forn_id = self._fornecedor_id_atual()  # pode ser None, que indica Global
+    
+        try:
+            rows = banco.itens_rascunho_listar(fornecedor_id=forn_id)
+            for r in rows:
+                qt = float(r.get("qtde", 0) or 0)
+                vu = float(r.get("vl_unit", 0) or 0)
+                vt = qt * vu
+                self.tv.insert("", "end", values=(
+                    r.get("cod_aghu", ""),
+                    r.get("nome_item", ""),
+                    f"{qt}",
+                    f"{vu:.2f}",
+                    r.get("numero_empenho", "") or "",
+                    r.get("observacao", "") or "",
+                    f"{vt:.2f}"
+                ))
+        except Exception as e:
+            print("Falha ao carregar itens em rascunho:", e)
+
