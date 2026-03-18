@@ -66,8 +66,15 @@ class TelaOrcamento(tk.Frame):
 
         # Botão Add
         btns_form = tk.Frame(form, bg="white")
-        btns_form.grid(column=5, row=0, rowspan=2, sticky="e", padx=6)
-        ttk.Button(btns_form, text="Add", command=self._adicionar).pack(side="top", pady=2)
+        btns_form.grid(column=5, row=0, rowspan=4, sticky="ne", padx=6)
+        
+        ttk.Button(btns_form, text="Add", command=self._adicionar).pack(fill="x", pady=2)
+        
+        ttk.Button(btns_form, text="Salvar Modelo",
+                   command=lambda: self._salvar_mensagem("modelo")).pack(fill="x", pady=2)
+        
+        ttk.Button(btns_form, text="Salvar Rascunho",
+                   command=lambda: self._salvar_mensagem("rascunho")).pack(fill="x", pady=2)
 
         # ---------- Rascunho (itens não salvos) ----------
         lf_rasc = ttk.LabelFrame(self, text="Itens em rascunho (não salvos)")
@@ -588,28 +595,37 @@ class TelaOrcamento(tk.Frame):
         conteudo = self.txt_msg.get("1.0", "end").strip()
         if not conteudo:
             return
-        titulo = (self.e_titulo_msg.get() or "").strip()
-        if not titulo:
-            # Título mais informativo
-            titulo = f"Rascunho automático - {self.cb_fornec.get() or 'Global'} - {datetime.now():%d/%m %H:%M}"
-
+    
+        forn_id = self._fornecedor_id_atual()
+    
+        titulo = f"Rascunho automático - {self.cb_fornec.get() or 'Global'}"
+    
         try:
             if self._autosave_msg_id:
-                # Atualiza o mesmo rascunho
                 banco.mensagem_atualizar(self._autosave_msg_id, titulo, conteudo)
             else:
-                # Cria um novo rascunho (quando veio de MODELO ou texto novo)
-                forn_id = self._fornecedor_id_atual() if self.var_msg_forn.get() else None
-                self._autosave_msg_id = banco.mensagem_inserir({
-                    "fornecedor_id": forn_id,
-                    "titulo": titulo,
-                    "conteudo": conteudo,
-                    "tipo": "rascunho"
-                })
-            # recarrega silenciosamente
+                # 🔥 tenta pegar último rascunho do fornecedor
+                existentes = banco.mensagens_listar(
+                    tipo="rascunho",
+                    fornecedor_id=forn_id,
+                    busca=""
+                )
+    
+                if existentes:
+                    self._autosave_msg_id = existentes[0]["id"]
+                    banco.mensagem_atualizar(self._autosave_msg_id, titulo, conteudo)
+                else:
+                    self._autosave_msg_id = banco.mensagem_inserir({
+                        "fornecedor_id": forn_id,
+                        "titulo": titulo,
+                        "conteudo": conteudo,
+                        "tipo": "rascunho"
+                    })
+    
             self._carregar_msgs()
+    
         except Exception as e:
-            print("Falha no autosave do rascunho:", e)
+            print("Erro autosave:", e)
 
     # ---------- Exportar / Enviar (salva antes) ----------
     def _exportar_excel(self):
