@@ -57,8 +57,15 @@ class TelaOrcamento(tk.Frame):
 
         rod = tk.Frame(self, bg="white")
         rod.pack(fill="x", padx=12, pady=10)
-        ttk.Button(rod, text="Exportar para Excel", command=self._exportar_excel).pack(side="right", padx=6)
-        ttk.Button(rod, text="Enviar por e-mail", command=self._enviar_email).pack(side="right", padx=6)
+        
+        self.btn_salvar = ttk.Button(rod, text="Salvar orçamento", command=self._salvar_orcamento)
+        self.btn_salvar.pack(side="left")
+        
+        self.btn_email = ttk.Button(rod, text="Enviar por e-mail", command=self._enviar_email)
+        self.btn_email.pack(side="right", padx=6)
+        
+        self.btn_export = ttk.Button(rod, text="Exportar para Excel", command=self._exportar_excel)
+        self.btn_export.pack(side="right", padx=6)
 
     def _carregar_fornecedores(self):
         fs = banco.fornecedores_listar()
@@ -129,6 +136,7 @@ class TelaOrcamento(tk.Frame):
             messagebox.showinfo("Exportação", f"Planilha salva em:\n{arq}")
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao exportar para Excel: {e}")
+            
 
     def _enviar_email(self):
         # Coleta destinatário a partir do fornecedor
