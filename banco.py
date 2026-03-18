@@ -636,3 +636,97 @@ def mensagem_atualizar(id_: int, novo_titulo: str, novo_conteudo: str):
     """, (novo_titulo, novo_conteudo, id_))
     conn.commit()
     conn.close()
+
+# ------ Orçamentos: contagem para paginação ------
+def orcamentos_contar(
+    fornecedor_id: int | None = None,
+    data_ini: str | None = None,  # 'YYYY-MM-DD'
+    data_fim: str | None = None,  # 'YYYY-MM-DD'
+    termo: str = "",
+    numero_empenho: str = ""
+) -> int:
+    conn = conectar()
+    cur = conn.cursor()
+    sql = "SELECT COUNT(*) AS total FROM orcamentos o WHERE 1=1"
+    params: list = []
+    if fornecedor_id:
+        sql += " AND o.fornecedor_id=?"; params.append(fornecedor_id)
+    if data_ini:
+        sql += " AND date(o.criado_em) >= date(?)"; params.append(data_ini)
+    if data_fim:
+        sql += " AND date(o.criado_em) <= date(?)"; params.append(data_fim)
+    if termo:
+        like = f"%{termo}%"
+        sql += " AND (o.cod_aghu LIKE ? OR o.nome_item LIKE ? OR o.observacao LIKE ?)"
+        params.extend([like, like, like])
+    if numero_empenho:
+        sql += " AND IFNULL(o.numero_empenho,'') LIKE ?"; params.append(f"%{numero_empenho}%")
+    cur.execute(sql, tuple(params))
+    row = cur.fetchone()
+    conn.close()
+    return int(row[0] if row else 0)
+
+# ------ Orçamentos: filtro com paginação (LIMIT/OFFSET) ------
+def orcamentos_filtrar(
+    fornecedor_id: int | None = None,
+    data_ini: str | None = None,
+    data_fim: str | None = None,
+    termo: str = "",
+    numero_empenho: str = "",
+    limit: int | None = None,
+    offset: int | None = None
+):
+    conn = conectar()
+    cur = conn.cursor()
+    sql = """
+        SELECT o.id, o.fornecedor_id, f.nome AS fornecedor_nome,
+               o.cod_aghu, o.nome_item, o.qtde, o.vl_unit,
+               o.numero_empenho, o.observacao, o.criado_em
+        FROM orcamentos o
+        LEFT JOIN fornecedores f ON f.id = o.fornecedor_id
+        WHERE 1=1
+    """
+    params: list = []
+    if fornecedor_id:
+        sql += " AND o.fornecedor_id=?"; params.append(fornecedor_id)
+    if data_ini:
+        sql += " AND date(o.criado_em) >= date(?)"; params.append(data_ini)
+    if data_fim:
+        sql += " AND date(o.criado_em) <= date(?)"; params.append(data_fim)
+    if termo:
+        like = f"%{termo}%"
+        sql += " AND (o.cod_aghu LIKE ? OR o.nome_item LIKE ? OR o.observacao LIKE ?)"
+        params.extend([like, like, like])
+    if numero_empenho:
+        sql += " AND IFNULL(o.numero_empenho,'') LIKE ?"; params.append(f"%{numero_empenho}%")
+
+    sql += " ORDER BY o.id DESC"
+    if limit is not None:
+        sql += " LIMIT ?"; params.append(int(limit))
+        if offset is not None:
+            sql += " OFFSET ?"; params.append(int(offset))
+
+    cur.execute(sql, tuple(params))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+# ------ Mensagens padrão: obter + atualizar (para edição) ------
+def mensagens_obter(id_: int):
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM mensagens_padrao WHERE id=?", (id_,))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def mensagem_atualizar(id_: int, novo_titulo: str, novo_conteudo: str):
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE mensagens_padrao
+           SET titulo=?, conteudo=?
+         WHERE id=?
+    """, (novo_titulo, novo_conteudo, id_))
+    conn.commit()
+    conn.close()
