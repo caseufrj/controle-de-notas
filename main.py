@@ -14,6 +14,7 @@ from telas.fornecedores import TelaFornecedores
 from telas.atas_empenhos import TelaAtasEmpenhos
 from telas.notas import TelaNotas
 from telas.orcamento import TelaOrcamento
+from telas.configuracoes import TelaConfiguracoes
 
 # Corrige caminho quando vira EXE (PyInstaller)
 if getattr(sys, 'frozen', False):
@@ -81,6 +82,7 @@ class Sistema(tk.Tk):
         self.btn_atas = btn("Ata / Empenho", self.abrir_atas_empenhos)
         self.btn_notas = btn("Notas Fiscais", self.abrir_notas)
         self.btn_orc = btn("Orçamento", self.abrir_orcamento)
+        self.btn_conf = btn("Configurações", self.abrir_configuracoes)
 
     def _area_trabalho(self):
         self.container = tk.Frame(self, bg="#ecf0f1")
@@ -126,6 +128,11 @@ class Sistema(tk.Tk):
 
     def abrir_orcamento(self):
         self._abrir_tela(TelaOrcamento, "Orçamento")
+
+    def abrir_configuracoes(self):
+    self.limpar()
+    tela = TelaConfiguracoes(self.container)
+    tela.pack(fill="both", expand=True)
 
 
 if __name__ == "__main__":
