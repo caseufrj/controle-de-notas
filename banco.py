@@ -679,3 +679,87 @@ def mensagem_atualizar(id_: int, novo_titulo: str, novo_conteudo: str) -> None:
     """, (novo_titulo, novo_conteudo, id_))
     conn.commit()
     conn.close()
+
+# banco.py – novos trechos para ITENS EM RASCUNHO
+import sqlite3
+from contextlib import closing
+
+DB_PATH = "app.db"
+
+def conn():
+    return sqlite3.connect(DB_PATH)
+
+def criar_tabelas():
+    with closing(conn()) as c, c:
+        cur = c.cursor()
+
+        # --- Tabela de mensagens (se ainda não tiver, mantenha a sua) ---
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS mensagens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fornecedor_id INTEGER NULL,
+            titulo TEXT NOT NULL,
+            conteudo TEXT NOT NULL,
+            tipo TEXT NOT NULL CHECK (tipo IN ('modelo','rascunho')),
+            criado_em TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            atualizado_em TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+        """)
+
+        # --- NOVA: Itens em rascunho (persistência dos itens antes do envio) ---
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS itens_rascunho (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fornecedor_id INTEGER NULL,
+            cod_aghu TEXT NOT NULL,
+            nome_item TEXT NOT NULL,
+            qtde REAL NOT NULL,
+            vl_unit REAL NOT NULL,
+            numero_empenho TEXT,
+            observacao TEXT,
+            criado_em TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+        );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_it_rasc_forn ON itens_rascunho (fornecedor_id, criado_em DESC);")
+
+# ---------- ITENS RASCUNHO ----------
+def itens_rascunho_inserir(d: dict) -> int:
+    with closing(conn()) as c, c:
+        cur = c.cursor()
+        cur.execute("""
+            INSERT INTO itens_rascunho
+            (fornecedor_id, cod_aghu, nome_item, qtde, vl_unit, numero_empenho, observacao)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (d.get("fornecedor_id"), d["cod_aghu"], d["nome_item"], d["qtde"],
+              d["vl_unit"], d.get("numero_empenho"), d.get("observacao")))
+        return cur.lastrowid
+
+def itens_rascunho_listar(fornecedor_id: int | None) -> list[dict]:
+    where = "fornecedor_id IS NULL" if fornecedor_id is None else "fornecedor_id = ?"
+    params = [] if fornecedor_id is None else [fornecedor_id]
+    sql = f"""
+        SELECT id, fornecedor_id, cod_aghu, nome_item, qtde, vl_unit,
+               numero_empenho, observacao, criado_em
+          FROM itens_rascunho
+         WHERE {where}
+         ORDER BY criado_em ASC, id ASC
+    """
+    with closing(conn()) as c:
+        c.row_factory = sqlite3.Row
+        cur = c.cursor()
+        cur.execute(sql, params)
+        return [dict(r) for r in cur.fetchall()]
+
+def itens_rascunho_excluir(item_id: int):
+    with closing(conn()) as c, c:
+        cur = c.cursor()
+        cur.execute("DELETE FROM itens_rascunho WHERE id = ?", (item_id,))
+
+def itens_rascunho_limpar_por_fornecedor(fornecedor_id: int | None):
+    with closing(conn()) as c, c:
+        cur = c.cursor()
+        if fornecedor_id is None:
+            cur.execute("DELETE FROM itens_rascunho WHERE fornecedor_id IS NULL")
+        else:
+            cur.execute("DELETE FROM itens_rascunho WHERE fornecedor_id = ?", (fornecedor_id,))
+
