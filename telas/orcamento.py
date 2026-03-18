@@ -44,16 +44,13 @@ class TelaOrcamento(tk.Frame):
         self.e_obs = ttk.Entry(form, width=40)
         self.e_obs.grid(column=5, row=1, sticky="w", padx=6, pady=3)
 
-        # Mensagem (corpo do e-mail)
-        # 🔽 Seleção rápida de modelo
+        # ----- Seleção rápida de modelo (linha acima do corpo da mensagem)
         tk.Label(form, text="Modelo:").grid(column=0, row=3, sticky="w", padx=6, pady=3)
-        
         self.cb_modelo = ttk.Combobox(form, state="readonly", width=50)
         self.cb_modelo.grid(column=1, row=3, columnspan=3, sticky="w", padx=6, pady=3)
-        
         ttk.Button(form, text="Carregar", command=self._carregar_modelo_rapido)\
             .grid(column=4, row=3, padx=6)
-        
+
         # Mensagem (corpo do e-mail)
         tk.Label(form, text="Mensagem p/ e-mail:").grid(column=0, row=4, sticky="nw", padx=6, pady=3)
         self.txt_msg = tk.Text(form, width=80, height=4)
@@ -62,19 +59,36 @@ class TelaOrcamento(tk.Frame):
         # Auto-save rascunho da mensagem (debounce ~2s)
         self._autosave_job = None
         self._autosave_msg_id = None
+        self._msg_editando_id = None
         self.txt_msg.bind("<KeyRelease>", lambda e: self._agendar_autosave())
 
-        # Botão Add
-        btns_form = tk.Frame(form, bg="white")
-        btns_form.grid(column=5, row=0, rowspan=4, sticky="ne", padx=6)
-        
-        ttk.Button(btns_form, text="Add", command=self._adicionar).pack(fill="x", pady=2)
-        
-        ttk.Button(btns_form, text="Salvar Modelo",
-                   command=lambda: self._salvar_mensagem("modelo")).pack(fill="x", pady=2)
-        
-        ttk.Button(btns_form, text="Salvar Rascunho",
-                   command=lambda: self._salvar_mensagem("rascunho")).pack(fill="x", pady=2)
+        # ----- Lado direito do formulário: Add + Título + Vincular + Salvar
+        side = tk.Frame(form, bg="white")
+        # cobre as linhas do formulário, ficando ao lado do Add
+        side.grid(column=6, row=0, rowspan=5, sticky="ne", padx=(10, 6), pady=3)
+
+        ttk.Button(side, text="Add", command=self._adicionar).pack(fill="x", pady=(0, 8))
+
+        msg_box = ttk.LabelFrame(side, text="Mensagem: Modelo / Rascunho")
+        msg_box.pack(fill="x")
+
+        # Título (agora no topo, ao lado do Add)
+        tk.Label(msg_box, text="Título:").pack(anchor="w", padx=6, pady=(6, 0))
+        self.e_titulo_msg = ttk.Entry(msg_box, width=28)
+        self.e_titulo_msg.pack(anchor="w", padx=6, pady=(0, 6))
+
+        # Vincular ao fornecedor atual (fica no topo)
+        self.var_msg_forn = tk.BooleanVar(value=False)
+        ttk.Checkbutton(msg_box, text="Vincular ao fornecedor atual",
+                        variable=self.var_msg_forn).pack(anchor="w", padx=6, pady=(0, 6))
+
+        # Botões Salvar (no topo)
+        btns_msg = tk.Frame(msg_box, bg="white")
+        btns_msg.pack(fill="x", padx=6, pady=(0, 8))
+        ttk.Button(btns_msg, text="Salvar Modelo",
+                   command=lambda: self._salvar_mensagem("modelo")).pack(side="left")
+        ttk.Button(btns_msg, text="Salvar Rascunho",
+                   command=lambda: self._salvar_mensagem("rascunho")).pack(side="left", padx=6)
 
         # ---------- Rascunho (itens não salvos) ----------
         lf_rasc = ttk.LabelFrame(self, text="Itens em rascunho (não salvos)")
@@ -160,27 +174,18 @@ class TelaOrcamento(tk.Frame):
         lf_msg = ttk.LabelFrame(self, text="Mensagens (Modelos e Rascunhos)")
         lf_msg.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
-        msg_top = tk.Frame(lf_msg); msg_top.pack(fill="x", padx=6, pady=6)
-        tk.Label(msg_top, text="Título:").pack(side="left")
-        self.e_titulo_msg = ttk.Entry(msg_top, width=40); self.e_titulo_msg.pack(side="left", padx=6)
-        self.var_msg_forn = tk.BooleanVar(value=False)
-        ttk.Checkbutton(msg_top, text="Vincular ao fornecedor atual", variable=self.var_msg_forn).pack(side="left", padx=10)
-
-        msg_btns = tk.Frame(lf_msg); msg_btns.pack(fill="x", padx=6, pady=(0, 6))
-        ttk.Button(msg_btns, text="Salvar como MODELO", command=lambda: self._salvar_mensagem("modelo")).pack(side="left")
-        ttk.Button(msg_btns, text="Salvar como RASCUNHO", command=lambda: self._salvar_mensagem("rascunho")).pack(side="left", padx=6)
+        # (REMOVIDOS daqui: Título, Vincular, Salvar Modelo/Rascunho — agora estão no topo)
 
         # Busca de mensagens
-        busca_bar = tk.Frame(lf_msg); busca_bar.pack(fill="x", padx=6, pady=(0, 6))
+        busca_bar = tk.Frame(lf_msg); busca_bar.pack(fill="x", padx=6, pady=(6, 6))
         tk.Label(busca_bar, text="Buscar (título/conteúdo):").pack(side="left")
         self.e_msg_busca = ttk.Entry(busca_bar, width=40); self.e_msg_busca.pack(side="left", padx=6)
         ttk.Button(busca_bar, text="Filtrar listas", command=self._carregar_msgs).pack(side="left")
 
-        # Botões gerais de edição
+        # Botões gerais de edição (continuam aqui)
         msg_edit = tk.Frame(lf_msg); msg_edit.pack(fill="x", padx=6, pady=(0, 6))
         ttk.Button(msg_edit, text="Editar selecionada", command=self._editar_msg).pack(side="left")
         ttk.Button(msg_edit, text="Salvar alterações", command=self._salvar_alteracoes_msg).pack(side="left", padx=6)
-        self._msg_editando_id = None  # controla edição em andamento
 
         # Notebook com as listas
         nb = ttk.Notebook(lf_msg)
@@ -418,31 +423,37 @@ class TelaOrcamento(tk.Frame):
     # ---------- Mensagens: modelos & rascunhos ----------
     def _carregar_msgs(self):
         forn_id = self._fornecedor_id_atual()
-        busca = self.e_msg_busca.get().strip()
+        busca = self.e_msg_busca.get().strip() if hasattr(self, "e_msg_busca") else ""
 
-        # limpa
-        for i in self.tv_modelos.get_children():
-            self.tv_modelos.delete(i)
-        for i in self.tv_rasc.get_children():
-            self.tv_rasc.delete(i)
+        # limpa listas
+        if hasattr(self, "tv_modelos"):
+            for i in self.tv_modelos.get_children():
+                self.tv_modelos.delete(i)
+        if hasattr(self, "tv_rasc"):
+            for i in self.tv_rasc.get_children():
+                self.tv_rasc.delete(i)
 
+        # Modelos: popular combo e, se existir, a lista inferior
         try:
             modelos = banco.mensagens_listar(tipo="modelo", fornecedor_id=forn_id, busca=busca)
             self._modelos_cache = modelos
             self.cb_modelo["values"] = [m["titulo"] for m in modelos]
-            for m in modelos:
-                escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
-                self.tv_modelos.insert("", "end",
-                                       values=(m["id"], m["titulo"], escopo, m["criado_em"]))
+            if hasattr(self, "tv_modelos"):
+                for m in modelos:
+                    escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
+                    self.tv_modelos.insert("", "end",
+                                           values=(m["id"], m["titulo"], escopo, m["criado_em"]))
         except Exception as e:
             print("Falha ao listar modelos:", e)
 
+        # Rascunhos: lista inferior
         try:
             rascs = banco.mensagens_listar(tipo="rascunho", fornecedor_id=forn_id, busca=busca)
-            for m in rascs:
-                escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
-                self.tv_rasc.insert("", "end",
-                                    values=(m["id"], m["titulo"], escopo, m["criado_em"]))
+            if hasattr(self, "tv_rasc"):
+                for m in rascs:
+                    escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
+                    self.tv_rasc.insert("", "end",
+                                        values=(m["id"], m["titulo"], escopo, m["criado_em"]))
         except Exception as e:
             print("Falha ao listar rascunhos:", e)
 
@@ -450,18 +461,17 @@ class TelaOrcamento(tk.Frame):
         titulo = self.cb_modelo.get()
         if not titulo:
             return
-    
         for m in self._modelos_cache:
             if m["titulo"] == titulo:
                 msg = banco.mensagem_obter(m["id"])
                 if msg:
                     self.txt_msg.delete("1.0", "end")
                     self.txt_msg.insert("1.0", msg.get("conteudo", ""))
-    
+
                     self.e_titulo_msg.delete(0, "end")
                     self.e_titulo_msg.insert(0, msg.get("titulo", ""))
-    
-                    # reseta autosave
+
+                    # reseta autosave para não sobrescrever modelo
                     self._autosave_msg_id = None
                 break
 
@@ -474,9 +484,8 @@ class TelaOrcamento(tk.Frame):
         if not conteudo:
             messagebox.showwarning("Validação", "Escreva o conteúdo da mensagem.")
             return
-        forn_id = self._fornecedor_id_atual() if self.var_msg_forn.get() else None
 
-        # Se marcou vincular ao fornecedor, mas não há fornecedor selecionado
+        forn_id = self._fornecedor_id_atual() if self.var_msg_forn.get() else None
         if self.var_msg_forn.get() and not forn_id:
             messagebox.showwarning("Validação", "Selecione um fornecedor para vincular a mensagem.")
             return
@@ -488,10 +497,8 @@ class TelaOrcamento(tk.Frame):
                 "conteudo": conteudo,
                 "tipo": tipo
             })
-            self._msg_editando_id = mid  # passa a editar este
-            # Se for rascunho, o autosave deve continuar atualizando este mesmo registro
+            self._msg_editando_id = mid
             self._autosave_msg_id = mid if tipo == "rascunho" else None
-
             self._carregar_msgs()
             messagebox.showinfo("OK", f"Mensagem salva como {tipo.upper()}.\nEla aparece na lista da aba correspondente.")
         except Exception as e:
@@ -514,7 +521,6 @@ class TelaOrcamento(tk.Frame):
             return
 
         self._msg_editando_id = mid
-        # Se for rascunho, autosave atualiza este. Se for modelo, autosave criará novo rascunho.
         self._autosave_msg_id = mid if msg.get("tipo") == "rascunho" else None
 
         self.e_titulo_msg.delete(0, "end")
@@ -578,7 +584,6 @@ class TelaOrcamento(tk.Frame):
         try:
             banco.mensagem_excluir(mid)
             self._msg_editando_id = None
-            # Se estava autosalvando este registro, encerra o contexto
             if self._autosave_msg_id == mid:
                 self._autosave_msg_id = None
             self._carregar_msgs()
@@ -595,22 +600,21 @@ class TelaOrcamento(tk.Frame):
         conteudo = self.txt_msg.get("1.0", "end").strip()
         if not conteudo:
             return
-    
-        forn_id = self._fornecedor_id_atual()
-    
+
+        # respeita "Vincular ao fornecedor atual"
+        forn_id = self._fornecedor_id_atual() if self.var_msg_forn.get() else None
         titulo = f"Rascunho automático - {self.cb_fornec.get() or 'Global'}"
-    
+
         try:
             if self._autosave_msg_id:
                 banco.mensagem_atualizar(self._autosave_msg_id, titulo, conteudo)
             else:
-                # 🔥 tenta pegar último rascunho do fornecedor
+                # tenta usar o último rascunho do mesmo escopo (global/fornecedor)
                 existentes = banco.mensagens_listar(
                     tipo="rascunho",
                     fornecedor_id=forn_id,
                     busca=""
                 )
-    
                 if existentes:
                     self._autosave_msg_id = existentes[0]["id"]
                     banco.mensagem_atualizar(self._autosave_msg_id, titulo, conteudo)
@@ -621,9 +625,7 @@ class TelaOrcamento(tk.Frame):
                         "conteudo": conteudo,
                         "tipo": "rascunho"
                     })
-    
             self._carregar_msgs()
-    
         except Exception as e:
             print("Erro autosave:", e)
 
