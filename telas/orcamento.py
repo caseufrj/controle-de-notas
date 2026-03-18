@@ -44,6 +44,10 @@ class TelaOrcamento(tk.Frame):
         tk.Label(form, text="Mensagem p/ e-mail:").grid(column=0, row=3, sticky="nw", padx=6, pady=3)
         self.txt_msg = tk.Text(form, width=80, height=4)
         self.txt_msg.grid(column=1, row=3, columnspan=5, sticky="w", padx=6, pady=3)
+        # Auto-save rascunho da mensagem (debounce)
+        self._autosave_job = None
+        self._autosave_msg_id = None
+        self.txt_msg.bind("<KeyRelease>", lambda e: self._agendar_autosave())
 
         # Botão Add
         btns_form = tk.Frame(form, bg="white")
@@ -179,6 +183,9 @@ class TelaOrcamento(tk.Frame):
         for c, h, w in zip(cols_m, ("ID","Título","Fornecedor","Criado em"), (60,280,100,140)):
             self.tv_rasc.heading(c, text=h); self.tv_rasc.column(c, width=w, anchor="w")
         self.tv_rasc.pack(fill="both", expand=True, padx=4, pady=4)
+        
+        self.tv_modelos.bind("<Double-1>", lambda e: self._usar_msg("modelo"))
+        self.tv_rasc.bind("<Double-1>",   lambda e: self._usar_msg("rascunho"))
 
         bar_r = tk.Frame(aba_rasc); bar_r.pack(fill="x", padx=4, pady=(0,6))
         ttk.Button(bar_r, text="Usar na mensagem", command=lambda: self._usar_msg("rascunho")).pack(side="left")
@@ -359,6 +366,7 @@ class TelaOrcamento(tk.Frame):
             messagebox.showinfo("Exportar histórico", f"Planilha salva em:\n{arq}")
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao exportar histórico:\n{e}")
+            
     def _excluir_salvo(self):
         sel = self.tv_salvos.selection()
         if not sel:
@@ -380,29 +388,28 @@ class TelaOrcamento(tk.Frame):
     # ---------- Mensagens: modelos & rascunhos ----------
     def _carregar_msgs(self):
         forn_id = self._fornecedor_id_atual()
-
-        # Modelos (globais + do fornecedor atual)
+        busca = self.e_msg_busca.get().strip()
+    
+        # limpa
         for i in self.tv_modelos.get_children(): self.tv_modelos.delete(i)
+        for i in self.tv_rasc.get_children(): self.tv_rasc.delete(i)
+    
         try:
-            modelos = banco.mensagens_listar(tipo="modelo", fornecedor_id=forn_id)
+            modelos = banco.mensagens_listar(tipo="modelo", fornecedor_id=forn_id, busca=busca)
             for m in modelos:
-                self.tv_modelos.insert("", "end", values=(
-                    m["id"], m["titulo"], m.get("fornecedor_id") or "-", m["criado_em"]
-                ))
+                escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
+                self.tv_modelos.insert("", "end", values=(m["id"], m["titulo"], escopo, m["criado_em"]))
         except Exception as e:
             print("Falha ao listar modelos:", e)
-
-        # Rascunhos (globais + do fornecedor atual)
-        for i in self.tv_rasc.get_children(): self.tv_rasc.delete(i)
+    
         try:
-            rascs = banco.mensagens_listar(tipo="rascunho", fornecedor_id=forn_id)
+            rascs = banco.mensagens_listar(tipo="rascunho", fornecedor_id=forn_id, busca=busca)
             for m in rascs:
-                self.tv_rasc.insert("", "end", values=(
-                    m["id"], m["titulo"], m.get("fornecedor_id") or "-", m["criado_em"]
-                ))
+                escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
+                self.tv_rasc.insert("", "end", values=(m["id"], m["titulo"], escopo, m["criado_em"]))
         except Exception as e:
             print("Falha ao listar rascunhos:", e)
-
+    
     def _salvar_mensagem(self, tipo: str):
         titulo = (self.e_titulo_msg.get() or "").strip()
         if not titulo:
@@ -414,17 +421,18 @@ class TelaOrcamento(tk.Frame):
             return
         forn_id = self._fornecedor_id_atual() if self.var_msg_forn.get() else None
         try:
-            banco.mensagem_inserir({
+            mid = banco.mensagem_inserir({
                 "fornecedor_id": forn_id,
                 "titulo": titulo,
                 "conteudo": conteudo,
                 "tipo": tipo
             })
+            self._msg_editando_id = mid  # passa a editar este
             self._carregar_msgs()
-            messagebox.showinfo("OK", f"Mensagem salva como {tipo.upper()}.")
+            messagebox.showinfo("OK", f"Mensagem salva como {tipo.upper()}.\nEla aparece na lista da aba correspondente.")
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao salvar mensagem: {e}")
-
+    
     def _usar_msg(self, tipo: str):
         tv = self.tv_modelos if tipo == "modelo" else self.tv_rasc
         sel = tv.selection()
@@ -436,14 +444,49 @@ class TelaOrcamento(tk.Frame):
             mid = int(vals[0])
         except Exception:
             return
-        # busca o conteúdo
-        msgs = banco.mensagens_listar(tipo=tipo, fornecedor_id=self._fornecedor_id_atual())
-        msg = next((m for m in msgs if m["id"] == mid), None)
+        msg = banco.mensagem_obter(mid)
         if not msg:
             messagebox.showwarning("Aviso", "Mensagem não encontrada.")
             return
-        self.txt_msg.delete("1.0", "end")
-        self.txt_msg.insert("1.0", msg.get("conteudo",""))
+        self._msg_editando_id = mid
+        self.e_titulo_msg.delete(0, "end"); self.e_titulo_msg.insert(0, msg.get("titulo",""))
+        self.txt_msg.delete("1.0", "end"); self.txt_msg.insert("1.0", msg.get("conteudo",""))
+    
+    def _editar_msg(self):
+        # Pega seleção (modelo ou rascunho) e carrega no editor
+        sel = self.tv_modelos.selection() or self.tv_rasc.selection()
+        if not sel:
+            messagebox.showwarning("Atenção", "Selecione uma mensagem nas abas.")
+            return
+        tv = self.tv_modelos if self.tv_modelos.selection() else self.tv_rasc
+        vals = tv.item(sel[0], "values")
+        try:
+            mid = int(vals[0])
+        except Exception:
+            return
+        msg = banco.mensagem_obter(mid)
+        if not msg:
+            messagebox.showwarning("Aviso", "Mensagem não encontrada.")
+            return
+        self._msg_editando_id = mid
+        self.e_titulo_msg.delete(0, "end"); self.e_titulo_msg.insert(0, msg.get("titulo",""))
+        self.txt_msg.delete("1.0", "end"); self.txt_msg.insert("1.0", msg.get("conteudo",""))
+    
+    def _salvar_alteracoes_msg(self):
+        if not self._msg_editando_id:
+            messagebox.showwarning("Edição", "Nenhuma mensagem selecionada para editar.")
+            return
+        titulo = (self.e_titulo_msg.get() or "").strip()
+        conteudo = self.txt_msg.get("1.0", "end").strip()
+        if not titulo or not conteudo:
+            messagebox.showwarning("Validação", "Título e conteúdo são obrigatórios.")
+            return
+        try:
+            banco.mensagem_atualizar(self._msg_editando_id, titulo, conteudo)
+            self._carregar_msgs()
+            messagebox.showinfo("OK", "Mensagem atualizada.")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao atualizar: {e}")
 
     def _excluir_msg(self, tipo: str):
         tv = self.tv_modelos if tipo == "modelo" else self.tv_rasc
@@ -463,6 +506,35 @@ class TelaOrcamento(tk.Frame):
             self._carregar_msgs()
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao excluir: {e}")
+
+    def _agendar_autosave(self):
+        if self._autosave_job:
+            self.after_cancel(self._autosave_job)
+        self._autosave_job = self.after(2000, self._autosave_rascunho)  # 2s depois que parar de digitar
+
+    def _autosave_rascunho(self):
+        conteudo = self.txt_msg.get("1.0", "end").strip()
+        if not conteudo:
+            return
+        titulo = (self.e_titulo_msg.get() or "").strip()
+        if not titulo:
+            titulo = f"Rascunho automático - {self.cb_fornec.get() or 'Global'}"
+        try:
+            if self._autosave_msg_id:
+                banco.mensagem_atualizar(self._autosave_msg_id, titulo, conteudo)
+            else:
+                forn_id = self._fornecedor_id_atual() if self.var_msg_forn.get() else None
+                self._autosave_msg_id = banco.mensagem_inserir({
+                    "fornecedor_id": forn_id,
+                    "titulo": titulo,
+                    "conteudo": conteudo,
+                    "tipo": "rascunho"
+                })
+            # não mostra popup; apenas recarrega silenciosamente
+            self._carregar_msgs()
+        except Exception as e:
+            print("Falha no autosave do rascunho:", e)
+
 
     # ---------- Exportar / Enviar (salva antes) ----------
     def _exportar_excel(self):
