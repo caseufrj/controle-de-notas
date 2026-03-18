@@ -6,7 +6,7 @@ import smtplib
 import ssl
 import mimetypes
 from email.message import EmailMessage
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 
 import pandas as pd
 
@@ -104,8 +104,8 @@ def salvar_config(cfg: Dict[str, Any]) -> None:
 # E-mail
 # ------------------------------
 
-def _detectar_mime(caminho: str) -> (str, str):
-    mtype, enc = mimetypes.guess_type(caminho)
+def _detectar_mime(caminho: str) -> Tuple[str, str]:
+    mtype, _enc = mimetypes.guess_type(caminho)
     if mtype is None:
         return ("application", "octet-stream")
     major, minor = mtype.split("/", 1)
@@ -185,13 +185,11 @@ def exportar_excel(dataframes_dict: Dict[str, pd.DataFrame], caminho_saida: str)
     """
     dataframes_dict: {'Aba1': df1, 'Aba2': df2, ...}
     """
-    # Diretorio
     base_dir = os.path.dirname(caminho_saida)
     if base_dir:
         os.makedirs(base_dir, exist_ok=True)
     with pd.ExcelWriter(caminho_saida, engine="openpyxl") as writer:
         for aba, df in dataframes_dict.items():
-            # Garante DataFrame
             if not isinstance(df, pd.DataFrame):
                 df = pd.DataFrame(list(df))
             df.to_excel(writer, sheet_name=str(aba)[:31], index=False)
@@ -202,7 +200,6 @@ def tabela_para_dataframe(linhas: List[Dict[str, Any]], colunas_ordenadas: Optio
     """
     df = pd.DataFrame(linhas)
     if colunas_ordenadas:
-        # adiciona colunas faltantes como vazias, para manter ordem
         for c in colunas_ordenadas:
             if c not in df.columns:
                 df[c] = ""
