@@ -1,9 +1,11 @@
 # telas/orcamento.py
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+import tempfile
+
 import banco
 import utils
-import tempfile
+
 
 class TelaOrcamento(tk.Frame):
     def __init__(self, master):
@@ -17,7 +19,7 @@ class TelaOrcamento(tk.Frame):
         tk.Label(topo, text="Fornecedor:", bg="white").pack(side="left")
         self.cb_fornec = ttk.Combobox(topo, state="readonly", width=50)
         self.cb_fornec.pack(side="left", padx=6)
-        self.cb_fornec.bind("<<ComboboxSelected>>", lambda e: self._carregar_salvos())
+        self.cb_fornec.bind("<<ComboboxSelected>>", lambda e: (self._carregar_salvos(), self._carregar_msgs()))
 
         # ---------- Formulário de lançamento ----------
         form = ttk.LabelFrame(self, text="Lançar itens para Orçamento")
@@ -29,24 +31,26 @@ class TelaOrcamento(tk.Frame):
             e.grid(column=col+1, row=row, sticky="w", padx=6, pady=3)
             return e
 
-        self.e_cod = campo("Cód AGHU*:", 0, 0)
+        self.e_cod = campo("Cód AGHU*:",   0, 0)
         self.e_nome = campo("Nome item*:", 0, 1, 40)
-        self.e_qt = campo("Qtde*:", 2, 0, 12)
-        self.e_vu = campo("Vlr Unit*:", 2, 1, 12)
-        self.e_emp = campo("Nº Empenho:", 4, 0)
+        self.e_qt = campo("Qtde*:",        2, 0, 12)
+        self.e_vu = campo("Vlr Unit*:",    2, 1, 12)
+        self.e_emp = campo("Nº Empenho:",  4, 0)
         tk.Label(form, text="Observação:").grid(column=4, row=1, sticky="w", padx=6, pady=3)
         self.e_obs = ttk.Entry(form, width=40)
         self.e_obs.grid(column=5, row=1, sticky="w", padx=6, pady=3)
 
+        # Mensagem (corpo do e-mail)
         tk.Label(form, text="Mensagem p/ e-mail:").grid(column=0, row=3, sticky="nw", padx=6, pady=3)
         self.txt_msg = tk.Text(form, width=80, height=4)
         self.txt_msg.grid(column=1, row=3, columnspan=5, sticky="w", padx=6, pady=3)
 
+        # Botão Add
         btns_form = tk.Frame(form, bg="white")
         btns_form.grid(column=5, row=0, rowspan=2, sticky="e", padx=6)
         ttk.Button(btns_form, text="Add", command=self._adicionar).pack(side="top", pady=2)
 
-        # ---------- Grade: Itens em rascunho (memória) ----------
+        # ---------- Rascunho (itens não salvos) ----------
         lf_rasc = ttk.LabelFrame(self, text="Itens em rascunho (não salvos)")
         lf_rasc.pack(fill="both", expand=True, padx=12, pady=(4, 2))
 
@@ -59,7 +63,7 @@ class TelaOrcamento(tk.Frame):
             self.tv.column(c, width=w, anchor="w")
         self.tv.pack(fill="both", expand=True, padx=6, pady=6)
 
-        # ---------- Rodapé: ações ----------
+        # ---------- Ações principais ----------
         rod = tk.Frame(self, bg="white")
         rod.pack(fill="x", padx=12, pady=8)
         self.btn_email = ttk.Button(rod, text="Enviar por e-mail", command=self._enviar_email)
@@ -67,9 +71,27 @@ class TelaOrcamento(tk.Frame):
         self.btn_export = ttk.Button(rod, text="Exportar para Excel", command=self._exportar_excel)
         self.btn_export.pack(side="right", padx=6)
 
-        # ---------- Grade: Orçamentos já salvos ----------
+        # ---------- Histórico (com filtros) ----------
         lf_hist = ttk.LabelFrame(self, text="Orçamentos já salvos (no banco) — por fornecedor")
-        lf_hist.pack(fill="both", expand=True, padx=12, pady=(2, 10))
+        lf_hist.pack(fill="both", expand=True, padx=12, pady=(2, 8))
+
+        filtros = tk.Frame(lf_hist)
+        filtros.pack(fill="x", padx=6, pady=(6, 0))
+
+        tk.Label(filtros, text="De (YYYY-MM-DD):").pack(side="left")
+        self.f_data_ini = ttk.Entry(filtros, width=12); self.f_data_ini.pack(side="left", padx=4)
+
+        tk.Label(filtros, text="Até:").pack(side="left")
+        self.f_data_fim = ttk.Entry(filtros, width=12); self.f_data_fim.pack(side="left", padx=4)
+
+        tk.Label(filtros, text="Termo (cód/nome/obs):").pack(side="left", padx=(12,0))
+        self.f_busca = ttk.Entry(filtros, width=28); self.f_busca.pack(side="left", padx=4)
+
+        tk.Label(filtros, text="Empenho:").pack(side="left", padx=(12,0))
+        self.f_emp = ttk.Entry(filtros, width=14); self.f_emp.pack(side="left", padx=4)
+
+        ttk.Button(filtros, text="Filtrar", command=self._carregar_salvos).pack(side="left", padx=6)
+        ttk.Button(filtros, text="Limpar", command=self._limpar_filtros).pack(side="left")
 
         cols_s = ("id","criado_em","cod_aghu","nome_item","qtde","vl_unit","vl_total","numero_empenho","observacao")
         heads_s = ("ID","Criado em","Cód AGHU","Item","Qtde","Vlr Unit","Vlr Total","Nº Empenho","Obs")
@@ -84,25 +106,66 @@ class TelaOrcamento(tk.Frame):
         barra_hist.pack(fill="x", padx=6, pady=(0,6))
         ttk.Button(barra_hist, text="Atualizar", command=self._carregar_salvos).pack(side="left")
         ttk.Button(barra_hist, text="Excluir selecionado", command=self._excluir_salvo).pack(side="left", padx=6)
-        tip = tk.Label(barra_hist, text="Dica: selecione o fornecedor no topo para ver os orçamentos salvos.",
-                       bg="white", fg="#7f8c8d")
-        tip.pack(side="left", padx=12)
+
+        # ---------- Mensagens (Modelos e Rascunhos) ----------
+        lf_msg = ttk.LabelFrame(self, text="Mensagens (Modelos e Rascunhos)")
+        lf_msg.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+
+        msg_top = tk.Frame(lf_msg); msg_top.pack(fill="x", padx=6, pady=6)
+        tk.Label(msg_top, text="Título:").pack(side="left")
+        self.e_titulo_msg = ttk.Entry(msg_top, width=40); self.e_titulo_msg.pack(side="left", padx=6)
+        self.var_msg_forn = tk.BooleanVar(value=False)
+        ttk.Checkbutton(msg_top, text="Vincular ao fornecedor atual", variable=self.var_msg_forn).pack(side="left", padx=10)
+
+        msg_btns = tk.Frame(lf_msg); msg_btns.pack(fill="x", padx=6, pady=(0,6))
+        ttk.Button(msg_btns, text="Salvar como MODELO", command=lambda: self._salvar_mensagem("modelo")).pack(side="left")
+        ttk.Button(msg_btns, text="Salvar como RASCUNHO", command=lambda: self._salvar_mensagem("rascunho")).pack(side="left", padx=6)
+
+        nb = ttk.Notebook(lf_msg)
+        nb.pack(fill="both", expand=True, padx=6, pady=6)
+
+        # Aba Modelos
+        aba_modelos = tk.Frame(nb)
+        nb.add(aba_modelos, text="Modelos")
+        cols_m = ("id","titulo","fornecedor_id","criado_em")
+        self.tv_modelos = ttk.Treeview(aba_modelos, columns=cols_m, show="headings", height=6)
+        for c, h, w in zip(cols_m, ("ID","Título","Fornecedor","Criado em"), (60,280,100,140)):
+            self.tv_modelos.heading(c, text=h); self.tv_modelos.column(c, width=w, anchor="w")
+        self.tv_modelos.pack(fill="both", expand=True, padx=4, pady=4)
+
+        bar_m = tk.Frame(aba_modelos); bar_m.pack(fill="x", padx=4, pady=(0,6))
+        ttk.Button(bar_m, text="Usar na mensagem", command=lambda: self._usar_msg("modelo")).pack(side="left")
+        ttk.Button(bar_m, text="Excluir", command=lambda: self._excluir_msg("modelo")).pack(side="left", padx=6)
+        ttk.Button(bar_m, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=6)
+
+        # Aba Rascunhos
+        aba_rasc = tk.Frame(nb)
+        nb.add(aba_rasc, text="Rascunhos")
+        self.tv_rasc = ttk.Treeview(aba_rasc, columns=cols_m, show="headings", height=6)
+        for c, h, w in zip(cols_m, ("ID","Título","Fornecedor","Criado em"), (60,280,100,140)):
+            self.tv_rasc.heading(c, text=h); self.tv_rasc.column(c, width=w, anchor="w")
+        self.tv_rasc.pack(fill="both", expand=True, padx=4, pady=4)
+
+        bar_r = tk.Frame(aba_rasc); bar_r.pack(fill="x", padx=4, pady=(0,6))
+        ttk.Button(bar_r, text="Usar na mensagem", command=lambda: self._usar_msg("rascunho")).pack(side="left")
+        ttk.Button(bar_r, text="Excluir", command=lambda: self._excluir_msg("rascunho")).pack(side="left", padx=6)
+        ttk.Button(bar_r, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=6)
 
         # Estado
         self.map_fornec = {}
 
-        # Carrega fornecedores e histórico inicial
+        # Inicializações
         self._carregar_fornecedores()
         self._carregar_salvos()
+        self._carregar_msgs()
 
     # ----------------- Utilidades -----------------
     def _carregar_fornecedores(self):
         fs = banco.fornecedores_listar()
         self.map_fornec = {f["nome"]: f["id"] for f in fs}
         self.cb_fornec["values"] = list(self.map_fornec.keys())
-        if fs:
-            if not self.cb_fornec.get():
-                self.cb_fornec.current(0)
+        if fs and not self.cb_fornec.get():
+            self.cb_fornec.current(0)
 
     def _fornecedor_id_atual(self):
         nome = self.cb_fornec.get()
@@ -111,7 +174,7 @@ class TelaOrcamento(tk.Frame):
         return self.map_fornec.get(nome)
 
     def _adicionar(self):
-        # validação e inserção no rascunho
+        # validação e inserção no rascunho (memória)
         try:
             qt = float(str(self.e_qt.get() or 0).replace(",", "."))
             vu = float(str(self.e_vu.get() or 0).replace(",", "."))
@@ -137,12 +200,8 @@ class TelaOrcamento(tk.Frame):
         for e in (self.e_cod, self.e_nome, self.e_qt, self.e_vu, self.e_emp, self.e_obs):
             e.delete(0, "end")
 
-    # ---------- Persistência ----------
+    # ---------- Persistência de itens ----------
     def _salvar_orcamento_linhas(self, values_rows) -> int:
-        """
-        Salva cada linha (values) do rascunho no banco, para o fornecedor atual.
-        Retorna a quantidade salva.
-        """
         forn_id = self._fornecedor_id_atual()
         if not forn_id:
             raise RuntimeError("Selecione o fornecedor.")
@@ -166,26 +225,46 @@ class TelaOrcamento(tk.Frame):
                 continue
         return salvos
 
+    # ---------- Histórico (filtros) ----------
+    def _limpar_filtros(self):
+        self.f_data_ini.delete(0, "end")
+        self.f_data_fim.delete(0, "end")
+        self.f_busca.delete(0, "end")
+        self.f_emp.delete(0, "end")
+        self._carregar_salvos()
+
     def _carregar_salvos(self):
-        """Recarrega a tabela de orçamentos salvos para o fornecedor atual."""
         forn_id = self._fornecedor_id_atual()
         for i in self.tv_salvos.get_children():
             self.tv_salvos.delete(i)
         if not forn_id:
             return
+
+        di = self.f_data_ini.get().strip() or None
+        df = self.f_data_fim.get().strip() or None
+        termo = self.f_busca.get().strip()
+        nem = self.f_emp.get().strip()
+
         try:
-            rows = banco.orcamentos_listar(fornecedor_id=forn_id)
+            rows = banco.orcamentos_filtrar(
+                fornecedor_id=forn_id,
+                data_ini=di, data_fim=df,
+                termo=termo,
+                numero_empenho=nem
+            )
             for r in rows:
+                qt = float(r.get("qtde", 0) or 0)
+                vu = float(r.get("vl_unit", 0) or 0)
                 self.tv_salvos.insert("", "end", values=(
                     r.get("id",""),
                     r.get("criado_em",""),
                     r.get("cod_aghu",""),
                     r.get("nome_item",""),
-                    r.get("qtde",0),
-                    f'{r.get("vl_unit",0):.2f}',
-                    f'{(r.get("qtde",0) or 0) * (r.get("vl_unit",0) or 0):.2f}',
+                    f"{qt}",
+                    f"{vu:.2f}",
+                    f"{qt*vu:.2f}",
                     r.get("numero_empenho","") or "",
-                    r.get("observacao","") or ""
+                    r.get("observacao","") or "",
                 ))
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao carregar orçamentos salvos:\n{e}")
@@ -208,23 +287,108 @@ class TelaOrcamento(tk.Frame):
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao excluir: {e}")
 
-    # ---------- Exportar / Enviar (salva automaticamente ANTES) ----------
+    # ---------- Mensagens: modelos & rascunhos ----------
+    def _carregar_msgs(self):
+        forn_id = self._fornecedor_id_atual()
+
+        # Modelos (globais + do fornecedor atual)
+        for i in self.tv_modelos.get_children(): self.tv_modelos.delete(i)
+        try:
+            modelos = banco.mensagens_listar(tipo="modelo", fornecedor_id=forn_id)
+            for m in modelos:
+                self.tv_modelos.insert("", "end", values=(
+                    m["id"], m["titulo"], m.get("fornecedor_id") or "-", m["criado_em"]
+                ))
+        except Exception as e:
+            print("Falha ao listar modelos:", e)
+
+        # Rascunhos (globais + do fornecedor atual)
+        for i in self.tv_rasc.get_children(): self.tv_rasc.delete(i)
+        try:
+            rascs = banco.mensagens_listar(tipo="rascunho", fornecedor_id=forn_id)
+            for m in rascs:
+                self.tv_rasc.insert("", "end", values=(
+                    m["id"], m["titulo"], m.get("fornecedor_id") or "-", m["criado_em"]
+                ))
+        except Exception as e:
+            print("Falha ao listar rascunhos:", e)
+
+    def _salvar_mensagem(self, tipo: str):
+        titulo = (self.e_titulo_msg.get() or "").strip()
+        if not titulo:
+            messagebox.showwarning("Validação", "Informe um título para a mensagem.")
+            return
+        conteudo = self.txt_msg.get("1.0", "end").strip()
+        if not conteudo:
+            messagebox.showwarning("Validação", "Escreva o conteúdo da mensagem.")
+            return
+        forn_id = self._fornecedor_id_atual() if self.var_msg_forn.get() else None
+        try:
+            banco.mensagem_inserir({
+                "fornecedor_id": forn_id,
+                "titulo": titulo,
+                "conteudo": conteudo,
+                "tipo": tipo
+            })
+            self._carregar_msgs()
+            messagebox.showinfo("OK", f"Mensagem salva como {tipo.upper()}.")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao salvar mensagem: {e}")
+
+    def _usar_msg(self, tipo: str):
+        tv = self.tv_modelos if tipo == "modelo" else self.tv_rasc
+        sel = tv.selection()
+        if not sel:
+            messagebox.showwarning("Atenção", "Selecione uma mensagem.")
+            return
+        vals = tv.item(sel[0], "values")
+        try:
+            mid = int(vals[0])
+        except Exception:
+            return
+        # busca o conteúdo
+        msgs = banco.mensagens_listar(tipo=tipo, fornecedor_id=self._fornecedor_id_atual())
+        msg = next((m for m in msgs if m["id"] == mid), None)
+        if not msg:
+            messagebox.showwarning("Aviso", "Mensagem não encontrada.")
+            return
+        self.txt_msg.delete("1.0", "end")
+        self.txt_msg.insert("1.0", msg.get("conteudo",""))
+
+    def _excluir_msg(self, tipo: str):
+        tv = self.tv_modelos if tipo == "modelo" else self.tv_rasc
+        sel = tv.selection()
+        if not sel:
+            messagebox.showwarning("Atenção", "Selecione uma mensagem.")
+            return
+        vals = tv.item(sel[0], "values")
+        try:
+            mid = int(vals[0])
+        except Exception:
+            return
+        if not messagebox.askyesno("Confirmar", "Excluir a mensagem selecionada?"):
+            return
+        try:
+            banco.mensagem_excluir(mid)
+            self._carregar_msgs()
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao excluir: {e}")
+
+    # ---------- Exportar / Enviar (salva antes) ----------
     def _exportar_excel(self):
-        # coleta valores do rascunho
+        # coleta rascunho
         values_rows = [self.tv.item(iid, "values") for iid in self.tv.get_children()]
         if not values_rows:
             messagebox.showinfo("Exportação", "Não há itens no rascunho para exportar.")
             return
 
-        # 1) SALVA no banco
+        # 1) SALVA
         try:
-            salvos = self._salvar_orcamento_linhas(values_rows)
-            if salvos == 0:
-                print("Aviso: nenhuma linha foi salva (verifique os dados).")
+            self._salvar_orcamento_linhas(values_rows)
         except Exception as e:
             messagebox.showwarning("Salvar orçamento", f"Não foi possível salvar no banco antes de exportar:\n{e}")
 
-        # 2) Monta DF para exportar
+        # 2) Exporta
         linhas = []
         for v in values_rows:
             linhas.append({
@@ -251,9 +415,8 @@ class TelaOrcamento(tk.Frame):
             ])
             utils.exportar_excel({"Orcamento": df}, arq)
             messagebox.showinfo("Exportação", f"Planilha salva em:\n{arq}")
-            # limpa rascunho e recarrega salvos
-            for i in self.tv.get_children():
-                self.tv.delete(i)
+            # limpa rascunho e recarrega histórico
+            for i in self.tv.get_children(): self.tv.delete(i)
             self._carregar_salvos()
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao exportar para Excel: {e}")
@@ -283,15 +446,13 @@ class TelaOrcamento(tk.Frame):
             messagebox.showinfo("E-mail", "Não há itens no rascunho para enviar.")
             return
 
-        # 1) SALVA no banco
+        # 1) SALVA
         try:
-            salvos = self._salvar_orcamento_linhas(values_rows)
-            if salvos == 0:
-                print("Aviso: nenhuma linha foi salva (verifique os dados).")
+            self._salvar_orcamento_linhas(values_rows)
         except Exception as e:
             messagebox.showwarning("Salvar orçamento", f"Não foi possível salvar no banco antes de enviar:\n{e}")
 
-        # 2) Monta HTML e anexo
+        # 2) Monta HTML + anexo
         linhas = []
         total_geral = 0.0
         for v in values_rows:
@@ -392,9 +553,8 @@ class TelaOrcamento(tk.Frame):
                 anexos=anexos
             )
             messagebox.showinfo("E-mail", f"E-mail enviado com sucesso para: {', '.join(destinatarios)}")
-            # limpa rascunho e recarrega salvos
-            for i in self.tv.get_children():
-                self.tv.delete(i)
+            # Limpa rascunho e atualiza histórico
+            for i in self.tv.get_children(): self.tv.delete(i)
             self._carregar_salvos()
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao enviar e-mail: {e}")
