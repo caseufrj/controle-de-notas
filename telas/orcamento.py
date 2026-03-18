@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import banco
 import utils  # <--- adicionar
+import tempfile  # usamos para gerar o anexo Excel
 
 
 class TelaOrcamento(tk.Frame):
@@ -99,27 +100,80 @@ class TelaOrcamento(tk.Frame):
             e.delete(0, "end")
 
     # ---------- Placeholders a implementar ----------
+    def _salvar_orcamento_linhas(self, linhas: list[int] | list[dict]) -> int:
+        """
+        Salva no banco cada linha do orçamento que está na Treeview.
+        Retorna a quantidade de registros inseridos.
+        """
+        forn_nome = self.cb_fornec.get()
+        if not forn_nome:
+            raise RuntimeError("Selecione o fornecedor.")
+    
+        # resolve fornecedor_id
+        fornecedor_id = None
+        for f in banco.fornecedores_listar():
+            if f["nome"] == forn_nome:
+                fornecedor_id = f["id"]
+                break
+        if not fornecedor_id:
+            raise RuntimeError("Fornecedor não encontrado no cadastro.")
+    
+        mensagem = self.txt_msg.get("1.0", "end").strip()
+    
+        salvos = 0
+        for l in linhas:
+            # l vem do self.tv.item(...,"values")
+            # ordem: ("cod","nome","qt","vu","emp","obs","vl_total")
+            try:
+                banco.orcamento_inserir({
+                    "fornecedor_id": fornecedor_id,
+                    "cod_aghu": l[0],
+                    "nome_item": l[1],
+                    "qtde": float(str(l[2]).replace(",", ".")),
+                    "vl_unit": float(str(l[3]).replace(",", ".")),
+                    "numero_empenho": l[4],
+                    "observacao": l[5],
+                    "mensagem_email": mensagem
+                })
+                salvos += 1
+            except Exception:
+                # se uma linha falhar, segue nas demais (mas reporta depois)
+                continue
+        return salvos
+        
     def _exportar_excel(self):
-        # Monta uma lista de linhas com os dados da tabela
-        linhas = []
+        # Coleta linhas da tabela
+        valores = []
         for iid in self.tv.get_children():
-            v = self.tv.item(iid, "values")
-            # ("cod","nome","qt","vu","emp","obs","vl_total")
-            linhas.append({
-                "Cód AGHU": v[0],
-                "Nome": v[1],
-                "Qtde": float(v[2]),
-                "Valor Unitário": float(v[3]),
-                "Nº Empenho": v[4],
-                "Observação": v[5],
-                "Valor Total": float(v[6]),
-            })
-
-        if not linhas:
+            valores.append(self.tv.item(iid, "values"))
+    
+        if not valores:
             messagebox.showinfo("Exportação", "Não há itens na tabela para exportar.")
             return
-
-        # Seleciona arquivo
+    
+        # 1) SALVAR no banco ANTES de exportar
+        try:
+            salvos = self._salvar_orcamento_linhas(valores)
+            if salvos == 0:
+                # não impede exportar, só informa
+                print("Aviso: nenhuma linha foi salva (verifique os dados).")
+        except Exception as e:
+            # não bloqueia exportação, mas informa
+            messagebox.showwarning("Salvar orçamento", f"Não foi possível salvar no banco antes de exportar:\n{e}")
+    
+        # 2) Montar DataFrame e exportar
+        linhas_df = []
+        for v in valores:
+            linhas_df.append({
+                "Cód AGHU": v[0],
+                "Nome": v[1],
+                "Qtde": float(str(v[2]).replace(",", ".")),
+                "Valor Unitário": float(str(v[3]).replace(",", ".")),
+                "Nº Empenho": v[4],
+                "Observação": v[5],
+                "Valor Total": float(str(v[6]).replace(",", "."))
+            })
+    
         arq = filedialog.asksaveasfilename(
             defaultextension=".xlsx",
             filetypes=[("Excel", "*.xlsx")],
@@ -127,9 +181,9 @@ class TelaOrcamento(tk.Frame):
         )
         if not arq:
             return
-
+    
         try:
-            df = utils.tabela_para_dataframe(linhas, [
+            df = utils.tabela_para_dataframe(linhas_df, [
                 "Cód AGHU","Nome","Qtde","Valor Unitário","Valor Total","Nº Empenho","Observação"
             ])
             utils.exportar_excel({"Orcamento": df}, arq)
@@ -139,50 +193,58 @@ class TelaOrcamento(tk.Frame):
             
 
     def _enviar_email(self):
-        # Coleta destinatário a partir do fornecedor
         forn_nome = self.cb_fornec.get()
         if not forn_nome:
             messagebox.showwarning("Validação", "Selecione o fornecedor.")
             return
-
+    
         # Buscar fornecedor para pegar e-mail
         fornecedor = None
         for f in banco.fornecedores_listar():
             if f["nome"] == forn_nome:
                 fornecedor = f
                 break
-
         if not fornecedor:
             messagebox.showwarning("Validação", "Fornecedor não encontrado no cadastro.")
             return
-
+    
         destinatario = (fornecedor.get("email") or "").strip()
         if not destinatario:
             messagebox.showwarning("Validação", "O fornecedor selecionado não possui e-mail cadastrado.")
             return
-
-        # Monta tabela HTML do orçamento
-        linhas = []
-        total_geral = 0.0
+    
+        # Coleta linhas da tabela
+        valores = []
         for iid in self.tv.get_children():
-            v = self.tv.item(iid, "values")
-            # ("cod","nome","qt","vu","emp","obs","vl_total")
-            linhas.append({
-                "cod": v[0],
-                "nome": v[1],
-                "qt": float(v[2]),
-                "vu": float(v[3]),
-                "emp": v[4],
-                "obs": v[5],
-                "vt": float(v[6]),
-            })
-            total_geral += float(v[6])
-
-        if not linhas:
+            valores.append(self.tv.item(iid, "values"))
+        if not valores:
             messagebox.showinfo("E-mail", "Não há itens na tabela para enviar.")
             return
-
-        # Corpo HTML
+    
+        # 1) SALVAR no banco ANTES de enviar
+        try:
+            salvos = self._salvar_orcamento_linhas(valores)
+            if salvos == 0:
+                print("Aviso: nenhuma linha foi salva (verifique os dados).")
+        except Exception as e:
+            messagebox.showwarning("Salvar orçamento", f"Não foi possível salvar no banco antes de enviar:\n{e}")
+    
+        # 2) Montar corpo HTML e anexo
+        linhas = []
+        total_geral = 0.0
+        for v in valores:
+            l = {
+                "cod": v[0],
+                "nome": v[1],
+                "qt": float(str(v[2]).replace(",", ".")),
+                "vu": float(str(v[3]).replace(",", ".")),
+                "emp": v[4],
+                "obs": v[5],
+                "vt": float(str(v[6]).replace(",", "."))
+            }
+            linhas.append(l)
+            total_geral += l["vt"]
+    
         msg_user = self.txt_msg.get("1.0", "end").strip()
         html_rows = ""
         for l in linhas:
@@ -197,7 +259,7 @@ class TelaOrcamento(tk.Frame):
                   <td>{l['obs']}</td>
                 </tr>
             """
-
+    
         corpo_html = f"""
         <html>
           <body>
@@ -230,11 +292,9 @@ class TelaOrcamento(tk.Frame):
           </body>
         </html>
         """
-
-        # (Opcional) gerar e anexar Excel no e-mail
+    
         anexos = []
         try:
-            import tempfile
             tmp = tempfile.NamedTemporaryFile(prefix="orcamento_", suffix=".xlsx", delete=False)
             tmp.close()
             df = utils.tabela_para_dataframe(
@@ -254,16 +314,21 @@ class TelaOrcamento(tk.Frame):
             utils.exportar_excel({"Orcamento": df}, tmp.name)
             anexos.append(tmp.name)
         except Exception as e:
-            # Se falhar o anexo, ainda assim enviamos o corpo HTML.
             print("Falha ao gerar anexo Excel:", e)
-
+    
+        # 3) Enviar (com CC opcional)
         try:
+            cfg = utils.carregar_config()
+            destinatarios = [destinatario]
+            if cfg.get("email_alerta"):
+                destinatarios.append(cfg["email_alerta"])
+    
             utils.enviar_email(
-                destinatarios=[destinatario],
+                destinatarios=destinatarios,
                 assunto=f"Orçamento - {forn_nome}",
                 corpo_html=corpo_html,
                 anexos=anexos
             )
-            messagebox.showinfo("E-mail", f"E-mail enviado com sucesso para: {destinatario}")
+            messagebox.showinfo("E-mail", f"E-mail enviado com sucesso para: {', '.join(destinatarios)}")
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao enviar e-mail: {e}")
