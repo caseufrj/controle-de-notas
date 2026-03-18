@@ -186,6 +186,37 @@ class TelaNotas(tk.Frame):
 
         grid = tk.Frame(area)
         grid.pack(fill="x", padx=8, pady=6)
+        
+        # no formulário da nota:
+        tk.Label(form_nota, text="Data:").grid(column=0, row=0, sticky="w", padx=6, pady=3)
+        self.e_data = DataEntry(form_nota, width=12)
+        self.e_data.grid(column=1, row=0, sticky="w", padx=6, pady=3)
+        # atalho prático: F4 preenche hoje
+        
+        self.e_vu_nota = MoedaEntry(form_notas, width=18)  # moeda BR
+        self.e_vu_nota.grid(column=3, row=0, sticky="w", padx=6, pady=3)
+        
+        tk.Label(form_notas, text="Vlr Total:").grid(column=4, row=0, sticky="w", padx=6, pady=3)
+        self.e_vt_nota = ttk.Entry(form_notas, width=18, state="readonly")
+        self.e_vt_nota.grid(column=5, row=0, sticky="w", padx=6, pady=3)
+        
+        # sempre que digitar em Qtde ou Vlr Unit, recalcule:
+        self.e_qt_nota.bind("<KeyRelease>", lambda e: self._recalcular_total_item())
+        self.e_vu_nota.bind("<KeyRelease>", lambda e: self._recalcular_total_item())
+        
+        def _recalcular_total_item(self):
+            try:
+                qt = float((self.e_qt_nota.get() or "0").replace(",", "."))
+            except ValueError:
+                qt = 0.0
+            vu_dec = self.e_vu_nota.value()  # Decimal
+            total = (Decimal(str(qt)) * vu_dec).quantize(Decimal("0.01"))
+            # mostra no campo readonly
+            self.e_vt_nota.configure(state="normal")
+            self.e_vt_nota.delete(0, "end")
+            self.e_vt_nota.insert(0, formatar_moeda_br(total))
+            self.e_vt_nota.configure(state="readonly")
+
 
         # >>> Primeiro crie as Combobox de vínculo
         tk.Label(grid, text="Vínculo ATA:").grid(row=0, column=0, sticky="w")
