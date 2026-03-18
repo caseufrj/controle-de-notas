@@ -176,8 +176,6 @@ def criar_tabelas():
     """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_orc_fornec ON orcamentos(fornecedor_id);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_orc_cod ON orcamentos(cod_aghu);")
-
-    # ---------------- Índice auxiliar para histórico de orçamentos ----------------
     cur.execute("CREATE INDEX IF NOT EXISTS idx_orc_criado_em ON orcamentos(criado_em);")
 
     # ---------------- Mensagens (Modelos & Rascunhos) ----------------
@@ -484,14 +482,14 @@ def saldo_empenho_por_fornecedor(fornecedor_id: int) -> List[Dict[str, Any]]:
     cur.execute("""
         SELECT * FROM vw_saldo_empenho
         WHERE fornecedor_id=?
-        ORDER BY valor_saldo ASC, empenho_id DESC   -- <<< coluna correta
+        ORDER BY valor_saldo ASC, empenho_id DESC
     """, (fornecedor_id,))
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
 
-# ------ Orçamentos ------
-def orcamento_inserir(d):
+# ------ Orçamentos: CRUD básico ------
+def orcamento_inserir(d: Dict[str, Any]) -> int:
     """
     d = {
       'fornecedor_id','cod_aghu','nome_item','qtde','vl_unit','numero_empenho',
@@ -512,11 +510,11 @@ def orcamento_inserir(d):
     conn.close()
     return novo_id
 
-def orcamentos_listar(fornecedor_id=None, cod_aghu="", numero_empenho=""):
+def orcamentos_listar(fornecedor_id: Optional[int] = None, cod_aghu: str = "", numero_empenho: str = "") -> List[Dict[str, Any]]:
     conn = conectar()
     cur = conn.cursor()
     sql = "SELECT * FROM orcamentos WHERE 1=1"
-    params = []
+    params: List[Any] = []
     if fornecedor_id:
         sql += " AND fornecedor_id=?"; params.append(fornecedor_id)
     if cod_aghu:
@@ -529,61 +527,93 @@ def orcamentos_listar(fornecedor_id=None, cod_aghu="", numero_empenho=""):
     conn.close()
     return rows
 
-def orcamento_excluir(id_):
+def orcamento_excluir(id_: int) -> None:
     conn = conectar()
     cur = conn.cursor()
     cur.execute("DELETE FROM orcamentos WHERE id=?", (id_,))
     conn.commit()
     conn.close()
 
-# ------ Orçamentos (filtros p/ histórico) ------
-def orcamentos_filtrar(
-    fornecedor_id: int | None = None,
-    data_ini: str | None = None,  # 'YYYY-MM-DD'
-    data_fim: str | None = None,  # 'YYYY-MM-DD'
-    termo: str = "",
-    numero_empenho: str = ""
-):
-    conn = conectar()
-    cur = conn.cursor()
-    sql = """
-        SELECT o.id, o.fornecedor_id, f.nome AS fornecedor_nome,
-               o.cod_aghu, o.nome_item, o.qtde, o.vl_unit,
-               o.numero_empenho, o.observacao, o.criado_em
+# ------ Orçamentos: filtros + paginação ------
+def _sql_orc_base() -> str:
+    return """
         FROM orcamentos o
         LEFT JOIN fornecedores f ON f.id = o.fornecedor_id
         WHERE 1=1
     """
-    params: list = []
+
+def _aplicar_filtros_orc(sql_parts: List[str], params: List[Any],
+                         fornecedor_id: Optional[int] = None,
+                         data_ini: Optional[str] = None,
+                         data_fim: Optional[str] = None,
+                         termo: str = "",
+                         numero_empenho: str = "") -> Tuple[List[str], List[Any]]:
     if fornecedor_id:
-        sql += " AND o.fornecedor_id=?"
-        params.append(fornecedor_id)
+        sql_parts.append(" AND o.fornecedor_id=?"); params.append(fornecedor_id)
     if data_ini:
-        sql += " AND date(o.criado_em) >= date(?)"
-        params.append(data_ini)
+        sql_parts.append(" AND date(o.criado_em) >= date(?)"); params.append(data_ini)
     if data_fim:
-        sql += " AND date(o.criado_em) <= date(?)"
-        params.append(data_fim)
+        sql_parts.append(" AND date(o.criado_em) <= date(?)"); params.append(data_fim)
     if termo:
-        sql += """ AND (
-            o.cod_aghu LIKE ? OR
-            o.nome_item LIKE ? OR
-            o.observacao LIKE ?
-        )"""
         like = f"%{termo}%"
+        sql_parts.append(" AND (o.cod_aghu LIKE ? OR o.nome_item LIKE ? OR o.observacao LIKE ?)")
         params.extend([like, like, like])
     if numero_empenho:
-        sql += " AND IFNULL(o.numero_empenho,'') LIKE ?"
-        params.append(f"%{numero_empenho}%")
+        sql_parts.append(" AND IFNULL(o.numero_empenho,'') LIKE ?"); params.append(f"%{numero_empenho}%")
+    return sql_parts, params
 
-    sql += " ORDER BY o.id DESC"
-    cur.execute(sql, tuple(params))
+def orcamentos_filtrar(fornecedor_id: Optional[int] = None,
+                       data_ini: Optional[str] = None,
+                       data_fim: Optional[str] = None,
+                       termo: str = "",
+                       numero_empenho: str = "") -> List[Dict[str, Any]]:
+    conn = conectar(); cur = conn.cursor()
+    parts: List[str] = [_sql_orc_base()]; params: List[Any] = []
+    parts, params = _aplicar_filtros_orc(parts, params, fornecedor_id, data_ini, data_fim, termo, numero_empenho)
+    sql_rows = f"""
+        SELECT o.id, o.fornecedor_id, f.nome AS fornecedor_nome,
+               o.cod_aghu, o.nome_item, o.qtde, o.vl_unit,
+               o.numero_empenho, o.observacao, o.criado_em
+        {''.join(parts)}
+        ORDER BY o.id DESC
+    """
+    cur.execute(sql_rows, tuple(params))
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
 
+def orcamentos_filtrar_paginado(fornecedor_id: Optional[int] = None,
+                                data_ini: Optional[str] = None,
+                                data_fim: Optional[str] = None,
+                                termo: str = "",
+                                numero_empenho: str = "",
+                                limit: int = 50,
+                                offset: int = 0) -> Dict[str, Any]:
+    conn = conectar(); cur = conn.cursor()
+    parts: List[str] = [_sql_orc_base()]; params: List[Any] = []
+    parts, params = _aplicar_filtros_orc(parts, params, fornecedor_id, data_ini, data_fim, termo, numero_empenho)
+
+    # total
+    sql_count = f"SELECT COUNT(*) {''.join(parts)}"
+    cur.execute(sql_count, tuple(params))
+    total = int(cur.fetchone()[0] or 0)
+
+    # page
+    sql_rows = f"""
+        SELECT o.id, o.fornecedor_id, f.nome AS fornecedor_nome,
+               o.cod_aghu, o.nome_item, o.qtde, o.vl_unit,
+               o.numero_empenho, o.observacao, o.criado_em
+        {''.join(parts)}
+        ORDER BY o.id DESC
+        LIMIT ? OFFSET ?
+    """
+    cur.execute(sql_rows, tuple(params) + (int(limit), int(offset)))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return {"rows": rows, "total": total}
+
 # ------ Mensagens padrão / rascunhos ------
-def mensagem_inserir(d):
+def mensagem_inserir(d: Dict[str, Any]) -> int:
     """
     d = {'fornecedor_id': Optional[int], 'titulo': str, 'conteudo': str, 'tipo': 'modelo'|'rascunho'}
     """
@@ -600,18 +630,19 @@ def mensagem_inserir(d):
     conn.close()
     return novo_id
 
-def mensagens_listar(tipo: str | None = None, fornecedor_id: int | None = None, busca: str = ""):
+def mensagens_listar(tipo: Optional[str] = None, fornecedor_id: Optional[int] = None, busca: str = "") -> List[Dict[str, Any]]:
     conn = conectar()
     cur = conn.cursor()
     sql = "SELECT * FROM mensagens_padrao WHERE 1=1"
-    params: list = []
+    params: List[Any] = []
     if tipo:
         sql += " AND tipo=?"; params.append(tipo)
+    # inclui globais (NULL) e do fornecedor atual
     if fornecedor_id is not None:
         sql += " AND (fornecedor_id IS NULL OR fornecedor_id=?)"; params.append(fornecedor_id)
     if busca:
-        sql += " AND (titulo LIKE ? OR conteudo LIKE ?)"
         like = f"%{busca}%"
+        sql += " AND (titulo LIKE ? OR conteudo LIKE ?)"
         params.extend([like, like])
     sql += " ORDER BY id DESC"
     cur.execute(sql, tuple(params))
@@ -619,100 +650,7 @@ def mensagens_listar(tipo: str | None = None, fornecedor_id: int | None = None, 
     conn.close()
     return rows
 
-def mensagem_excluir(id_: int):
-    conn = conectar()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM mensagens_padrao WHERE id=?", (id_,))
-    conn.commit()
-    conn.close()
-
-def mensagem_atualizar(id_: int, novo_titulo: str, novo_conteudo: str):
-    conn = conectar()
-    cur = conn.cursor()
-    cur.execute("""
-        UPDATE mensagens_padrao
-           SET titulo=?, conteudo=?
-         WHERE id=?
-    """, (novo_titulo, novo_conteudo, id_))
-    conn.commit()
-    conn.close()
-
-# ------ Orçamentos: contagem para paginação ------
-def orcamentos_contar(
-    fornecedor_id: int | None = None,
-    data_ini: str | None = None,  # 'YYYY-MM-DD'
-    data_fim: str | None = None,  # 'YYYY-MM-DD'
-    termo: str = "",
-    numero_empenho: str = ""
-) -> int:
-    conn = conectar()
-    cur = conn.cursor()
-    sql = "SELECT COUNT(*) AS total FROM orcamentos o WHERE 1=1"
-    params: list = []
-    if fornecedor_id:
-        sql += " AND o.fornecedor_id=?"; params.append(fornecedor_id)
-    if data_ini:
-        sql += " AND date(o.criado_em) >= date(?)"; params.append(data_ini)
-    if data_fim:
-        sql += " AND date(o.criado_em) <= date(?)"; params.append(data_fim)
-    if termo:
-        like = f"%{termo}%"
-        sql += " AND (o.cod_aghu LIKE ? OR o.nome_item LIKE ? OR o.observacao LIKE ?)"
-        params.extend([like, like, like])
-    if numero_empenho:
-        sql += " AND IFNULL(o.numero_empenho,'') LIKE ?"; params.append(f"%{numero_empenho}%")
-    cur.execute(sql, tuple(params))
-    row = cur.fetchone()
-    conn.close()
-    return int(row[0] if row else 0)
-
-# ------ Orçamentos: filtro com paginação (LIMIT/OFFSET) ------
-def orcamentos_filtrar(
-    fornecedor_id: int | None = None,
-    data_ini: str | None = None,
-    data_fim: str | None = None,
-    termo: str = "",
-    numero_empenho: str = "",
-    limit: int | None = None,
-    offset: int | None = None
-):
-    conn = conectar()
-    cur = conn.cursor()
-    sql = """
-        SELECT o.id, o.fornecedor_id, f.nome AS fornecedor_nome,
-               o.cod_aghu, o.nome_item, o.qtde, o.vl_unit,
-               o.numero_empenho, o.observacao, o.criado_em
-        FROM orcamentos o
-        LEFT JOIN fornecedores f ON f.id = o.fornecedor_id
-        WHERE 1=1
-    """
-    params: list = []
-    if fornecedor_id:
-        sql += " AND o.fornecedor_id=?"; params.append(fornecedor_id)
-    if data_ini:
-        sql += " AND date(o.criado_em) >= date(?)"; params.append(data_ini)
-    if data_fim:
-        sql += " AND date(o.criado_em) <= date(?)"; params.append(data_fim)
-    if termo:
-        like = f"%{termo}%"
-        sql += " AND (o.cod_aghu LIKE ? OR o.nome_item LIKE ? OR o.observacao LIKE ?)"
-        params.extend([like, like, like])
-    if numero_empenho:
-        sql += " AND IFNULL(o.numero_empenho,'') LIKE ?"; params.append(f"%{numero_empenho}%")
-
-    sql += " ORDER BY o.id DESC"
-    if limit is not None:
-        sql += " LIMIT ?"; params.append(int(limit))
-        if offset is not None:
-            sql += " OFFSET ?"; params.append(int(offset))
-
-    cur.execute(sql, tuple(params))
-    rows = [dict(r) for r in cur.fetchall()]
-    conn.close()
-    return rows
-
-# ------ Mensagens padrão: obter + atualizar (para edição) ------
-def mensagens_obter(id_: int):
+def mensagens_obter(id_: int) -> Optional[Dict[str, Any]]:
     conn = conectar()
     cur = conn.cursor()
     cur.execute("SELECT * FROM mensagens_padrao WHERE id=?", (id_,))
@@ -720,7 +658,18 @@ def mensagens_obter(id_: int):
     conn.close()
     return dict(row) if row else None
 
-def mensagem_atualizar(id_: int, novo_titulo: str, novo_conteudo: str):
+# Alias para compatibilidade com a tela (usa mensagem_obter)
+def mensagem_obter(id_: int) -> Optional[Dict[str, Any]]:
+    return mensagens_obter(id_)
+
+def mensagem_excluir(id_: int) -> None:
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM mensagens_padrao WHERE id=?", (id_,))
+    conn.commit()
+    conn.close()
+
+def mensagem_atualizar(id_: int, novo_titulo: str, novo_conteudo: str) -> None:
     conn = conectar()
     cur = conn.cursor()
     cur.execute("""
