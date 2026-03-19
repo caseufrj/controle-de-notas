@@ -57,12 +57,15 @@ def validar_data_ddmmaa(s: str) -> bool:
         return False
 
 
+# ===========================
+#   Widgets: Moeda / Data
+# ===========================
 class MoedaEntry(ttk.Entry):
     """
     Entry de moeda BR com digitação fluida:
       • Enquanto DIGITA: sem "R$ " e sem separadores de milhar (apenas validação leve).
       • Ao SAIR do campo (FocusOut): formata bonito (R$ 1.234,56).
-    A posição do cursor é preservada mesmo após a normalização.
+    Cursor preservado.
     """
     def __init__(self, master=None, prefixo=True, **kw):
         super().__init__(master, **kw)
@@ -72,27 +75,18 @@ class MoedaEntry(ttk.Entry):
         self._formatando = False
         self._tem_foco = False
 
-        # eventos
         self._sv.trace_add("write", self._on_write)
         self.bind("<FocusIn>", self._on_focus_in)
         self.bind("<FocusOut>", self._on_focus_out)
 
-    # ---------- helpers ----------
     def _texto_para_digitacao(self, s: str) -> str:
-        """
-        Modo digitação (sem prefixo, sem milhar). Mantém só dígitos e 1 vírgula.
-        Converte ponto para vírgula e permite no máx. 2 casas decimais.
-        """
         s = (s or "").strip()
         s = s.replace("R$", "").replace(" ", "")
         s = s.replace(".", ",")
-        # mantém apenas dígitos e vírgulas
         s = "".join(ch for ch in s if (ch.isdigit() or ch == ","))
-        # deixa apenas uma vírgula (a primeira)
         if s.count(",") > 1:
             partes = s.split(",")
             s = partes[0] + "," + "".join(partes[1:]).replace(",", "")
-        # limita 2 decimais
         if "," in s:
             inteira, dec = s.split(",", 1)
             dec = dec[:2]
@@ -100,23 +94,19 @@ class MoedaEntry(ttk.Entry):
         return s
 
     def _formatar_exibicao(self, s: str) -> str:
-        """Formata bonitinho para exibição (com prefixo, milhar, vírgula decimal)."""
         if not s.strip():
             return ""
-        dec = parse_moeda_br(s)  # aceita "1234,56"
+        dec = parse_moeda_br(s)
         return formatar_moeda_br(dec, com_prefixo=self._prefixo)
 
-    # ---------- eventos ----------
     def _on_focus_in(self, *_):
         self._tem_foco = True
-        # ao focar, tira o "R$" e milhar para digitar leve
         atual = self._sv.get()
         leve = self._texto_para_digitacao(atual)
         self._sv.set(leve)
 
     def _on_focus_out(self, *_):
         self._tem_foco = False
-        # ao sair, formata bonito
         atual = self._sv.get()
         if not atual.strip():
             return
@@ -128,18 +118,15 @@ class MoedaEntry(ttk.Entry):
         self._formatando = True
         try:
             old = self._sv.get()
-            # posição antes da mudança
             try:
                 old_pos = self.index("insert")
             except Exception:
                 old_pos = len(old)
             dist_right = max(0, len(old) - old_pos)
 
-            # durante digitação: normaliza leve (sem "R$" e sem milhar)
             if self._tem_foco:
                 novo = self._texto_para_digitacao(old)
             else:
-                # fora do foco (caso programático), já deixa bonito
                 novo = self._formatar_exibicao(old) if old.strip() else ""
 
             self._sv.set(novo)
@@ -152,9 +139,7 @@ class MoedaEntry(ttk.Entry):
         finally:
             self._formatando = False
 
-    # ---------- util ----------
     def _set_text_preservando_cursor(self, texto: str, force_end: bool = False):
-        """Seta texto mantendo a posição lógica do cursor."""
         try:
             old = self._sv.get()
             old_pos = self.index("insert")
@@ -173,13 +158,10 @@ class MoedaEntry(ttk.Entry):
         except Exception:
             pass
 
-    # ---------- API ----------
     def value(self) -> Decimal:
-        # aceita tanto o texto leve quanto formatado
         return parse_moeda_br(self._sv.get())
 
     def set_value(self, val):
-        # set programático já em modo bonito
         val_fmt = formatar_moeda_br(val, com_prefixo=self._prefixo)
         self._set_text_preservando_cursor(val_fmt, force_end=True)
 
@@ -199,21 +181,18 @@ class DataEntry(ttk.Entry):
         self._digits = ""     # somente dígitos (máx. 8)
         self._tem_foco = False
 
-        # Eventos principais
         self.bind("<FocusIn>", self._on_focus_in)
         self.bind("<FocusOut>", self._on_focus_out)
         self.bind("<KeyPress>", self._on_keypress)
         self.bind("<F4>", self._hoje)
-        self.bind("<<Paste>>", self._on_paste)  # suporta colar do sistema
+        self.bind("<<Paste>>", self._on_paste)
 
-        # Inicializa a renderização
         self._render(force_end=True)
 
-    # ---------- Helpers de máscara/cursor ----------
+    # helpers
     @staticmethod
     def _only_digits(s: str) -> str:
-        import re as _re
-        return _re.sub(r"\D", "", s or "")[:8]
+        return re.sub(r"\D", "", s or "")[:8]
 
     @staticmethod
     def _mask(d: str) -> str:
@@ -226,13 +205,11 @@ class DataEntry(ttk.Entry):
 
     @staticmethod
     def _pos_to_dindex(masked: str, pos: int) -> int:
-        """Quantos dígitos existem à esquerda de pos em 'masked'."""
         pos = max(0, min(pos, len(masked)))
         return sum(1 for ch in masked[:pos] if ch.isdigit())
 
     @staticmethod
     def _dindex_to_pos(masked: str, dindex: int) -> int:
-        """Posição em 'masked' para manter 'dindex' dígitos à esquerda do cursor."""
         if dindex <= 0:
             return 0
         count = 0
@@ -245,10 +222,8 @@ class DataEntry(ttk.Entry):
 
     def _render(self, dindex: int = None, force_end: bool = False):
         masked = self._mask(self._digits)
-        # Atualiza texto
         self.delete(0, "end")
         self.insert(0, masked)
-        # Posiciona cursor
         try:
             if force_end:
                 self.icursor("end")
@@ -260,31 +235,28 @@ class DataEntry(ttk.Entry):
         except Exception:
             pass
 
-    # ---------- Eventos ----------
+    # eventos
     def _on_focus_in(self, *_):
         self._tem_foco = True
-        # sincronia caso tenha sido setado programaticamente
+        # sincroniza caso tenha sido setado programaticamente
         self._digits = self._only_digits(self.get())
         self._render()
 
     def _on_focus_out(self, *_):
         self._tem_foco = False
         masked = self._mask(self._digits)
-        # mantém o texto final
         self.delete(0, "end")
         self.insert(0, masked)
-        # valida
-        if masked and not self._valid(masked):
+        if masked and not validar_data_ddmmaa(masked):
             messagebox.showwarning("Data", "Data inválida. Use DD/MM/AAAA.")
-            # devolve foco e seleciona para facilitar correção
             self.after(0, lambda: (self.focus_set(), self.selection_range(0, "end")))
 
     def _on_keypress(self, event):
-        # Navegação padrão
+        # navegação padrão
         if event.keysym in {"Left", "Right", "Home", "End"}:
             return
 
-        # Ctrl+A/C/X: deixa padrão; Ctrl+V tratado via <<Paste>>
+        # Ctrl+A/C/X: padrão; Ctrl+V tratado pelo <<Paste>>
         if (event.state & 0x4) and event.keysym.upper() in {"A", "C", "X"}:
             return
 
@@ -292,7 +264,6 @@ class DataEntry(ttk.Entry):
         pos = self.index("insert")
         dindex = self._pos_to_dindex(masked, pos)
 
-        # Backspace/Delete removem DÍGITOS (não barras)
         if event.keysym == "BackSpace":
             if self._has_selection():
                 self._delete_selection()
@@ -311,10 +282,8 @@ class DataEntry(ttk.Entry):
                 self._render(dindex=dindex)
             return "break"
 
-        # Digitação de dígitos
         if event.char and event.char.isdigit():
             if self._has_selection():
-                # substitui seleção por um dígito
                 sel_start = self.index("sel.first")
                 sel_end = self.index("sel.last")
                 dl = self._pos_to_dindex(masked, sel_start)
@@ -329,7 +298,7 @@ class DataEntry(ttk.Entry):
             self._render(dindex=dindex+1)
             return "break"
 
-        # Teclas irrelevantes ou '/' digitada manualmente: ignora
+        # ignora "/" digitada manualmente e outras teclas
         return "break"
 
     def _on_paste(self, *_):
@@ -361,7 +330,7 @@ class DataEntry(ttk.Entry):
             self._render(dindex=dindex + len(ins))
         return "break"
 
-    # ---------- Utilidades ----------
+    # utils
     def _has_selection(self) -> bool:
         try:
             self.index("sel.first"); self.index("sel.last")
@@ -378,19 +347,13 @@ class DataEntry(ttk.Entry):
         self._digits = self._digits[:dl] + self._digits[dr:]
         self._render(dindex=dl)
 
-    @staticmethod
-    def _valid(masked: str) -> bool:
-        try:
-            if not masked or len(masked) != 10:
-                return False
-            datetime.strptime(masked, "%d/%m/%Y")
-            return True
-        except Exception:
-            return False
+    def _hoje(self, *_):
+        self._digits = self._only_digits(datetime.now().strftime("%d/%m/%Y"))
+        self._render(force_end=True)
 
-    # ---------- API ----------
+    # API
     def value(self) -> str:
-        """Retorna 'DD/MM/AAAA' (ou string vazia)."""
+        """Retorna 'DD/MM/AAAA' (ou '')"""
         return self._mask(self._digits)
 
     def set_value(self, s: str):
@@ -399,13 +362,18 @@ class DataEntry(ttk.Entry):
         self._render(force_end=True)
 
 
-
 # ===========================
 #         TELA DE NOTAS
 # ===========================
 class TelaNotas(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="white")
+        # título de debug para garantir que este arquivo está em uso
+        try:
+            master.winfo_toplevel().title("Controle de Notas e Empenhos - Notas — v3")
+        except Exception:
+            pass
+
         banco.criar_tabelas()
 
         # ---------- Topo / Cabeçalho da Nota ----------
@@ -571,11 +539,9 @@ class TelaNotas(tk.Frame):
         if not fid:
             self.cb_ata["values"] = []; self.cb_emp["values"] = []
             return
-        # ATA
         atas = banco.ata_itens_listar(fornecedor_id=fid)
         self.map_ata = {f'{a["pregao"]} | {a["cod_aghu"]} | {a["nome_item"]}': a["id"] for a in atas}
         self.cb_ata["values"] = list(self.map_ata.keys())
-        # Empenho
         emps = banco.empenhos_listar(fornecedor_id=fid)
         self.map_emp = {f'{(e["numero_empenho"] or "-")} | {e["cod_aghu"]} | {e["nome_item"]}': e["id"] for e in emps}
         self.cb_emp["values"] = list(self.map_emp.keys())
@@ -598,11 +564,10 @@ class TelaNotas(tk.Frame):
             ))
 
     def _fmt_data_list(self, s):
-        # aceita 'YYYY-MM-DD' e exibe 'DD/MM/YYYY'
         try:
             if not s:
                 return ""
-            if "/" in s:  # já vem formatada
+            if "/" in s:
                 return s
             dt = datetime.strptime(s, "%Y-%m-%d")
             return dt.strftime("%d/%m/%Y")
@@ -614,7 +579,6 @@ class TelaNotas(tk.Frame):
     # ======================
     def _nova_nota(self):
         self.nota_id = None
-        # limpa cabeçalho
         self.e_numero.config(state="normal"); self.e_numero.delete(0, "end")
         self.e_data.config(state="normal"); self.e_data.set_value(datetime.now().strftime("%d%m%Y"))
         self.e_total.config(state="normal"); self.e_total.set_value(0)
@@ -622,7 +586,6 @@ class TelaNotas(tk.Frame):
         self.e_envio.set_value("")
         self.e_obs.delete(0, "end")
         self.cb_fornec.config(state="readonly")
-        # limpa itens pendentes
         for i in self.tv_itens.get_children():
             self.tv_itens.delete(i)
         self.btn_add_item.config(state="disabled")
@@ -640,7 +603,6 @@ class TelaNotas(tk.Frame):
             messagebox.showwarning("Validação","Preencha número e data de expedição.")
             return
 
-        # armazena data no padrão do banco (YYYY-MM-DD)
         try:
             dt = datetime.strptime(data_gui, "%d/%m/%Y").date()
             data_bd = dt.strftime("%Y-%m-%d")
@@ -666,10 +628,8 @@ class TelaNotas(tk.Frame):
             else:
                 self.nota_id = banco.nota_inserir(d)
                 messagebox.showinfo("OK", f"Nota criada (ID {self.nota_id}). Agora adicione os itens.")
-                # habilita edição de itens
                 self.btn_add_item.config(state="normal")
                 self.btn_salvar_itens.config(state="normal")
-                # congela cabeçalho essencial
                 self.cb_fornec.config(state="disabled")
                 self.e_numero.config(state="disabled")
                 self.e_data.config(state="disabled")
@@ -740,7 +700,7 @@ class TelaNotas(tk.Frame):
 
         self.tv_itens.insert("", "end", values=(
             cod,
-            data_uso,              # GUI (DD/MM/AAAA) para o usuário
+            data_uso,              # GUI (DD/MM/AAAA)
             f"{vu:.2f}",
             f"{qt}",
             f"{total:.2f}",
@@ -751,7 +711,6 @@ class TelaNotas(tk.Frame):
             emp_leg
         ))
 
-        # limpa campos do item (mantém vínculos)
         self.e_cod_item.delete(0, "end")
         self.e_data_uso.set_value("")
         self.e_vu_item.set_value(0)
@@ -766,10 +725,7 @@ class TelaNotas(tk.Frame):
         itens = []
         for iid in self.tv_itens.get_children():
             v = self.tv_itens.item(iid, "values")
-            # v = (cod_aghu, data_uso_gui, vl_unit, qtde, vl_total, qtde_consumida, ata_item_id, empenho_id, ata_leg, emp_leg)
-
-            # --- Conversão da data de uso (GUI -> ISO) ---
-            data_uso_gui = (v[1] or "").strip()   # "DD/MM/AAAA" ou ""
+            data_uso_gui = (v[1] or "").strip()
             if data_uso_gui:
                 try:
                     dt_uso = datetime.strptime(data_uso_gui, "%d/%m/%Y").date()
@@ -781,7 +737,7 @@ class TelaNotas(tk.Frame):
 
             itens.append({
                 "cod_aghu": v[0],
-                "data_uso": data_uso_bd,  # ISO no banco
+                "data_uso": data_uso_bd,
                 "vl_unit": float(str(v[2]).replace(".", "").replace(",", ".")),
                 "qtde": float(str(v[3]).replace(".", "").replace(",", ".")),
                 "vl_total": float(str(v[4]).replace(".", "").replace(",", ".")),
@@ -795,14 +751,11 @@ class TelaNotas(tk.Frame):
             return
 
         try:
-            # Se estiver editando uma nota existente, substitui os itens por estes
             banco.nota_itens_excluir_por_nota(self.nota_id)
             banco.nota_itens_inserir(self.nota_id, itens)
-            # Recalcula total no cabeçalho
             total = banco.nota_total_recalcular(self.nota_id)
             self.e_total.set_value(Decimal(str(total)))
             messagebox.showinfo("OK", "Itens salvos na nota e total recalculado.")
-            # Limpa pendências
             for i in self.tv_itens.get_children():
                 self.tv_itens.delete(i)
             self._recarregar_notas()
@@ -845,21 +798,17 @@ class TelaNotas(tk.Frame):
             return
 
         self.nota_id = nid
-        # Cabeçalho
-        self.cb_fornec.config(state="disabled")  # fornecedor não muda durante edição
+        self.cb_fornec.config(state="disabled")
         self.e_numero.config(state="normal"); self.e_numero.delete(0,"end"); self.e_numero.insert(0, nota.get("numero",""))
-        # data no formato da GUI
         data_gui = self._fmt_data_list(nota.get("data_expedicao",""))
         self.e_data.config(state="normal"); self.e_data.set_value(data_gui)
         self.e_total.set_value(Decimal(str(nota.get("vl_total") or 0)))
         self.e_sei.delete(0, "end"); self.e_sei.insert(0, nota.get("codigo_sei") or "")
         self.e_envio.set_value(self._fmt_data_list(nota.get("data_envio_processo") or "") or "")
         self.e_obs.delete(0, "end"); self.e_obs.insert(0, nota.get("observacao") or "")
-        # Ao editar, bloqueia número e data (mudanças fortes); pode liberar se quiser
         self.e_numero.config(state="disabled")
         self.e_data.config(state="disabled")
 
-        # Itens atuais -> carregados na área pendente para edição
         for i in self.tv_itens.get_children():
             self.tv_itens.delete(i)
         itens = banco.nota_itens_listar(nid)
@@ -876,8 +825,6 @@ class TelaNotas(tk.Frame):
                 it.get("pregao") or "",
                 it.get("numero_empenho") or ""
             ))
-
-        # habilita edição de itens
         self.btn_add_item.config(state="normal")
         self.btn_salvar_itens.config(state="normal")
 
@@ -889,7 +836,7 @@ class TelaNotas(tk.Frame):
         if not messagebox.askyesno("Confirmar", "Excluir a nota selecionada e TODOS os itens?"):
             return
         try:
-            banco.nota_excluir(nid)  # CASCADE remove itens
+            banco.nota_excluir(nid)
             if self.nota_id == nid:
                 self._nova_nota()
             self._recarregar_notas()
