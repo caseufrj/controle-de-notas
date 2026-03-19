@@ -454,9 +454,8 @@ def ata_itens_listar_por_ata(ata_id: int) -> List[Dict[str,Any]]:
 
 def ata_itens_listar_por_ata_com_saldo(ata_id: int) -> List[Dict[str, Any]]:
     """
-    Retorna itens com colunas:
-      id, cod_aghu, nome_item, qtde_total, qtde_empenhada, qtde_saldo, vl_unit, vl_total, observacao
-    'qtde_empenhada' soma empenhos.qtde vinculados a este ata_item_id.
+    Retorna TODOS os itens da Ata, calculando o saldo já empenhado.
+    Itens com saldo 0 NÃO são ocultados, apenas marcados como esgotados.
     """
     conn = conectar(); cur = conn.cursor()
     cur.execute("""
@@ -465,21 +464,26 @@ def ata_itens_listar_por_ata_com_saldo(ata_id: int) -> List[Dict[str, Any]]:
             ai.cod_aghu,
             ai.nome_item,
             ai.qtde_total,
-            IFNULL((
-                SELECT SUM(e.qtde) FROM empenhos e WHERE e.ata_item_id = ai.id
-            ), 0) AS qtde_empenhada,
-            (ai.qtde_total - IFNULL((
-                SELECT SUM(e.qtde) FROM empenhos e WHERE e.ata_item_id = ai.id
-            ), 0)) AS qtde_saldo,
             ai.vl_unit,
             ai.vl_total,
-            ai.observacao
+            ai.observacao,
+            -- Soma quantidades de todos os empenhos vinculados a este item
+            IFNULL((
+                SELECT SUM(e.qtde) FROM empenhos e 
+                WHERE e.ata_item_id = ai.id
+            ), 0) AS qtde_empenhada,
+            -- Calcula o saldo restante
+            (ai.qtde_total - IFNULL((
+                SELECT SUM(e.qtde) FROM empenhos e 
+                WHERE e.ata_item_id = ai.id
+            ), 0)) AS qtde_saldo
         FROM atas_itens ai
-        WHERE ai.ata_id=?
-        ORDER BY ai.id ASC
+        WHERE ai.ata_id = ?
+        ORDER BY ai.nome_item ASC
     """, (ata_id,))
     rows = [dict(r) for r in cur.fetchall()]
-    conn.close(); return rows
+    conn.close()
+    return rows
 
 def ata_item_atualizar(item_id: int, d: Dict[str,Any]) -> None:
     conn = conectar(); cur = conn.cursor()
@@ -522,6 +526,32 @@ def ata_vinculos_contar(ata_id: int) -> Dict[str, int]:
     return {"empenhos": emp, "notas_itens": ni}
 
 # ------ Empenhos ------
+def validar_saldo_antes_empenho(ata_item_id: int, qtde_solicitada: float) -> Tuple[bool, str, float]:
+    """
+    Retorna (Sucesso, Mensagem, SaldoAtual).
+    """
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        SELECT 
+            qtde_total,
+            IFNULL((SELECT SUM(qtde) FROM empenhos WHERE ata_item_id = ?), 0) as empenhado
+        FROM atas_itens WHERE id = ?
+    """, (ata_item_id, ata_item_id))
+    row = cur.fetchone()
+    conn.close()
+    
+    if not row:
+        return False, "Item da Ata não encontrado.", 0
+    
+    total = row['qtde_total']
+    empenhado = row['empenhado']
+    saldo = total - empenhado
+    
+    if qtde_solicitada > saldo:
+        return False, f"Saldo insuficiente! Disponível: {saldo}, Solicitado: {qtde_solicitada}", saldo
+    
+    return True, "Saldo OK", saldo
+
 def empenho_inserir(d: Dict[str, Any]) -> int:
     campos = ("fornecedor_id","cod_aghu","nome_item","qtde","vl_unit","vl_total","numero_empenho","observacao","ata_item_id")
     vals = (d.get("fornecedor_id"), d.get("cod_aghu"), d.get("nome_item"),
