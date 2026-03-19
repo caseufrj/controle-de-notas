@@ -186,107 +186,179 @@ class MoedaEntry(ttk.Entry):
 
 class DataEntry(ttk.Entry):
     """
-    Entry que mascara data DD/MM/AAAA com cursor estável.
-    • Enquanto digita: injeta '/' automaticamente, preservando a posição do cursor.
-    • Ao sair do campo: valida data; se inválida, mantém foco e avisa.
-    • F4: preenche com a data de hoje.
+    Entry de data DD/MM/AAAA com digitação 100% estável.
+    Controla KeyPress para inserir/remover dígitos e mapeia o cursor por índice lógico.
     """
     def __init__(self, master=None, **kw):
         super().__init__(master, **kw)
+        self._digits = ""         # somente dígitos (máx. 8)
         self._sv = tk.StringVar()
         self.configure(textvariable=self._sv)
-        self._formatando = False
         self._tem_foco = False
 
-        # eventos
-        self._sv.trace_add("write", self._on_write)
+        # Eventos de teclado
         self.bind("<FocusIn>", self._on_focus_in)
         self.bind("<FocusOut>", self._on_focus_out)
         self.bind("<F4>", self._hoje)
 
-        # melhora experiência com delete/backspace perto das barras
+        # Intercepta todas as teclas
         self.bind("<KeyPress>", self._on_keypress)
 
-    # ---------- utils ----------
-    def _texto_mascarado(self, s: str) -> str:
-        """Retorna s apenas com dígitos e formato 'DD/MM/AAAA' conforme tamanho."""
-        return mascarar_data_ddmmaa(s)
+        # Inicial
+        self._render()
 
-    def _set_text_preservando_cursor(self, texto: str, force_end: bool = False):
-        """Aplica texto preservando posição lógica do cursor (distância até o fim)."""
-        try:
-            old = self._sv.get()
-            old_pos = self.index("insert")
-            dist_right = max(0, len(old) - old_pos)
-        except Exception:
-            dist_right = 0
+    # ---------- Helpers de máscara/cursor ----------
+    @staticmethod
+    def _mask_from_digits(d: str) -> str:
+        d = (d or "")[:8]
+        if len(d) > 4:
+            return f"{d[:2]}/{d[2:4]}/{d[4:]}"
+        elif len(d) > 2:
+            return f"{d[:2]}/{d[2:]}"
+        return d
 
-        self._sv.set(texto)
+    @staticmethod
+    def _digits_only(s: str) -> str:
+        return re.sub(r"\D", "", s or "")[:8]
+
+    @staticmethod
+    def _pos_to_digit_index(masked: str, pos: int) -> int:
+        """Quantos dígitos existem à esquerda de pos em masked."""
+        pos = max(0, min(pos, len(masked)))
+        return sum(1 for ch in masked[:pos] if ch.isdigit())
+
+    @staticmethod
+    def _digit_index_to_pos(masked: str, dindex: int) -> int:
+        """Posição em masked que mantém dindex dígitos à esquerda."""
+        if dindex <= 0:
+            return 0
+        count = 0
+        for i, ch in enumerate(masked):
+            if ch.isdigit():
+                count += 1
+                if count == dindex:
+                    return i + 1
+        return len(masked)
+
+    def _render(self, dindex: int | None = None, force_end: bool = False):
+        masked = self._mask_from_digits(self._digits)
+        self._sv.set(masked)
         try:
             if force_end:
                 self.icursor("end")
             else:
-                new_len = len(texto)
-                new_pos = max(0, new_len - dist_right)
+                if dindex is None:
+                    # mantém posição atual aproximadamente
+                    pos = self.index("insert")
+                    dindex = self._pos_to_digit_index(masked, pos)
+                new_pos = self._digit_index_to_pos(masked, dindex)
                 self.icursor(new_pos)
         except Exception:
             pass
 
-    # ---------- eventos ----------
+    # ---------- Eventos ----------
     def _on_focus_in(self, *_):
         self._tem_foco = True
+        # sincroniza _digits com o que estiver (caso preenchimento programático)
+        self._digits = self._digits_only(self._sv.get())
+        self._render(force_end=False)
 
     def _on_focus_out(self, *_):
         self._tem_foco = False
-        s = self._sv.get()
-        if not s.strip():
-            return
-        mas = self._texto_mascarado(s)
-        self._set_text_preservando_cursor(mas, force_end=True)
-        if not validar_data_ddmmaa(mas):
+        masked = self._mask_from_digits(self._digits)
+        self._sv.set(masked)
+        if masked and not validar_data_ddmmaa(masked):
             messagebox.showwarning("Data", "Data inválida. Use DD/MM/AAAA.")
-            self.focus_set()
-            try:
-                self.selection_range(0, "end")
-            except Exception:
-                pass
-
-    def _on_write(self, *_):
-        if self._formatando:
-            return
-        self._formatando = True
-        try:
-            atual = self._sv.get()
-            mascarado = self._texto_mascarado(atual)
-            self._set_text_preservando_cursor(mascarado, force_end=False)
-        finally:
-            self._formatando = False
+            self.after(0, lambda: (self.focus_set(), self.selection_range(0, "end")))
 
     def _on_keypress(self, event):
-        # gentileza com barras
+        # Permite navegação padrão
+        nav_keys = {"Left", "Right", "Home", "End"}
+        if event.keysym in nav_keys:
+            return  # comportamento padrão
+
+        # Copiar/colar/selecionar: permitimos Ctrl+A/C/V/X
+        if (event.state & 0x4) and event.keysym.upper() in {"A", "C", "V", "X"}:
+            # Tratamento especial para Ctrl+V (colar)
+            if event.keysym.upper() == "V":
+                try:
+                    clip = self.clipboard_get()
+                except Exception:
+                    clip = ""
+                # substitui seleção por dígitos colados
+                return self._paste_digits(clip)
+            return  # deixa o Tk cuidar
+
+        masked = self._sv.get()
+        pos = self.index("insert")
+        dindex = self._pos_to_digit_index(masked, pos)
+
+        # Backspace/Delete removem DÍGITOS (não barras)
+        if event.keysym == "BackSpace":
+            if dindex > 0:
+                # remove dígito anterior
+                self._digits = (self._digits[:dindex-1] + self._digits[dindex:])
+                self._render(dindex=dindex-1)
+            return "break"
+        if event.keysym == "Delete":
+            if dindex < len(self._digits):
+                # remove dígito na posição dindex
+                self._digits = (self._digits[:dindex] + self._digits[dindex+1:])
+                self._render(dindex=dindex)
+            return "break"
+
+        # Digitação de dígitos
+        if event.char and event.char.isdigit():
+            if len(self._digits) >= 8:
+                return "break"
+            # insere no índice lógico
+            self._digits = (self._digits[:dindex] + event.char + self._digits[dindex:])
+            self._render(dindex=dindex+1)
+            return "break"
+
+        # Barra digitada manualmente: ignora, deixamos a máscara cuidar
+        if event.char == "/":
+            return "break"
+
+        # Qualquer outra tecla: ignora
+        return "break"
+
+    def _paste_digits(self, s: str):
+        """Cola, mantendo apenas dígitos e respeitando seleção/posição."""
+        masked = self._sv.get()
         try:
-            pos = self.index("insert")
-            s = self._sv.get()
+            sel = self.selection_get()
+            sel_start = self.index("sel.first")
+            sel_end = self.index("sel.last")
+            # cursor após seleção = sel_start
+            dindex_left = self._pos_to_digit_index(masked, sel_start)
+            dindex_right = self._pos_to_digit_index(masked, sel_end)
+            # remove trecho selecionado (em dígitos)
+            self._digits = self._digits[:dindex_left] + self._digits[dindex_right:]
+            # insere dígitos do clipboard
+            ins = self._digits_only(s)
+            restante = max(0, 8 - len(self._digits))
+            ins = ins[:restante]
+            self._digits = self._digits[:dindex_left] + ins + self._digits[dindex_left:]
+            self._render(dindex=dindex_left + len(ins))
         except Exception:
-            return
-
-        if event.keysym in ("BackSpace", "Delete") and s:
-            if event.keysym == "BackSpace" and pos > 0 and s[pos-1:pos] == "/":
-                self.icursor(pos-1)
-                return "break"
-            if event.keysym == "Delete" and pos < len(s) and s[pos:pos+1] == "/":
-                self.icursor(pos+1)
-                return "break"
-
-    def _hoje(self, *_):
-        self._sv.set(datetime.now().strftime("%d/%m/%Y"))
+            # sem seleção: insere a partir da posição do cursor
+            pos = self.index("insert")
+            dindex = self._pos_to_digit_index(masked, pos)
+            ins = self._digits_only(s)
+            restante = max(0, 8 - len(self._digits))
+            ins = ins[:restante]
+            self._digits = self._digits[:dindex] + ins + self._digits[dindex:]
+            self._render(dindex=dindex + len(ins))
+        return "break"
 
     # ---------- API ----------
     def value(self) -> str:
-        return self._sv.get()
+        return self._mask_from_digits(self._digits)
 
     def set_value(self, s: str):
-        self._set_text_preservando_cursor(mascarar_data_ddmmaa(s), force_end=True)
+        self._digits = self._digits_only(s)
+        self._render(force_end=True)
 
 
 # ===========================
