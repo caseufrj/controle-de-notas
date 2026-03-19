@@ -14,7 +14,10 @@ class TelaAtasEmpenhos(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="white")
         try:
-            master.winfo_toplevel().title("Controle de Notas e Empenhos - "Atas & Empenhos")
+            
+            # Opção 2 (se quiser manter aspas internas, use aspas simples por fora)
+            master.winfo_toplevel().title('Controle de Notas e Empenhos - "Atas & Empenhos"')
+
         except Exception:
             pass
 
@@ -222,6 +225,28 @@ class TelaAtasEmpenhos(tk.Frame):
 
         self._ata_item_editando = None
         self._emp_item_editando = None
+
+    def _emp_excluir_cabecalho(self):
+        sel = self.tv_emp.selection()
+        if not sel:
+            messagebox.showinfo("Empenho","Selecione um Nº de empenho (linha de cabeçalho).")
+            return
+        iid = sel[0]
+        if "cab" not in self.tv_emp.item(iid, "tags"):
+            messagebox.showinfo("Empenho","Selecione a linha do Nº de empenho (cabeçalho).")
+            return
+        num = self.tv_emp.set(iid, "_num") or self.tv_emp.item(iid, "values")[1]
+        if not num:
+            messagebox.showwarning("Empenho","Nº do empenho não identificado.")
+            return
+        if not messagebox.askyesno("Confirmar", f"Excluir TODOS os itens do Nº de empenho '{num}'?"):
+            return
+        try:
+            afetados = banco.empenho_excluir_por_numero(self._fid(), num)
+            self._carregar_empenhos()
+            messagebox.showinfo("Empenho", f"Itens excluídos: {afetados}.")
+        except Exception as e:
+            messagebox.showerror("Empenho", f"Falha ao excluir Nº de empenho: {e}")
 
     def _emp_listar_atas_do_fornecedor(self):
         fid = self._fid()
