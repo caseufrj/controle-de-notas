@@ -138,11 +138,13 @@ class TelaAtasEmpenhos(tk.Frame):
 
         bar = tk.Frame(box, bg="white"); bar.pack(fill="x", padx=6, pady=(0,6))
         ttk.Button(bar, text="Recarregar", command=self._carregar_atas).pack(side="left")
+        ttk.Button(bar, text="Expandir tudo", command=self._atas_expandir_tudo).pack(side="left", padx=6)
         ttk.Button(bar, text="Debug", command=self._debug_ata).pack(side="left", padx=6)
 
         # estado de edição
         self._ata_id_editando = None
         self._ata_item_editando = None
+        self._atas_expandidas = set()
 
     #==========================================================
                         #TEMPORÁRIO
@@ -652,23 +654,34 @@ class TelaAtasEmpenhos(tk.Frame):
         for i in self.tv_atas.get_children():
             self.tv_atas.delete(i)
         if not fid: return
-
+    
         rows = banco.atas_hdr_listar(fornecedor_id=fid)
         forn_nome = self.cb_fornec.get()
-
+    
+        # quais ATAs reabrir? (preferência: refresh_items_of; senão, as que estavam em _atas_expandidas)
+        reabrir = set()
+        if refresh_items_of:
+            reabrir.add(int(refresh_items_of))
+        reabrir.update(getattr(self, "_atas_expandidas", set()))
+    
         for r in rows:
             vig_i = self._fmt_data(r.get("vigencia_ini"))
             vig_f = self._fmt_data(r.get("vigencia_fim"))
             saldo = formatar_moeda_br(r.get("valor_saldo", 0))
+            ata_id = int(r["ata_id"])
             iid = self.tv_atas.insert(
                 "", "end", text="",
                 values=(forn_nome, r.get("numero",""), vig_i, vig_f,
                         r.get("status",""), str(r.get("itens_qtd",0)), saldo,
-                        r["ata_id"], "", ""),
-                tags=("cab", f"ata_{r['ata_id']}")
+                        ata_id, "", ""),
+                tags=("cab", f"ata_{ata_id}")
             )
-            if refresh_items_of and int(r["ata_id"]) == int(refresh_items_of):
-                self._popular_itens_ata(iid, r["ata_id"])
+            # reabrir se estava expandida antes
+            if ata_id in reabrir:
+                # limpa filhos e repopula
+                for ch in self.tv_atas.get_children(iid):
+                    self.tv_atas.delete(ch)
+                self._popular_itens_ata(iid, ata_id)
 
     def _atas_on_open(self, _evt):
         iid = self.tv_atas.focus()
@@ -678,10 +691,24 @@ class TelaAtasEmpenhos(tk.Frame):
             if t.startswith("ata_"):
                 ata_id = int(t.split("_", 1)[1]); break
         if ata_id:
+            # marca como expandida
+            self._atas_expandidas.add(ata_id)
             # limpa filhos e repopula
             for ch in self.tv_atas.get_children(iid):
                 self.tv_atas.delete(ch)
             self._popular_itens_ata(iid, ata_id)
+
+    self.tv_atas.bind("<<TreeviewClose>>", self._atas_on_close)
+
+    def _atas_on_close(self, _evt):
+        iid = self.tv_atas.focus()
+        tags = self.tv_atas.item(iid, "tags")
+        for t in tags:
+            if t.startswith("ata_"):
+                ata_id = int(t.split("_", 1)[1])
+                if ata_id in self._atas_expandidas:
+                    self._atas_expandidas.remove(ata_id)
+                break
 
     def _popular_itens_ata(self, parent_iid, ata_id: int):
         # Itens da ATA sempre aparecem; só exibimos Qtde Empenhada e Saldo
@@ -731,6 +758,22 @@ class TelaAtasEmpenhos(tk.Frame):
         self.cb_ata_status.set(row.get("status","Em vigência"))
         self.e_ata_obs.delete(0, "end")  # view não traz obs; fica em branco
         self.btn_ata_add.config(text="Adicionar item")
+
+    def _atas_expandir_tudo(self):
+        # registra todas como expandidas e popula
+        self._atas_expandidas = set()
+        for iid in self.tv_atas.get_children(""):
+            # descobre o ata_id da linha
+            try:
+                ata_id = int(self.tv_atas.set(iid, "_ata_id") or 0)
+            except Exception:
+                ata_id = 0
+            if ata_id:
+                self._atas_expandidas.add(ata_id)
+                # limpa filhos e repopula
+                for ch in self.tv_atas.get_children(iid):
+                    self.tv_atas.delete(ch)
+                self._popular_itens_ata(iid, ata_id)
 
     # =========================================================
     #                      EMPENHOS: Ações
