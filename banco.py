@@ -93,6 +93,62 @@ def criar_tabelas() -> None:
     cur.execute("CREATE INDEX IF NOT EXISTS idx_ata_pregao ON atas_itens(pregao);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_ata_cod ON atas_itens(cod_aghu);")
 
+    # ------------ Cabeçalho de ATAS -------------
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS atas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fornecedor_id INTEGER NOT NULL REFERENCES fornecedores(id) ON DELETE CASCADE,
+        numero TEXT NOT NULL,
+        vigencia_ini TEXT,          -- YYYY-MM-DD
+        vigencia_fim TEXT,          -- YYYY-MM-DD
+        status TEXT NOT NULL DEFAULT 'Em vigência'
+               CHECK (status IN ('Em vigência','Encerrada','Renovada')),
+        observacao TEXT,
+        criado_em TEXT DEFAULT (datetime('now','localtime')),
+        atualizado_em TEXT DEFAULT (datetime('now','localtime')),
+        UNIQUE(fornecedor_id, numero)
+    );
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_atas_fornec ON atas(fornecedor_id);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_atas_num ON atas(numero);")
+    
+    # Itens de ata passam a aceitar 'ata_id' (FK)
+    if not _coluna_existe(cur, "atas_itens", "ata_id"):
+        cur.execute("ALTER TABLE atas_itens ADD COLUMN ata_id INTEGER REFERENCES atas(id) ON DELETE CASCADE;")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_atas_itens_ata ON atas_itens(ata_id);")
+    
+    # Saldo agregado por ATA (valor total dos itens - consumo em notas)
+    # Consumo: soma de ni.vl_total em notas_itens onde ni.ata_item_id = ai.id
+    if _view_existe(cur, "vw_saldo_ata_total"):
+        cur.execute("DROP VIEW vw_saldo_ata_total;")
+    cur.execute("""
+    CREATE VIEW vw_saldo_ata_total AS
+    SELECT
+        a.id            AS ata_id,
+        a.fornecedor_id,
+        a.numero,
+        a.vigencia_ini,
+        a.vigencia_fim,
+        a.status,
+        IFNULL(SUM(ai.vl_total),0) AS valor_total_ata,
+        IFNULL((
+            SELECT SUM(ni.vl_total)
+              FROM notas_itens ni
+              WHERE ni.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = a.id)
+        ), 0) AS valor_consumido,
+        -- saldo financeiro
+        (IFNULL(SUM(ai.vl_total),0) - IFNULL((
+            SELECT SUM(ni.vl_total)
+              FROM notas_itens ni
+              WHERE ni.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = a.id)
+        ), 0)) AS valor_saldo,
+        -- quantidade de itens cadastrados na ata
+        (SELECT COUNT(1) FROM atas_itens x WHERE x.ata_id = a.id) AS itens_qtd
+    FROM atas a
+    LEFT JOIN atas_itens ai ON ai.ata_id = a.id
+    GROUP BY a.id;
+    """)
+
     # -------- Empenhos --------
     cur.execute("""
     CREATE TABLE IF NOT EXISTS empenhos (
@@ -306,6 +362,86 @@ def ata_itens_listar(fornecedor_id: Optional[int] = None, busca_cod: str = "", b
     rows = [dict(r) for r in cur.fetchall()]
     conn.close(); return rows
 
+# ------ ATAS (cabeçalho) ------
+def ata_hdr_inserir(d: Dict[str,Any]) -> int:
+    """
+    d = {'fornecedor_id','numero','vigencia_ini','vigencia_fim','status','observacao'}
+    datas em 'YYYY-MM-DD' ou None
+    """
+    campos = ("fornecedor_id","numero","vigencia_ini","vigencia_fim","status","observacao")
+    vals = tuple(d.get(k) for k in campos)
+    conn = conectar(); cur = conn.cursor()
+    cur.execute(f"INSERT INTO atas ({','.join(campos)}) VALUES ({','.join(['?']*len(campos))})", vals)
+    conn.commit(); nid = cur.lastrowid; conn.close()
+    return nid
+
+def ata_hdr_atualizar(ata_id: int, d: Dict[str,Any]) -> None:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        UPDATE atas SET
+            numero=?, vigencia_ini=?, vigencia_fim=?, status=?, observacao=?,
+            atualizado_em = datetime('now','localtime')
+        WHERE id=?
+    """, (d.get("numero"), d.get("vigencia_ini"), d.get("vigencia_fim"), d.get("status"), d.get("observacao"), ata_id))
+    conn.commit(); conn.close()
+
+def ata_hdr_excluir(ata_id: int) -> None:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("DELETE FROM atas WHERE id=?", (ata_id,))
+    conn.commit(); conn.close()
+
+def atas_hdr_listar(fornecedor_id: Optional[int]=None, busca_numero: str="") -> List[Dict[str,Any]]:
+    conn = conectar(); cur = conn.cursor()
+    sql = "SELECT * FROM vw_saldo_ata_total WHERE 1=1"
+    params: List[Any] = []
+    if fornecedor_id:
+        sql += " AND fornecedor_id=?"; params.append(fornecedor_id)
+    if busca_numero:
+        sql += " AND numero LIKE ?"; params.append(f"%{busca_numero}%")
+    sql += " ORDER BY numero DESC, ata_id DESC"
+    cur.execute(sql, tuple(params))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close(); return rows
+
+# ------ ATAS (itens) ------
+def ata_item_inserir_v2(d: Dict[str,Any]) -> int:
+    """
+    d = {'ata_id','cod_aghu','nome_item','qtde_total','vl_unit','vl_total','observacao'}
+    """
+    campos = ("ata_id","cod_aghu","nome_item","qtde_total","vl_unit","vl_total","observacao")
+    vals = tuple(d.get(k) for k in campos)
+    conn = conectar(); cur = conn.cursor()
+    cur.execute(f"INSERT INTO atas_itens ({','.join(campos)}) VALUES ({','.join(['?']*len(campos))})", vals)
+    conn.commit(); iid = cur.lastrowid; conn.close()
+    return iid
+
+def ata_itens_listar_por_ata(ata_id: int) -> List[Dict[str,Any]]:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        SELECT id, cod_aghu, nome_item, qtde_total, vl_unit, vl_total, observacao
+          FROM atas_itens
+         WHERE ata_id=?
+         ORDER BY id ASC
+    """, (ata_id,))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close(); return rows
+
+def ata_item_atualizar(item_id: int, d: Dict[str,Any]) -> None:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        UPDATE atas_itens SET
+            cod_aghu=?, nome_item=?, qtde_total=?, vl_unit=?, vl_total=?, observacao=?,
+            atualizado_em = datetime('now','localtime')
+        WHERE id=?
+    """, (d.get("cod_aghu"), d.get("nome_item"), float(d.get("qtde_total") or 0),
+          float(d.get("vl_unit") or 0), float(d.get("vl_total") or 0), d.get("observacao"), item_id))
+    conn.commit(); conn.close()
+
+def ata_item_excluir(item_id: int) -> None:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("DELETE FROM atas_itens WHERE id=?", (item_id,))
+    conn.commit(); conn.close()
+
 # ------ Empenhos ------
 def empenho_inserir(d: Dict[str, Any]) -> int:
     campos = ("fornecedor_id","cod_aghu","nome_item","vl_unit","vl_total","numero_empenho","observacao")
@@ -328,6 +464,59 @@ def empenhos_listar(fornecedor_id: Optional[int] = None, busca_cod: str = "", nu
     cur.execute(sql, params)
     rows = [dict(r) for r in cur.fetchall()]
     conn.close(); return rows
+
+# ------ Empenhos (cabeçalho "virtual" agrupado) ------
+def empenho_cabecalhos_listar(fornecedor_id: Optional[int]=None, busca_numero: str="") -> List[Dict[str,Any]]:
+    """
+    Retorna cabeçalhos agrupados por numero_empenho:
+    {'numero_empenho','fornecedor_id','itens_qtd','valor_total'}
+    """
+    conn = conectar(); cur = conn.cursor()
+    sql = """
+        SELECT
+            IFNULL(numero_empenho,'-') AS numero_empenho,
+            fornecedor_id,
+            COUNT(*) AS itens_qtd,
+            IFNULL(SUM(vl_total),0) AS valor_total
+          FROM empenhos
+         WHERE 1=1
+    """
+    params: List[Any] = []
+    if fornecedor_id:
+        sql += " AND fornecedor_id=?"; params.append(fornecedor_id)
+    if busca_numero:
+        sql += " AND IFNULL(numero_empenho,'') LIKE ?"; params.append(f"%{busca_numero}%")
+    sql += " GROUP BY fornecedor_id, IFNULL(numero_empenho,'-') ORDER BY numero_empenho DESC"
+    cur.execute(sql, tuple(params))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close(); return rows
+
+def empenho_itens_listar(numero_empenho: str, fornecedor_id: int) -> List[Dict[str,Any]]:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        SELECT id, cod_aghu, nome_item, vl_unit, vl_total, observacao
+          FROM empenhos
+         WHERE fornecedor_id=? AND IFNULL(numero_empenho,'-')=IFNULL(?, '-')
+         ORDER BY id ASC
+    """, (fornecedor_id, numero_empenho))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close(); return rows
+
+def empenho_item_atualizar(item_id: int, d: Dict[str,Any]) -> None:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        UPDATE empenhos SET
+            cod_aghu=?, nome_item=?, vl_unit=?, vl_total=?, observacao=?,
+            atualizado_em = datetime('now','localtime')
+        WHERE id=?
+    """, (d.get("cod_aghu"), d.get("nome_item"), float(d.get("vl_unit") or 0),
+          float(d.get("vl_total") or 0), d.get("observacao"), item_id))
+    conn.commit(); conn.close()
+
+def empenho_item_excluir(item_id: int) -> None:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("DELETE FROM empenhos WHERE id=?", (item_id,))
+    conn.commit(); conn.close()
 
 # ------ Notas (cabeçalho + itens) ------
 def nota_inserir(d: Dict[str, Any]) -> int:
