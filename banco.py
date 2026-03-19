@@ -167,6 +167,11 @@ def criar_tabelas() -> None:
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emp_fornecedor ON empenhos(fornecedor_id);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emp_cod ON empenhos(cod_aghu);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emp_numero ON empenhos(numero_empenho);")
+    # dentro de criar_tabelas(), após criar a tabela empenhos:
+    if not _coluna_existe(cur, "empenhos", "qtde"):
+        cur.execute("ALTER TABLE empenhos ADD COLUMN qtde REAL NOT NULL DEFAULT 0;")
+    if not _coluna_existe(cur, "empenhos", "ata_item_id"):
+        cur.execute("ALTER TABLE empenhos ADD COLUMN ata_item_id INTEGER REFERENCES atas_itens(id) ON DELETE SET NULL;")
 
     # -------- Notas (cabeçalho) --------
     cur.execute("""
@@ -410,12 +415,9 @@ def ata_hdr_obter(ata_id: int) -> Optional[Dict[str, Any]]:
     row = cur.fetchone(); conn.close()
     return dict(row) if row else None
 
+
 # ------ ATAS (itens) ------
 def ata_item_inserir_v2(d: Dict[str,Any]) -> int:
-    """
-    d = {'ata_id','cod_aghu','nome_item','qtde_total','vl_unit','vl_total','observacao'}
-    Compatível com schema legado (atas_itens) que exige fornecedor_id e pregao (NOT NULL).
-    """
     ata_id = d.get("ata_id")
     if not ata_id:
         raise ValueError("ata_item_inserir_v2: 'ata_id' é obrigatório.")
@@ -425,18 +427,14 @@ def ata_item_inserir_v2(d: Dict[str,Any]) -> int:
         raise ValueError(f"Ata cabeçalho não encontrado (id={ata_id}).")
 
     fornecedor_id = hdr.get("fornecedor_id")
-    pregao = hdr.get("numero")  # usamos o 'numero' da ATA como 'pregao' legado
+    pregao = hdr.get("numero")  # usamos o número da ATA no campo legado 'pregao'
 
     campos = ("fornecedor_id","pregao","cod_aghu","nome_item","qtde_total","vl_unit","vl_total","observacao","ata_id")
     vals = (
-        fornecedor_id,
-        pregao,
-        d.get("cod_aghu"),
-        d.get("nome_item"),
-        float(d.get("qtde_total") or 0),
-        float(d.get("vl_unit") or 0),
-        float(d.get("vl_total") or 0),
-        d.get("observacao"),
+        fornecedor_id, pregao,
+        d.get("cod_aghu"), d.get("nome_item"),
+        float(d.get("qtde_total") or 0), float(d.get("vl_unit") or 0),
+        float(d.get("vl_total") or 0), d.get("observacao"),
         ata_id
     )
     conn = conectar(); cur = conn.cursor()
@@ -473,12 +471,37 @@ def ata_item_excluir(item_id: int) -> None:
 
 # ------ Empenhos ------
 def empenho_inserir(d: Dict[str, Any]) -> int:
-    campos = ("fornecedor_id","cod_aghu","nome_item","vl_unit","vl_total","numero_empenho","observacao")
-    vals = tuple(d.get(k) for k in campos)
+    campos = ("fornecedor_id","cod_aghu","nome_item","qtde","vl_unit","vl_total","numero_empenho","observacao","ata_item_id")
+    vals = (d.get("fornecedor_id"), d.get("cod_aghu"), d.get("nome_item"),
+            float(d.get("qtde") or 0), float(d.get("vl_unit") or 0), float(d.get("vl_total") or 0),
+            d.get("numero_empenho"), d.get("observacao"), d.get("ata_item_id"))
     conn = conectar(); cur = conn.cursor()
     cur.execute(f"INSERT INTO empenhos ({','.join(campos)}) VALUES ({','.join(['?']*len(campos))})", vals)
     conn.commit(); novo_id = cur.lastrowid; conn.close()
     return novo_id
+
+def empenho_itens_listar(numero_empenho: str, fornecedor_id: int) -> List[Dict[str,Any]]:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        SELECT id, cod_aghu, nome_item, qtde, vl_unit, vl_total, observacao, ata_item_id
+          FROM empenhos
+         WHERE fornecedor_id=? AND IFNULL(numero_empenho,'-')=IFNULL(?, '-')
+         ORDER BY id ASC
+    """, (fornecedor_id, numero_empenho))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close(); return rows
+
+def empenho_item_atualizar(item_id: int, d: Dict[str,Any]) -> None:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        UPDATE empenhos SET
+            cod_aghu=?, nome_item=?, qtde=?, vl_unit=?, vl_total=?, observacao=?, ata_item_id=?,
+            atualizado_em = datetime('now','localtime')
+        WHERE id=?
+    """, (d.get("cod_aghu"), d.get("nome_item"),
+          float(d.get("qtde") or 0), float(d.get("vl_unit") or 0), float(d.get("vl_total") or 0),
+          d.get("observacao"), d.get("ata_item_id"), item_id))
+    conn.commit(); conn.close()
 
 def empenhos_listar(fornecedor_id: Optional[int] = None, busca_cod: str = "", numero_empenho: str = "") -> List[Dict[str, Any]]:
     conn = conectar(); cur = conn.cursor()
