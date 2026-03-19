@@ -498,17 +498,16 @@ class TelaAtasEmpenhos(tk.Frame):
             self._popular_itens_ata(iid, ata_id)
 
     def _popular_itens_ata(self, parent_iid, ata_id: int):
-        # Usa versão COM SALDO (itens NUNCA somem; apenas exibimos Qtde Empenhada e Saldo)
+        # Itens da ATA sempre aparecem; só exibimos Qtde Empenhada e Saldo
         itens = banco.ata_itens_listar_por_ata_com_saldo(ata_id)
-
+    
         # Subcabeçalho mapeado às 7 colunas do treeview
-        # forn, numero,  vig_i,       vig_f,       status,    qtd,        saldo
         self.tv_atas.insert(
             parent_iid, "end", text="",
             values=("Itens", "Cód AGHU", "Qtde ATA", "Empenhado", "Saldo", "Vlr Unit", "Vlr Total", "", "", ""),
             tags=("subheader",)
         )
-
+    
         for idx, it in enumerate(itens, start=1):
             qt_total = it.get("qtde_total", 0)
             qt_emp   = it.get("qtde_empenhada", 0)
