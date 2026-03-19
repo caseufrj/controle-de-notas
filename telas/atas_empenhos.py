@@ -384,28 +384,16 @@ class TelaAtasEmpenhos(tk.Frame):
             messagebox.showwarning("ATA", "Nenhuma ATA carregada no cabeçalho.")
             return
     
-        # Bloqueia se houver vínculos
-        try:
-            vinc = banco.ata_vinculos_contar(self._ata_id_editando)
-        except Exception:
-            vinc = {"empenhos": 0, "notas_itens": 0}
-    
-        if vinc.get("empenhos", 0) > 0 or vinc.get("notas_itens", 0) > 0:
-            messagebox.showwarning(
-                "ATA",
-                "Não é possível excluir a ATA pois existem vínculos:\n"
-                f"  • Itens de Empenho: {vinc.get('empenhos',0)}\n"
-                f"  • Itens em Notas: {vinc.get('notas_itens',0)}\n\n"
-                "Sugestão: altere o Status para 'Encerrada'."
-            )
-            return
-    
-        if not messagebox.askyesno("Confirmar", "Excluir a ATA e todos os itens?"):
+        if not messagebox.askyesno("Confirmar", "Excluir a ATA e todos os itens? Os empenhos vinculados serão removidos."):
             return
         try:
             banco.ata_hdr_excluir(self._ata_id_editando)
             self._nova_ata()
+            # Recarrega listas para refletir a exclusão em toda a UI
             self._carregar_atas()
+            self._carregar_empenhos()
+            self._emp_listar_atas_do_fornecedor()
+            messagebox.showinfo("ATA", "ATA e empenhos vinculados excluídos.")
         except Exception as e:
             messagebox.showerror("ATA", f"Falha ao excluir: {e}")
 
@@ -620,35 +608,45 @@ class TelaAtasEmpenhos(tk.Frame):
         if not sel: return
         iid = sel[0]
         if "item" not in self.tv_emp.item(iid, "tags"):
-            messagebox.showinfo("Empenho", "Selecione um item (filho)."); return
+            messagebox.showinfo("Empenho","Selecione um item (linha abaixo do cabeçalho do número)."); return
+    
         payload = self.tv_emp.set(iid, "_payload")
+        if not payload:
+            messagebox.showerror("Empenho","Não foi possível obter os dados do item (payload vazio)."); return
         try:
             d = ast.literal_eval(payload)
-        except Exception:
+        except Exception as ex:
+            messagebox.showerror("Empenho", f"Não foi possível ler os dados do item.\nDetalhe: {ex}")
             return
+    
         self._emp_item_editando = d.get("id")
         # joga nos campos
-        self.e_emp_num.delete(0, "end"); self.e_emp_num.insert(0, d.get("num") or "")
-        self.e_emp_cod.delete(0, "end"); self.e_emp_cod.insert(0, d.get("cod") or "")
-        self.e_emp_nome.delete(0, "end"); self.e_emp_nome.insert(0, d.get("nome") or "")
-        self.e_emp_qt.delete(0, "end"); self.e_emp_qt.insert(0, str(d.get("qt") or 0))
+        self.e_emp_num.delete(0,"end"); self.e_emp_num.insert(0, d.get("num") or "")
+        self.e_emp_cod.delete(0,"end"); self.e_emp_cod.insert(0, d.get("cod") or "")
+        self.e_emp_nome.delete(0,"end"); self.e_emp_nome.insert(0, d.get("nome") or "")
+        self.e_emp_qt.delete(0,"end"); self.e_emp_qt.insert(0, str(d.get("qt") or 0))
         self.e_emp_vu.set_value(Decimal(str(d.get("vu") or 0)))
         self._calc_total(self.e_emp_qt, self.e_emp_vu, self.e_emp_vt)
-        self.e_emp_obs.delete(0, "end"); self.e_emp_obs.insert(0, d.get("obs") or "")
+        self.e_emp_obs.delete(0,"end"); self.e_emp_obs.insert(0, d.get("obs") or "")
         self.btn_emp_add.config(text="Salvar edição")
 
     def _emp_excluir_item_selec(self):
         sel = self.tv_emp.selection()
         if not sel: return
         iid = sel[0]
-        if "item" not in self.tv_emp.item(iid, "tags"):
-            messagebox.showinfo("Empenho", "Selecione um item (filho)."); return
+        if "item" not in self.tv_emp.item(iid,"tags"):
+            messagebox.showinfo("Empenho","Selecione um item (linha abaixo do cabeçalho do número)."); return
+    
         payload = self.tv_emp.set(iid, "_payload")
+        if not payload:
+            messagebox.showerror("Empenho","Não foi possível obter os dados do item (payload vazio)."); return
         try:
             d = ast.literal_eval(payload)
-        except Exception:
+        except Exception as ex:
+            messagebox.showerror("Empenho", f"Não foi possível ler os dados do item.\nDetalhe: {ex}")
             return
-        if not messagebox.askyesno("Confirmar", "Excluir o item do empenho?"):
+    
+        if not messagebox.askyesno("Confirmar","Excluir o item do empenho?"):
             return
         try:
             banco.empenho_item_excluir(d.get("id"))
