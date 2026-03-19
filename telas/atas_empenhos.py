@@ -34,6 +34,7 @@ class TelaAtasEmpenhos(tk.Frame):
 
         self._montar_aba_atas()
         self._montar_aba_empenhos()
+        self._emp_ata_item_id_sel = None
 
         # Estado
         self.map_fornec = {}
@@ -144,6 +145,21 @@ class TelaAtasEmpenhos(tk.Frame):
 
         frm = ttk.LabelFrame(aba, text="Item do Empenho (agrupado por nº)")
         frm.pack(fill="x", padx=6, pady=6)
+      
+        # Vincular a uma ATA
+        tk.Label(frm, text="Vincular à ATA:").grid(row= -1, column=0, sticky="w", padx=6, pady=(0,4))  # usamos -1 para ficar acima
+        self.cb_emp_ata = ttk.Combobox(frm, state="readonly", width=40)
+        self.cb_emp_ata.grid(row= -1, column=1, columnspan=3, sticky="w", padx=6, pady=(0,4))
+        self.cb_emp_ata.bind("<<ComboboxSelected>>", lambda e: self._emp_carregar_itens_da_ata())
+        
+        # Lista de itens da ATA escolhida
+        cols_ata = ("cod","desc","vu","_id")
+        self.tv_emp_ata = ttk.Treeview(frm, columns=cols_ata, show="headings", height=5)
+        for c,h,w in zip(cols_ata, ("Cód AGHU","Descrição","Vlr Unit","_id"), (100,280,120,0)):
+            self.tv_emp_ata.heading(c, text=h)
+            self.tv_emp_ata.column(c, width=w if c!="_id" else 0, anchor="w", stretch=False)
+        self.tv_emp_ata.grid(row=0, column=0, columnspan=7, sticky="we", padx=6, pady=(0,6))
+        self.tv_emp_ata.bind("<Double-1>", lambda e: self._emp_puxar_item_ata())
 
         tk.Label(frm, text="Nº Empenho*:").grid(row=0, column=0, sticky="w", padx=6)
         self.e_emp_num = ttk.Entry(frm, width=20); self.e_emp_num.grid(row=0, column=1, sticky="w", padx=6)
@@ -200,6 +216,62 @@ class TelaAtasEmpenhos(tk.Frame):
         self._ata_item_editando = None
         self._emp_item_editando = None
 
+    def _emp_listar_atas_do_fornecedor(self):
+        fid = self._fid()
+        if not fid:
+            self.cb_emp_ata["values"] = []; return
+        rows = banco.atas_hdr_listar(fornecedor_id=fid)
+        # mapa: "Nº ATA (vig_i → vig_f)" -> ata_id
+        vals = []
+        for r in rows:
+            txt = f"{r.get('numero','')} ({self._fmt_data(r.get('vigencia_ini'))} → {self._fmt_data(r.get('vigencia_fim'))})"
+            vals.append((txt, r["ata_id"]))
+        self._map_emp_ata = dict(vals)  # texto -> id
+        self.cb_emp_ata["values"] = [k for k,_ in vals]
+        if vals and not self.cb_emp_ata.get():
+            self.cb_emp_ata.current(0)
+            self._emp_carregar_itens_da_ata()
+    
+    def _emp_carregar_itens_da_ata(self):
+        self._emp_ata_item_id_sel = None
+        for i in self.tv_emp_ata.get_children():
+            self.tv_emp_ata.delete(i)
+        txt = self.cb_emp_ata.get()
+        ata_id = self._map_emp_ata.get(txt)
+        if not ata_id:
+            return
+        itens = banco.ata_itens_listar_por_ata(ata_id)
+        for it in itens:
+            self.tv_emp_ata.insert(
+                "", "end", values=(
+                    it.get("cod_aghu",""),
+                    it.get("nome_item",""),
+                    formatar_moeda_br(Decimal(str(it.get('vl_unit',0))).quantize(Decimal("0.01"))),
+                    it.get("id")
+                )
+            )
+    
+    def _emp_puxar_item_ata(self):
+        sel = self.tv_emp_ata.selection()
+        if not sel:
+            return
+        v = self.tv_emp_ata.item(sel[0],"values")
+        cod, desc, vu_fmt, ata_item_id = v[0], v[1], v[2], v[3]
+        self._emp_ata_item_id_sel = int(ata_item_id)
+    
+        # preenche os campos do item do empenho
+        self.e_emp_cod.delete(0,"end"); self.e_emp_cod.insert(0, cod)
+        self.e_emp_nome.delete(0,"end"); self.e_emp_nome.insert(0, desc)
+        # VU vem da ATA
+        try:
+            # tira 'R$ ' e converte
+            self.e_emp_vu.set_value(Decimal(str(vu_fmt).replace("R$","").strip().replace(".","").replace(",", ".")))
+        except Exception:
+            # fallback: 0
+            self.e_emp_vu.set_value(0)
+        # força recalcular quando o usuário digitar qtde
+        self._calc_total(self.e_emp_qt, self.e_emp_vu, self.e_emp_vt)
+
     # =========================================================
     #                     Utilidades Comuns
     # =========================================================
@@ -217,6 +289,7 @@ class TelaAtasEmpenhos(tk.Frame):
     def _recarregar_tudo(self):
         self._carregar_atas()
         self._carregar_empenhos()
+        self._emp_listar_atas_do_fornecedor()
 
     def _calc_total(self, e_qt: ttk.Entry, e_vu: MoedaEntry, e_vt: ttk.Entry):
         try:
@@ -475,7 +548,8 @@ class TelaAtasEmpenhos(tk.Frame):
         d = {
             "fornecedor_id": fid, "cod_aghu": cod, "nome_item": nome,
             "qtde": qt, "vl_unit": vu, "vl_total": vt,
-            "numero_empenho": num, "observacao": (self.e_emp_obs.get() or "").strip()
+            "numero_empenho": num, "observacao": (self.e_emp_obs.get() or "").strip(),
+            "ata_item_id": self._emp_ata_item_id_sel  # <-- vincula ao item da ATA (se selecionado)
         }
         try:
             if self._emp_item_editando:
@@ -569,12 +643,16 @@ class TelaAtasEmpenhos(tk.Frame):
                 "id": it["id"], "num": num,
                 "cod": it.get("cod_aghu",""), "nome": it.get("nome_item",""),
                 "qt": it.get("qtde",0), "vu": float(vu), "vt": float(vt),
-                "obs": it.get("observacao","") or ""
+                "obs": it.get("observacao","") or "", "ata_item_id": it.get("ata_item_id")
             }
-            self.tv_emp.insert(parent_iid, "end", text="", values=(
-                f"Item {idx}", payload["cod"], str(payload["qt"]), formatar_moeda_br(payload["vt"]),
-                "", str(payload["id"]), str(payload)  # _num vazio aqui, _item_id e _payload
-            ), tags=("item",))
+            self.tv_emp.insert(
+                parent_iid, "end", text="",
+                values=(
+                    f"Item {idx}", payload["cod"], str(payload["qt"]), formatar_moeda_br(payload["vt"]),
+                    "", str(payload["id"]), str(payload)  # ocultos: _num vazio, _item_id, _payload
+                ),
+                tags=("item",)
+            )
 
     def _emp_on_double_click(self, _evt):
         # Duplo clique no cabeçalho apenas expande
