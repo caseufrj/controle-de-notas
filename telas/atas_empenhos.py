@@ -437,6 +437,60 @@ class TelaAtasEmpenhos(tk.Frame):
                 )
             )
 
+    def _emp_puxar_item_ata(self):
+        """
+        Handler de duplo clique na grade de itens da ATA (aba Empenhos).
+        Preenche o formulário do empenho com Cód/Descrição/Vlr Unit (travados por padrão).
+        """
+        sel = self.tv_emp_ata.selection()
+        if not sel:
+            return
+    
+        # Lê a linha selecionada: (cod, desc, vu_formatado, ata_item_id)
+        v = self.tv_emp_ata.item(sel[0], "values")
+        if not v or len(v) < 4:
+            return
+        cod, desc, vu_fmt, ata_item_id = v[0], v[1], v[2], v[3]
+    
+        # guarda o vínculo ao item da ATA
+        try:
+            self._emp_ata_item_id_sel = int(ata_item_id)
+        except Exception:
+            self._emp_ata_item_id_sel = None
+    
+        # 1) Cód (readonly)
+        self.e_emp_cod.configure(state="normal")
+        self.e_emp_cod.delete(0, "end")
+        self.e_emp_cod.insert(0, cod)
+        self.e_emp_cod.configure(state="readonly")
+    
+        # 2) Descrição (readonly)
+        self.e_emp_nome.configure(state="normal")
+        self.e_emp_nome.delete(0, "end")
+        self.e_emp_nome.insert(0, desc)
+        self.e_emp_nome.configure(state="readonly")
+    
+        # 3) Vlr Unit (vem da ATA) — readonly por padrão; checkbox pode liberar
+        try:
+            vu = Decimal(str(vu_fmt).replace("R$", "").strip().replace(".", "").replace(",", "."))
+        except Exception:
+            vu = Decimal("0")
+        self.e_emp_vu.set_value(vu)
+        # respeita travamento atual
+        self.e_emp_vu.configure(state="readonly" if getattr(self, "_lock_vu", tk.BooleanVar(value=True)).get() else "normal")
+    
+        # 4) Limpa Qtde e Vlr Total para o usuário informar e recalcular
+        self.e_emp_qt.delete(0, "end")
+        self.e_emp_vt.configure(state="normal"); self.e_emp_vt.delete(0, "end"); self.e_emp_vt.configure(state="readonly")
+        self._calc_total(self.e_emp_qt, self.e_emp_vu, self.e_emp_vt)
+    
+        # foco amigável (opcional): põe o cursor no Nº do empenho
+        try:
+            self.e_emp_num.focus_set()
+        except Exception:
+            pass
+    ``
+
 
     # =========================================================
     #                     Utilidades Comuns
