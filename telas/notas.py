@@ -113,7 +113,6 @@ class MoedaEntry(ttk.Entry):
         atual = self._sv.get()
         leve = self._texto_para_digitacao(atual)
         self._sv.set(leve)
-        # não mexe no cursor aqui
 
     def _on_focus_out(self, *_):
         self._tem_foco = False
@@ -129,7 +128,7 @@ class MoedaEntry(ttk.Entry):
         self._formatando = True
         try:
             old = self._sv.get()
-            # posição/cenário antes da mudança
+            # posição antes da mudança
             try:
                 old_pos = self.index("insert")
             except Exception:
@@ -140,10 +139,9 @@ class MoedaEntry(ttk.Entry):
             if self._tem_foco:
                 novo = self._texto_para_digitacao(old)
             else:
-                # fora do foco (caso programático), já deixa formatado bonito
+                # fora do foco (caso programático), já deixa bonito
                 novo = self._formatar_exibicao(old) if old.strip() else ""
 
-            # aplica preservando cursor relativo ao fim
             self._sv.set(novo)
             try:
                 new_len = len(novo)
@@ -156,16 +154,12 @@ class MoedaEntry(ttk.Entry):
 
     # ---------- util ----------
     def _set_text_preservando_cursor(self, texto: str, force_end: bool = False):
-        """
-        Seta texto mantendo a posição lógica do cursor.
-        Quando force_end=True, posiciona no final (usado ao sair do campo).
-        """
+        """Seta texto mantendo a posição lógica do cursor."""
         try:
             old = self._sv.get()
             old_pos = self.index("insert")
             dist_right = max(0, len(old) - old_pos)
         except Exception:
-            old = ""
             dist_right = 0
 
         self._sv.set(texto)
@@ -188,6 +182,7 @@ class MoedaEntry(ttk.Entry):
         # set programático já em modo bonito
         val_fmt = formatar_moeda_br(val, com_prefixo=self._prefixo)
         self._set_text_preservando_cursor(val_fmt, force_end=True)
+
 
 class DataEntry(ttk.Entry):
     """
@@ -218,7 +213,7 @@ class DataEntry(ttk.Entry):
         return mascarar_data_ddmmaa(s)
 
     def _set_text_preservando_cursor(self, texto: str, force_end: bool = False):
-        """Aplica texto preservando posição lógica do cursor (pela distância até o fim)."""
+        """Aplica texto preservando posição lógica do cursor (distância até o fim)."""
         try:
             old = self._sv.get()
             old_pos = self.index("insert")
@@ -240,21 +235,17 @@ class DataEntry(ttk.Entry):
     # ---------- eventos ----------
     def _on_focus_in(self, *_):
         self._tem_foco = True
-        # nada especial aqui; deixamos o texto como está
 
     def _on_focus_out(self, *_):
         self._tem_foco = False
         s = self._sv.get()
         if not s.strip():
             return
-        # normaliza e valida
         mas = self._texto_mascarado(s)
         self._set_text_preservando_cursor(mas, force_end=True)
         if not validar_data_ddmmaa(mas):
             messagebox.showwarning("Data", "Data inválida. Use DD/MM/AAAA.")
-            # volta o foco para o campo
             self.focus_set()
-            # opcional: selecionar tudo para facilitar correção
             try:
                 self.selection_range(0, "end")
             except Exception:
@@ -266,17 +257,13 @@ class DataEntry(ttk.Entry):
         self._formatando = True
         try:
             atual = self._sv.get()
-            # mascarar sem perder cursor
             mascarado = self._texto_mascarado(atual)
             self._set_text_preservando_cursor(mascarado, force_end=False)
         finally:
             self._formatando = False
 
     def _on_keypress(self, event):
-        """
-        Pequenas gentilezas com backspace/delete ao lado das barras:
-        • Se tentar apagar exatamente sobre '/', movemos uma casa e apagamos o dígito.
-        """
+        # gentileza com barras
         try:
             pos = self.index("insert")
             s = self._sv.get()
@@ -285,11 +272,9 @@ class DataEntry(ttk.Entry):
 
         if event.keysym in ("BackSpace", "Delete") and s:
             if event.keysym == "BackSpace" and pos > 0 and s[pos-1:pos] == "/":
-                # pula a barra para a esquerda
                 self.icursor(pos-1)
                 return "break"
             if event.keysym == "Delete" and pos < len(s) and s[pos:pos+1] == "/":
-                # pula a barra para a direita
                 self.icursor(pos+1)
                 return "break"
 
@@ -330,7 +315,7 @@ class TelaNotas(tk.Frame):
         tk.Label(topo, text="Data expedição*:", bg="white").grid(row=1, column=2, sticky="w")
         self.e_data = DataEntry(topo, width=12)
         self.e_data.grid(row=1, column=3, sticky="w", padx=6, pady=2)
-        self.e_data.set_value(datetime.now().strftime("%d%m%Y"))  # seta hoje
+        self.e_data.set_value(datetime.now().strftime("%d%m%Y"))  # hoje
 
         tk.Label(topo, text="Valor total*:", bg="white").grid(row=2, column=0, sticky="w")
         self.e_total = MoedaEntry(topo, width=18)
@@ -644,7 +629,7 @@ class TelaNotas(tk.Frame):
 
         self.tv_itens.insert("", "end", values=(
             cod,
-            data_uso,
+            data_uso,              # GUI (DD/MM/AAAA) para o usuário
             f"{vu:.2f}",
             f"{qt}",
             f"{total:.2f}",
@@ -666,16 +651,30 @@ class TelaNotas(tk.Frame):
     def _salvar_itens(self):
         if not self.nota_id:
             return
+
         itens = []
         for iid in self.tv_itens.get_children():
             v = self.tv_itens.item(iid, "values")
+            # v = (cod_aghu, data_uso_gui, vl_unit, qtde, vl_total, qtde_consumida, ata_item_id, empenho_id, ata_leg, emp_leg)
+
+            # --- Conversão da data de uso (GUI -> ISO) ---
+            data_uso_gui = (v[1] or "").strip()   # "DD/MM/AAAA" ou ""
+            if data_uso_gui:
+                try:
+                    dt_uso = datetime.strptime(data_uso_gui, "%d/%m/%Y").date()
+                    data_uso_bd = dt_uso.strftime("%Y-%m-%d")  # ISO
+                except Exception:
+                    data_uso_bd = None
+            else:
+                data_uso_bd = None
+
             itens.append({
                 "cod_aghu": v[0],
-                "data_uso": v[1] or None,
-                "vl_unit": float(str(v[2]).replace(",", ".")),
-                "qtde": float(str(v[3]).replace(",", ".")),
-                "vl_total": float(str(v[4]).replace(",", ".")),
-                "qtde_consumida": float(str(v[5]).replace(",", ".")) if v[5] else 0.0,
+                "data_uso": data_uso_bd,  # ISO no banco
+                "vl_unit": float(str(v[2]).replace(".", "").replace(",", ".")),
+                "qtde": float(str(v[3]).replace(".", "").replace(",", ".")),
+                "vl_total": float(str(v[4]).replace(".", "").replace(",", ".")),
+                "qtde_consumida": float(str(v[5]).replace(".", "").replace(",", ".")) if v[5] else 0.0,
                 "ata_item_id": int(v[6]) if str(v[6]).isdigit() else None,
                 "empenho_id": int(v[7]) if str(v[7]).isdigit() else None
             })
