@@ -11,18 +11,50 @@ CAMINHO_BANCO = r"\\hc-arquivos.hc.ufpr.br\HC-GERAL\GERAD\DILIH\SESUP\Todos-SESU
 #  Conexão única (FK ON)
 # -------------------------
 def conectar() -> sqlite3.Connection:
-    """Abre conexão com row_factory por nome e foreign_keys habilitado."""
+    """Abre conexão SQLite com FK ON, tenta habilitar WAL e ajusta synchronous conforme modo ativo."""
     try:
         base_dir = os.path.dirname(CAMINHO_BANCO)
         if base_dir and not os.path.exists(base_dir) and not base_dir.startswith("\\\\"):
             os.makedirs(base_dir, exist_ok=True)
     except Exception:
-        # Em UNC, o diretório já existe ou não há permissão para criar (ok).
-        pass
+        pass  # Em UNC, o diretório normalmente já existe
 
     conn = sqlite3.connect(CAMINHO_BANCO)
+    cur = conn.cursor()
+
+    # Tenta ativar WAL e lê o modo realmente aplicado (pode voltar p/ 'delete' em alguns ambientes)
+    mode = None
+    try:
+        cur.execute("PRAGMA journal_mode=WAL;")
+        mode = (cur.fetchone() or [""])[0]
+    except Exception:
+        mode = None
+
+    # Ajusta synchronous conforme modo final
+    try:
+        if str(mode).lower() == "wal":
+            cur.execute("PRAGMA synchronous=NORMAL;")
+        else:
+            # Em DELETE/rollback tradicional, manter FULL é mais seguro em rede
+            cur.execute("PRAGMA synchronous=FULL;")
+    except Exception:
+        pass
+
+    # Timeout para aguardar locks de outros processos
+    try:
+        cur.execute("PRAGMA busy_timeout=5000;")  # 5s; ajuste se precisar
+    except Exception:
+        pass
+
+    # Outras configurações úteis
+    try:
+        cur.execute("PRAGMA foreign_keys = ON;")
+        cur.execute("PRAGMA temp_store = MEMORY;")
+        cur.execute("PRAGMA cache_size = -20000;")  # ~20MB de cache (negativo = KB)
+    except Exception:
+        pass
+
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
 # -------------------------
