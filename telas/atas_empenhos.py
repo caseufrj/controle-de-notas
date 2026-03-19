@@ -365,6 +365,40 @@ class TelaAtasEmpenhos(tk.Frame):
         self._ata_item_editando = None
         self._emp_item_editando = None
 
+    def _emp_listar_atas_do_fornecedor(self):
+        """
+        Preenche a combo 'Vincular à ATA' com as ATAs do fornecedor selecionado,
+        populando self._map_emp_ata = {texto_da_combo: ata_id}.
+        Depois de popular, se houver uma ATA selecionável, carrega seus itens na grade de baixo.
+        """
+        fid = self._fid()
+        # Limpa combo e mapa caso não haja fornecedor
+        if not fid:
+            self._map_emp_ata = {}
+            self.cb_emp_ata["values"] = []
+            return
+    
+        # Busca ATAs do fornecedor (view agrega saldo/itens)
+        rows = banco.atas_hdr_listar(fornecedor_id=fid)
+    
+        # Monta tuplas (texto visível -> ata_id)
+        vals = []
+        for r in rows:
+            num = r.get("numero", "")
+            Ini = self._fmt_data(r.get("vigencia_ini"))
+            Fim = self._fmt_data(r.get("vigencia_fim"))
+            texto = f"{num} ({Ini} → {Fim})"
+            vals.append((texto, r["ata_id"]))
+    
+        # Atualiza mapa e combo
+        self._map_emp_ata = dict(vals)
+        self.cb_emp_ata["values"] = [k for k, _ in vals]
+    
+        # Se a combo está vazia e temos opções, seleciona a primeira e carrega os itens
+        if vals and not self.cb_emp_ata.get():
+            self.cb_emp_ata.current(0)
+            self._emp_carregar_itens_da_ata()
+
     def _toggle_lock_vu(self):
         try:
             self.e_emp_vu.configure(state="readonly" if self._lock_vu.get() else "normal")
@@ -372,30 +406,37 @@ class TelaAtasEmpenhos(tk.Frame):
             pass
 
     def _emp_carregar_itens_da_ata(self):
+        """Carrega na grade (tv_emp_ata) os itens da ATA escolhida na combo 'Vincular à ATA'."""
+        # Zera seleção atual de item
         self._emp_ata_item_id_sel = None
-        # limpa a grade
+    
+        # Limpa a grid
         for i in self.tv_emp_ata.get_children():
             self.tv_emp_ata.delete(i)
     
-        # Mapa pode não existir no primeiro disparo do evento
+        # Mapa pode não existir no primeiro disparo em alguns temas do Tk
         map_atas = getattr(self, "_map_emp_ata", {})
         if not isinstance(map_atas, dict):
             map_atas = {}
     
-        txt = self.cb_emp_ata.get() or ""
-        ata_id = map_atas.get(txt)
+        texto = self.cb_emp_ata.get() or ""
+        ata_id = map_atas.get(texto)
         if not ata_id:
-            return
+            return  # nada a carregar
     
+        # Busca itens da ATA e preenche a grid abaixo (cód, desc, vl unit, id)
         itens = banco.ata_itens_listar_por_ata(ata_id)
         for it in itens:
             self.tv_emp_ata.insert(
                 "", "end",
-                values=(it.get("cod_aghu",""),
-                        it.get("nome_item",""),
-                        formatar_moeda_br(Decimal(str(it.get('vl_unit',0))).quantize(Decimal("0.01"))),
-                        it.get("id"))
+                values=(
+                    it.get("cod_aghu", ""),
+                    it.get("nome_item", ""),
+                    formatar_moeda_br(Decimal(str(it.get('vl_unit', 0))).quantize(Decimal("0.01"))),
+                    it.get("id")
+                )
             )
+
 
     # =========================================================
     #                     Utilidades Comuns
