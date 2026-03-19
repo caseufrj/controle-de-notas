@@ -3,17 +3,24 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
+import ast
 
 import banco
-# Reaproveita os widgets de Notas
+# Reaproveita widgets e util de moeda/data da tela de Notas
 from telas.notas import MoedaEntry, DataEntry, formatar_moeda_br
+
 
 class TelaAtasEmpenhos(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="white")
+        try:
+            master.winfo_toplevel().title("Controle de Notas e Empenhos - Atas & Empenhos")
+        except Exception:
+            pass
+
         banco.criar_tabelas()
 
-        # Fornecedor comum
+        # ---------- Fornecedor (comum às abas) ----------
         topo = tk.Frame(self, bg="white")
         topo.pack(fill="x", padx=12, pady=8)
         tk.Label(topo, text="Fornecedor:", bg="white").pack(side="left")
@@ -21,14 +28,11 @@ class TelaAtasEmpenhos(tk.Frame):
         self.cb_fornec.pack(side="left", padx=6)
         self.cb_fornec.bind("<<ComboboxSelected>>", lambda e: self._recarregar_tudo())
 
-        # Notebook principal
+        # ---------- Notebook principal ----------
         self.nb = ttk.Notebook(self)
         self.nb.pack(fill="both", expand=True, padx=12, pady=10)
 
-        # --------- Aba ATAS ---------
         self._montar_aba_atas()
-
-        # --------- Aba EMPENHOS ---------
         self._montar_aba_empenhos()
 
         # Estado
@@ -36,18 +40,18 @@ class TelaAtasEmpenhos(tk.Frame):
         self._carregar_fornecedores()
         self._recarregar_tudo()
 
-    # ======================
-    #       ATAS
-    # ======================
+    # =========================================================
+    #                       ABA ATAS
+    # =========================================================
     def _montar_aba_atas(self):
         aba = tk.Frame(self.nb, bg="white")
         self.nb.add(aba, text="Atas")
 
-        # Cabeçalho ATA
+        # ----- Cabeçalho da ATA -----
         hdr = ttk.LabelFrame(aba, text="Cabeçalho da ATA")
         hdr.pack(fill="x", padx=6, pady=6)
 
-        tk.Label(hdr, text="Nº da ATA*:").grid(row=0, column=0, sticky="w", padx=6, pady=3)
+        tk.Label(hdr, text="Nº ATA*:").grid(row=0, column=0, sticky="w", padx=6, pady=3)
         self.e_ata_num = ttk.Entry(hdr, width=20); self.e_ata_num.grid(row=0, column=1, sticky="w", padx=6)
 
         tk.Label(hdr, text="Vigência (início):").grid(row=0, column=2, sticky="w", padx=6)
@@ -58,7 +62,7 @@ class TelaAtasEmpenhos(tk.Frame):
 
         tk.Label(hdr, text="Status:").grid(row=0, column=6, sticky="w", padx=6)
         self.cb_ata_status = ttk.Combobox(hdr, state="readonly", width=14,
-            values=["Em vigência","Encerrada","Renovada"])
+                                          values=["Em vigência","Encerrada","Renovada"])
         self.cb_ata_status.set("Em vigência")
         self.cb_ata_status.grid(row=0, column=7, sticky="w", padx=6)
 
@@ -70,7 +74,7 @@ class TelaAtasEmpenhos(tk.Frame):
         ttk.Button(btns_hdr, text="Salvar ATA", command=self._salvar_ata).pack(fill="x", pady=2)
         ttk.Button(btns_hdr, text="Excluir ATA", command=self._excluir_ata).pack(fill="x", pady=2)
 
-        # Itens da ATA
+        # ----- Item da ATA -----
         it = ttk.LabelFrame(aba, text="Item da ATA")
         it.pack(fill="x", padx=6, pady=4)
 
@@ -92,47 +96,53 @@ class TelaAtasEmpenhos(tk.Frame):
         tk.Label(it, text="Observação:").grid(row=2, column=0, sticky="w", padx=6)
         self.e_ai_obs = ttk.Entry(it, width=60); self.e_ai_obs.grid(row=2, column=1, columnspan=5, sticky="w", padx=6, pady=(0,6))
 
-        # recalcula total
+        # recálculo
         self.e_ai_qt.bind("<KeyRelease>", lambda e: self._calc_total(self.e_ai_qt, self.e_ai_vu, self.e_ai_vt))
         self.e_ai_vu.bind("<KeyRelease>", lambda e: self._calc_total(self.e_ai_qt, self.e_ai_vu, self.e_ai_vt))
 
         btns_it = tk.Frame(it, bg="white"); btns_it.grid(row=0, column=6, rowspan=3, sticky="ne", padx=(10,0))
-        ttk.Button(btns_it, text="Adicionar item", command=self._ata_add_item).pack(fill="x", pady=2)
+        self.btn_ata_add = ttk.Button(btns_it, text="Adicionar item", command=self._ata_add_or_save_item)
+        self.btn_ata_add.pack(fill="x", pady=2)
         ttk.Button(btns_it, text="Editar item selec.", command=self._ata_editar_item_selec).pack(fill="x", pady=2)
         ttk.Button(btns_it, text="Excluir item selec.", command=self._ata_excluir_item_selec).pack(fill="x", pady=2)
 
-        # Catálogo (hierárquico)
-        box = ttk.LabelFrame(aba, text="Atas cadastradas (clique no cabeçalho para expandir itens)")
+        # ----- Catálogo (hierárquico) -----
+        box = ttk.LabelFrame(aba, text="Atas cadastradas (clique no cabeçalho para ver os itens)")
         box.pack(fill="both", expand=True, padx=6, pady=6)
 
-        cols = ("fornecedor","numero","vig_ini","vig_fim","status","itens","saldo")
-        self.tv_atas = ttk.Treeview(box, columns=cols, show="tree headings", height=10)
-        for c, h, w in zip(cols,
-                           ("Fornecedor","Nº ATA","Vigência (ini)","Vigência (fim)","Status","Itens","Saldo"),
-                           (240,120,110,110,120,60,120)):
+        # colunas: cabeçalho visível. Para itens, mapeamos colunas (Item, Cód, Desc, Qtde, VU, VT)
+        self.tv_atas = ttk.Treeview(box,
+                                    columns=("forn","numero","vig_i","vig_f","status","qtd","saldo","_ata_id","_item_id","_payload"),
+                                    show="tree headings", height=10)
+        heads = ("Fornecedor","Nº ATA","Vigência (ini)","Vigência (fim)","Status","Itens","Saldo")
+        widths = (240,120,110,110,120,70,120)
+        for c,h,w in zip(("forn","numero","vig_i","vig_f","status","qtd","saldo"), heads, widths):
             self.tv_atas.heading(c, text=h)
             self.tv_atas.column(c, width=w, anchor="w")
-        self.tv_atas.pack(fill="both", expand=True, padx=6, pady=6)
+        # colunas ocultas
+        self.tv_atas.column("_ata_id", width=0, stretch=False)
+        self.tv_atas.column("_item_id", width=0, stretch=False)
+        self.tv_atas.column("_payload", width=0, stretch=False)
 
+        self.tv_atas.pack(fill="both", expand=True, padx=6, pady=6)
         self.tv_atas.bind("<<TreeviewOpen>>", self._atas_on_open)
         self.tv_atas.bind("<Double-1>", self._atas_on_double_click)
 
         bar = tk.Frame(box, bg="white"); bar.pack(fill="x", padx=6, pady=(0,6))
         ttk.Button(bar, text="Recarregar", command=self._carregar_atas).pack(side="left")
 
-        # estado interno
+        # estado de edição
         self._ata_id_editando = None
         self._ata_item_editando = None
 
-    # ======================
-    #     EMPENHOS
-    # ======================
+    # =========================================================
+    #                     ABA EMPENHOS
+    # =========================================================
     def _montar_aba_empenhos(self):
         aba = tk.Frame(self.nb, bg="white")
         self.nb.add(aba, text="Empenhos")
 
-        # Item de Empenho (agrupado por nº)
-        frm = ttk.LabelFrame(aba, text="Item do Empenho")
+        frm = ttk.LabelFrame(aba, text="Item do Empenho (agrupado por nº)")
         frm.pack(fill="x", padx=6, pady=6)
 
         tk.Label(frm, text="Nº Empenho*:").grid(row=0, column=0, sticky="w", padx=6)
@@ -144,11 +154,11 @@ class TelaAtasEmpenhos(tk.Frame):
         tk.Label(frm, text="Descrição*:").grid(row=0, column=4, sticky="w", padx=6)
         self.e_emp_nome = ttk.Entry(frm, width=40); self.e_emp_nome.grid(row=0, column=5, sticky="w", padx=6)
 
-        tk.Label(frm, text="Vlr Unit*:").grid(row=1, column=0, sticky="w", padx=6)
-        self.e_emp_vu = MoedaEntry(frm, width=18); self.e_emp_vu.grid(row=1, column=1, sticky="w", padx=6)
+        tk.Label(frm, text="Qtde*:").grid(row=1, column=0, sticky="w", padx=6)
+        self.e_emp_qt = ttk.Entry(frm, width=10); self.e_emp_qt.grid(row=1, column=1, sticky="w", padx=6)
 
-        tk.Label(frm, text="Qtde*:").grid(row=1, column=2, sticky="w", padx=6)
-        self.e_emp_qt = ttk.Entry(frm, width=10); self.e_emp_qt.grid(row=1, column=3, sticky="w", padx=6)
+        tk.Label(frm, text="Vlr Unit*:").grid(row=1, column=2, sticky="w", padx=6)
+        self.e_emp_vu = MoedaEntry(frm, width=18); self.e_emp_vu.grid(row=1, column=3, sticky="w", padx=6)
 
         tk.Label(frm, text="Vlr Total:").grid(row=1, column=4, sticky="w", padx=6)
         self.e_emp_vt = ttk.Entry(frm, width=18, state="readonly"); self.e_emp_vt.grid(row=1, column=5, sticky="w", padx=6)
@@ -160,43 +170,39 @@ class TelaAtasEmpenhos(tk.Frame):
         self.e_emp_vu.bind("<KeyRelease>", lambda e: self._calc_total(self.e_emp_qt, self.e_emp_vu, self.e_emp_vt))
 
         btns = tk.Frame(frm, bg="white"); btns.grid(row=0, column=6, rowspan=3, sticky="ne", padx=(10,0))
-        ttk.Button(btns, text="Adicionar item", command=self._emp_add_item).pack(fill="x", pady=2)
+        self.btn_emp_add = ttk.Button(btns, text="Adicionar item", command=self._emp_add_or_save_item)
+        self.btn_emp_add.pack(fill="x", pady=2)
         ttk.Button(btns, text="Editar item selec.", command=self._emp_editar_item_selec).pack(fill="x", pady=2)
         ttk.Button(btns, text="Excluir item selec.", command=self._emp_excluir_item_selec).pack(fill="x", pady=2)
 
-        # Catálogo por Nº do Empenho (hierárquico)
         box = ttk.LabelFrame(aba, text="Empenhos — agrupados por número (clique para ver itens)")
         box.pack(fill="both", expand=True, padx=6, pady=6)
 
-        cols = ("fornecedor","numero","itens","valor_total")
-        self.tv_emp = ttk.Treeview(box, columns=cols, show="tree headings", height=10)
-        for c, h, w in zip(cols, ("Fornecedor","Nº Empenho","Itens","Valor total"), (240,160,80,140)):
+        self.tv_emp = ttk.Treeview(box,
+                                   columns=("forn","num","qtd","total","_num","_item_id","_payload"),
+                                   show="tree headings", height=10)
+        for c,h,w in zip(("forn","num","qtd","total"),
+                         ("Fornecedor","Nº Empenho","Itens","Total"),
+                         (240,160,80,140)):
             self.tv_emp.heading(c, text=h)
             self.tv_emp.column(c, width=w, anchor="w")
-        self.tv_emp.pack(fill="both", expand=True, padx=6, pady=6)
+        self.tv_emp.column("_num", width=0, stretch=False)
+        self.tv_emp.column("_item_id", width=0, stretch=False)
+        self.tv_emp.column("_payload", width=0, stretch=False)
 
+        self.tv_emp.pack(fill="both", expand=True, padx=6, pady=6)
         self.tv_emp.bind("<<TreeviewOpen>>", self._emp_on_open)
         self.tv_emp.bind("<Double-1>", self._emp_on_double_click)
 
         bar = tk.Frame(box, bg="white"); bar.pack(fill="x", padx=6, pady=(0,6))
         ttk.Button(bar, text="Recarregar", command=self._carregar_empenhos).pack(side="left")
 
-        # estado interno
+        self._ata_item_editando = None
         self._emp_item_editando = None
 
-    # ======================
-    #     Utilidades
-    # ======================
-    def _calc_total(self, e_qt: ttk.Entry, e_vu: MoedaEntry, e_vt: ttk.Entry):
-        try:
-            qt = Decimal(str((e_qt.get() or "0").replace(",", ".")))
-        except Exception:
-            qt = Decimal("0")
-        vu = e_vu.value()
-        total = (qt * vu).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        e_vt.configure(state="normal"); e_vt.delete(0,"end")
-        e_vt.insert(0, formatar_moeda_br(total)); e_vt.configure(state="readonly")
-
+    # =========================================================
+    #                     Utilidades Comuns
+    # =========================================================
     def _carregar_fornecedores(self):
         fs = banco.fornecedores_listar()
         self.map_fornec = {f["nome"]: f["id"] for f in fs}
@@ -212,16 +218,28 @@ class TelaAtasEmpenhos(tk.Frame):
         self._carregar_atas()
         self._carregar_empenhos()
 
-    # ======================
-    #     ATAS - ações
-    # ======================
+    def _calc_total(self, e_qt: ttk.Entry, e_vu: MoedaEntry, e_vt: ttk.Entry):
+        try:
+            qt = Decimal(str((e_qt.get() or "0").replace(",", ".")))
+        except Exception:
+            qt = Decimal("0")
+        vu = e_vu.value()
+        total = (qt * vu).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        e_vt.configure(state="normal"); e_vt.delete(0,"end")
+        e_vt.insert(0, formatar_moeda_br(total)); e_vt.configure(state="readonly")
+
+    # =========================================================
+    #                           ATAS: Ações
+    # =========================================================
     def _nova_ata(self):
         self._ata_id_editando = None
+        self._ata_item_editando = None
         self.e_ata_num.delete(0,"end")
         self.e_ata_ini.set_value("")
         self.e_ata_fim.set_value("")
         self.cb_ata_status.set("Em vigência")
         self.e_ata_obs.delete(0,"end")
+        self.btn_ata_add.config(text="Adicionar item")
 
     def _salvar_ata(self):
         fid = self._fid()
@@ -268,9 +286,11 @@ class TelaAtasEmpenhos(tk.Frame):
         except Exception as e:
             messagebox.showerror("ATA", f"Falha ao excluir: {e}")
 
-    def _ata_add_item(self):
+    def _ata_add_or_save_item(self):
         if not self._ata_id_editando:
             messagebox.showwarning("ATA","Salve o cabeçalho da ATA antes de incluir itens."); return
+
+        # leitura
         try:
             qt = float((self.e_ai_qt.get() or "0").replace(",", "."))
         except Exception:
@@ -281,15 +301,19 @@ class TelaAtasEmpenhos(tk.Frame):
             "ata_id": self._ata_id_editando,
             "cod_aghu": (self.e_ai_cod.get() or "").strip(),
             "nome_item": (self.e_ai_nome.get() or "").strip(),
-            "qtde_total": qt,
-            "vl_unit": vu,
-            "vl_total": vt,
+            "qtde_total": qt, "vl_unit": vu, "vl_total": vt,
             "observacao": (self.e_ai_obs.get() or "").strip()
         }
         if not (d["cod_aghu"] and d["nome_item"] and d["qtde_total"] and d["vl_unit"]):
             messagebox.showwarning("ATA","Preencha cód, descrição, qtde e Vlr Unit."); return
+
         try:
-            banco.ata_item_inserir_v2(d)
+            if self._ata_item_editando:
+                banco.ata_item_atualizar(self._ata_item_editando, d)
+                self._ata_item_editando = None
+                self.btn_ata_add.config(text="Adicionar item")
+            else:
+                banco.ata_item_inserir_v2(d)
             self._carregar_atas(refresh_items_of=self._ata_id_editando)
             # limpa campos do item
             self.e_ai_cod.delete(0,"end"); self.e_ai_nome.delete(0,"end")
@@ -297,20 +321,17 @@ class TelaAtasEmpenhos(tk.Frame):
             self.e_ai_vt.configure(state="normal"); self.e_ai_vt.delete(0,"end"); self.e_ai_vt.configure(state="readonly")
             self.e_ai_obs.delete(0,"end")
         except Exception as e:
-            messagebox.showerror("ATA", f"Falha ao incluir item: {e}")
+            messagebox.showerror("ATA", f"Falha ao salvar item: {e}")
 
     def _ata_editar_item_selec(self):
         sel = self.tv_atas.selection()
         if not sel: return
         iid = sel[0]
-        # só permite editar itens (não cabeçalho); itens terão tag 'item'
         if "item" not in self.tv_atas.item(iid,"tags"):
             messagebox.showinfo("ATA","Selecione um item (filho)."); return
-        vals = self.tv_atas.item(iid,"values")
-        # values para item: ("", "", "", "", "", "", "") – mas guardo via 'values' custom? Melhor usar 'text'
-        data = self.tv_atas.item(iid,"text")  # embuto um dict string
+        payload = self.tv_atas.set(iid, "_payload")
         try:
-            d = eval(data)  # {'id':..., 'cod':'...', ...}
+            d = ast.literal_eval(payload)
         except Exception:
             messagebox.showwarning("ATA","Não foi possível carregar o item."); return
         self._ata_item_editando = d.get("id")
@@ -319,16 +340,9 @@ class TelaAtasEmpenhos(tk.Frame):
         self.e_ai_nome.delete(0,"end"); self.e_ai_nome.insert(0, d.get("nome") or "")
         self.e_ai_qt.delete(0,"end"); self.e_ai_qt.insert(0, str(d.get("qt") or "0"))
         self.e_ai_vu.set_value(Decimal(str(d.get("vu") or 0)))
-        # força recálculo
         self._calc_total(self.e_ai_qt, self.e_ai_vu, self.e_ai_vt)
         self.e_ai_obs.delete(0,"end"); self.e_ai_obs.insert(0, d.get("obs") or "")
-
-        # troca botão "Adicionar" por "Salvar edição"
-        for w in self.e_ai_cod.master.grid_slaves(row=0, column=6)[0].winfo_children():
-            # limpa painel e recria (evita state bleed)
-            pass
-        # simples: reusa o botão "Adicionar" chamando salvar edição se _ata_item_editando estiver setado
-        self.e_ai_cod.master.after(10, lambda: None)
+        self.btn_ata_add.config(text="Salvar edição")
 
     def _ata_excluir_item_selec(self):
         sel = self.tv_atas.selection()
@@ -336,9 +350,9 @@ class TelaAtasEmpenhos(tk.Frame):
         iid = sel[0]
         if "item" not in self.tv_atas.item(iid,"tags"):
             messagebox.showinfo("ATA","Selecione um item (filho)."); return
-        data = self.tv_atas.item(iid,"text")
+        payload = self.tv_atas.set(iid, "_payload")
         try:
-            d = eval(data)
+            d = ast.literal_eval(payload)
         except Exception:
             return
         if not messagebox.askyesno("Confirmar","Excluir o item selecionado?"):
@@ -356,31 +370,21 @@ class TelaAtasEmpenhos(tk.Frame):
         if not fid: return
 
         rows = banco.atas_hdr_listar(fornecedor_id=fid)
-        # monta cabeçalhos
+        forn_nome = self.cb_fornec.get()
+
         for r in rows:
-            vig_i = self._fmt(r.get("vigencia_ini"))
-            vig_f = self._fmt(r.get("vigencia_fim"))
+            vig_i = self._fmt_data(r.get("vigencia_ini"))
+            vig_f = self._fmt_data(r.get("vigencia_fim"))
             saldo = formatar_moeda_br(r.get("valor_saldo", 0))
-            nome_f = self.cb_fornec.get()
-
-            iid = self.tv_atas.insert("", "end", text="", values=(
-                nome_f, r.get("numero",""), vig_i, vig_f, r.get("status",""),
-                str(r.get("itens_qtd",0)), saldo
-            ))
-            # guardo ata_id para expandir
-            self.tv_atas.set(iid, column="numero", value=r.get("numero",""))
-            self.tv_atas.item(iid, tags=("cab", f"ata_{r['ata_id']}"))
-
-            # se vier pedido para atualizar os filhos de uma ata específica
+            iid = self.tv_atas.insert("", "end", text="",
+                                      values=(forn_nome, r.get("numero",""), vig_i, vig_f,
+                                              r.get("status",""), str(r.get("itens_qtd",0)), saldo,
+                                              r["ata_id"], "", ""),  # _ata_id preenche; outros vazios
+                                      tags=("cab", f"ata_{r['ata_id']}"))
             if refresh_items_of and int(r["ata_id"]) == int(refresh_items_of):
                 self._popular_itens_ata(iid, r["ata_id"])
 
-    def _fmt(self, iso):
-        if not iso: return ""
-        try: return datetime.strptime(iso, "%Y-%m-%d").strftime("%d/%m/%Y")
-        except Exception: return iso
-
-    def _atas_on_open(self, event):
+    def _atas_on_open(self, _evt):
         iid = self.tv_atas.focus()
         tags = self.tv_atas.item(iid,"tags")
         ata_id = None
@@ -395,50 +399,46 @@ class TelaAtasEmpenhos(tk.Frame):
 
     def _popular_itens_ata(self, parent_iid, ata_id: int):
         itens = banco.ata_itens_listar_por_ata(ata_id)
-        idx = 1
-        for it in itens:
+        for idx, it in enumerate(itens, start=1):
             payload = {
                 "id": it["id"], "ata_id": ata_id,
                 "cod": it.get("cod_aghu",""), "nome": it.get("nome_item",""),
-                "qt": it.get("qtde_total",0), "vu": it.get("vl_unit",0),
-                "vt": it.get("vl_total",0), "obs": it.get("observacao","") or ""
+                "qt": it.get("qtde_total",0),
+                "vu": float(Decimal(str(it.get("vl_unit",0))).quantize(Decimal("0.01"))),
+                "vt": float(Decimal(str(it.get("vl_total",0))).quantize(Decimal("0.01"))),
+                "obs": it.get("observacao","") or ""
             }
-            txt = str(payload)  # guardo no text
-            self.tv_atas.insert(parent_iid, "end", text=txt, values=(
-                f"Item {idx}",  # aparece na col 'fornecedor' como rótulo
-                payload["cod"],
-                "", "", "", "", formatar_moeda_br(payload["vt"])
-            ), tags=("item",))
-            idx += 1
+            self.tv_atas.insert(parent_iid, "end", text="",
+                                values=(f"Item {idx}", payload["cod"], payload["nome"],
+                                        str(payload["qt"]),
+                                        formatar_moeda_br(payload["vu"]),
+                                        "",  # coluna "Itens" não se aplica a linha filho
+                                        formatar_moeda_br(payload["vt"]),
+                                        "", str(payload["id"]), str(payload)),
+                                tags=("item",))
 
-    def _atas_on_double_click(self, event):
-        # duplo clique num cabeçalho -> carrega no formulário de edição
+    def _atas_on_double_click(self, _evt):
+        # Duplo clique no cabeçalho → carrega a ATA no formulário
         iid = self.tv_atas.focus()
         tags = self.tv_atas.item(iid,"tags")
-        if "cab" in tags:
-            # extrai ata_id a partir da tag
-            ata_id = None
-            for t in tags:
-                if t.startswith("ata_"):
-                    ata_id = int(t.split("_",1)[1]); break
-            if not ata_id: return
-            # carrega cabeçalho no form
-            rows = banco.atas_hdr_listar(fornecedor_id=self._fid())
-            row = next((r for r in rows if int(r["ata_id"])==ata_id), None)
-            if not row: return
-            self._ata_id_editando = ata_id
-            self.e_ata_num.delete(0,"end"); self.e_ata_num.insert(0, row.get("numero",""))
-            self.e_ata_ini.set_value(self._fmt(row.get("vigencia_ini")))
-            self.e_ata_fim.set_value(self._fmt(row.get("vigencia_fim")))
-            self.cb_ata_status.set(row.get("status","Em vigência"))
-            self.e_ata_obs.delete(0,"end")  # sem obs na view; deixo em branco
-            # abre lista de itens
-            self._popular_itens_ata(iid, ata_id)
+        if "cab" not in tags: return
+        ata_id = int(self.tv_atas.set(iid, "_ata_id") or 0)
+        if not ata_id: return
+        rows = banco.atas_hdr_listar(fornecedor_id=self._fid())
+        row = next((r for r in rows if int(r["ata_id"])==ata_id), None)
+        if not row: return
+        self._ata_id_editando = ata_id
+        self.e_ata_num.delete(0,"end"); self.e_ata_num.insert(0, row.get("numero",""))
+        self.e_ata_ini.set_value(self._fmt_data(row.get("vigencia_ini")))
+        self.e_ata_fim.set_value(self._fmt_data(row.get("vigencia_fim")))
+        self.cb_ata_status.set(row.get("status","Em vigência"))
+        self.e_ata_obs.delete(0,"end")  # view não traz obs; fica em branco
+        self.btn_ata_add.config(text="Adicionar item")
 
-    # ======================
-    #     EMPENHOS - ações
-    # ======================
-    def _emp_add_item(self):
+    # =========================================================
+    #                      EMPENHOS: Ações
+    # =========================================================
+    def _emp_add_or_save_item(self):
         fid = self._fid()
         if not fid:
             messagebox.showwarning("Empenho","Selecione o fornecedor."); return
@@ -447,30 +447,36 @@ class TelaAtasEmpenhos(tk.Frame):
             messagebox.showwarning("Empenho","Informe o Nº do empenho."); return
         cod = (self.e_emp_cod.get() or "").strip()
         nome = (self.e_emp_nome.get() or "").strip()
-        try: qt = float((self.e_emp_qt.get() or "0").replace(",", "."))
-        except Exception: qt = 0.0
+        try:
+            qt = float((self.e_emp_qt.get() or "0").replace(",", "."))
+        except Exception:
+            qt = 0.0
         vu = float(str(self.e_emp_vu.value()))
         vt = qt * vu
         if not (cod and nome and qt and vu):
             messagebox.showwarning("Empenho","Preencha cód, descrição, qtde e Vlr Unit."); return
+
+        d = {
+            "fornecedor_id": fid, "cod_aghu": cod, "nome_item": nome,
+            "qtde": qt, "vl_unit": vu, "vl_total": vt,
+            "numero_empenho": num, "observacao": (self.e_emp_obs.get() or "").strip()
+        }
         try:
-            banco.empenho_inserir({
-                "fornecedor_id": fid,
-                "cod_aghu": cod,
-                "nome_item": nome,
-                "vl_unit": vu,
-                "vl_total": vt,
-                "numero_empenho": num,
-                "observacao": (self.e_emp_obs.get() or "").strip()
-            })
+            if self._emp_item_editando:
+                banco.empenho_item_atualizar(self._emp_item_editando, d)
+                self._emp_item_editando = None
+                self.btn_emp_add.config(text="Adicionar item")
+            else:
+                banco.empenho_inserir(d)
             self._carregar_empenhos(refresh_num=num)
-            # limpar
+
+            # limpa
             self.e_emp_cod.delete(0,"end"); self.e_emp_nome.delete(0,"end")
             self.e_emp_qt.delete(0,"end"); self.e_emp_vu.set_value(0)
             self.e_emp_vt.configure(state="normal"); self.e_emp_vt.delete(0,"end"); self.e_emp_vt.configure(state="readonly")
             self.e_emp_obs.delete(0,"end")
         except Exception as e:
-            messagebox.showerror("Empenho", f"Falha ao incluir item: {e}")
+            messagebox.showerror("Empenho", f"Falha ao salvar item: {e}")
 
     def _emp_editar_item_selec(self):
         sel = self.tv_emp.selection()
@@ -478,13 +484,13 @@ class TelaAtasEmpenhos(tk.Frame):
         iid = sel[0]
         if "item" not in self.tv_emp.item(iid,"tags"):
             messagebox.showinfo("Empenho","Selecione um item (filho)."); return
-        payload = self.tv_emp.item(iid,"text")
+        payload = self.tv_emp.set(iid, "_payload")
         try:
-            d = eval(payload)
+            d = ast.literal_eval(payload)
         except Exception:
             return
         self._emp_item_editando = d.get("id")
-        # joga para edição
+        # joga nos campos
         self.e_emp_num.delete(0,"end"); self.e_emp_num.insert(0, d.get("num") or "")
         self.e_emp_cod.delete(0,"end"); self.e_emp_cod.insert(0, d.get("cod") or "")
         self.e_emp_nome.delete(0,"end"); self.e_emp_nome.insert(0, d.get("nome") or "")
@@ -492,6 +498,7 @@ class TelaAtasEmpenhos(tk.Frame):
         self.e_emp_vu.set_value(Decimal(str(d.get("vu") or 0)))
         self._calc_total(self.e_emp_qt, self.e_emp_vu, self.e_emp_vt)
         self.e_emp_obs.delete(0,"end"); self.e_emp_obs.insert(0, d.get("obs") or "")
+        self.btn_emp_add.config(text="Salvar edição")
 
     def _emp_excluir_item_selec(self):
         sel = self.tv_emp.selection()
@@ -499,9 +506,9 @@ class TelaAtasEmpenhos(tk.Frame):
         iid = sel[0]
         if "item" not in self.tv_emp.item(iid,"tags"):
             messagebox.showinfo("Empenho","Selecione um item (filho)."); return
-        payload = self.tv_emp.item(iid,"text")
+        payload = self.tv_emp.set(iid, "_payload")
         try:
-            d = eval(payload)
+            d = ast.literal_eval(payload)
         except Exception:
             return
         if not messagebox.askyesno("Confirmar","Excluir o item do empenho?"):
@@ -510,7 +517,7 @@ class TelaAtasEmpenhos(tk.Frame):
             banco.empenho_item_excluir(d.get("id"))
             self._carregar_empenhos(refresh_num=d.get("num"))
         except Exception as e:
-            messagebox.showerror("Empenho", f"Falha ao excluir: {e}")
+            messagebox.showerror("Empenho", f"Falha ao excluir item: {e}")
 
     def _carregar_empenhos(self, refresh_num: str|None=None):
         fid = self._fid()
@@ -523,17 +530,15 @@ class TelaAtasEmpenhos(tk.Frame):
         for h in hdrs:
             num = h.get("numero_empenho") or "-"
             iid = self.tv_emp.insert("", "end", text="", values=(
-                nome_f, num, str(h.get("itens_qtd",0)), formatar_moeda_br(h.get("valor_total",0))
-            ), tags=("cab", f"emp_{num}"))
+                nome_f, num, str(h.get("itens_qtd",0)), formatar_moeda_br(h.get("valor_total",0)),
+                num, "", ""  # _num, _item_id, _payload
+            ), tags=("cab",))
             if refresh_num and num == refresh_num:
                 self._popular_itens_empenho(iid, num, fid)
 
-    def _emp_on_open(self, event):
+    def _emp_on_open(self, _evt):
         iid = self.tv_emp.focus()
-        tags = self.tv_emp.item(iid,"tags")
-        num = None
-        for t in tags:
-            if t.startswith("emp_"): num = t.split("_",1)[1]; break
+        num = self.tv_emp.set(iid, "_num")
         if num:
             for ch in self.tv_emp.get_children(iid):
                 self.tv_emp.delete(ch)
@@ -541,20 +546,28 @@ class TelaAtasEmpenhos(tk.Frame):
 
     def _popular_itens_empenho(self, parent_iid, num: str, fornecedor_id: int):
         itens = banco.empenho_itens_listar(num, fornecedor_id)
-        idx = 1
-        for it in itens:
-            vt = Decimal(str(it.get("vl_total",0))).quantize(Decimal("0.01"))
+        for idx, it in enumerate(itens, start=1):
             vu = Decimal(str(it.get("vl_unit",0))).quantize(Decimal("0.01"))
+            vt = Decimal(str(it.get("vl_total",0))).quantize(Decimal("0.01"))
             payload = {
                 "id": it["id"], "num": num,
                 "cod": it.get("cod_aghu",""), "nome": it.get("nome_item",""),
-                "qt": "", "vu": float(vu), "vt": float(vt), "obs": it.get("observacao","") or ""
+                "qt": it.get("qtde",0), "vu": float(vu), "vt": float(vt),
+                "obs": it.get("observacao","") or ""
             }
-            self.tv_emp.insert(parent_iid, "end", text=str(payload), values=(
-                f"Item {idx}", payload["cod"], "", formatar_moeda_br(vt)
+            self.tv_emp.insert(parent_iid, "end", text="", values=(
+                f"Item {idx}", payload["cod"], str(payload["qt"]), formatar_moeda_br(payload["vt"]),
+                "", str(payload["id"]), str(payload)  # _num vazio aqui, _item_id e _payload
             ), tags=("item",))
-            idx += 1
 
-    def _emp_on_double_click(self, event):
-        # duplo clique no cabeçalho só expande; edição é pelo item
+    def _emp_on_double_click(self, _evt):
+        # Duplo clique no cabeçalho apenas expande
         pass
+
+    # =========================================================
+    #                         Helpers
+    # =========================================================
+    def _fmt_data(self, iso: str|None):
+        if not iso: return ""
+        try: return datetime.strptime(iso, "%Y-%m-%d").strftime("%d/%m/%Y")
+        except Exception: return iso
