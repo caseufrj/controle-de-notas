@@ -452,6 +452,35 @@ def ata_itens_listar_por_ata(ata_id: int) -> List[Dict[str,Any]]:
     rows = [dict(r) for r in cur.fetchall()]
     conn.close(); return rows
 
+def ata_itens_listar_por_ata_com_saldo(ata_id: int) -> List[Dict[str, Any]]:
+    """
+    Retorna itens com colunas:
+      id, cod_aghu, nome_item, qtde_total, qtde_empenhada, qtde_saldo, vl_unit, vl_total, observacao
+    'qtde_empenhada' soma empenhos.qtde vinculados a este ata_item_id.
+    """
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            ai.id,
+            ai.cod_aghu,
+            ai.nome_item,
+            ai.qtde_total,
+            IFNULL((
+                SELECT SUM(e.qtde) FROM empenhos e WHERE e.ata_item_id = ai.id
+            ), 0) AS qtde_empenhada,
+            (ai.qtde_total - IFNULL((
+                SELECT SUM(e.qtde) FROM empenhos e WHERE e.ata_item_id = ai.id
+            ), 0)) AS qtde_saldo,
+            ai.vl_unit,
+            ai.vl_total,
+            ai.observacao
+        FROM atas_itens ai
+        WHERE ai.ata_id=?
+        ORDER BY ai.id ASC
+    """, (ata_id,))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close(); return rows
+
 def ata_item_atualizar(item_id: int, d: Dict[str,Any]) -> None:
     conn = conectar(); cur = conn.cursor()
     cur.execute("""
@@ -467,6 +496,30 @@ def ata_item_excluir(item_id: int) -> None:
     conn = conectar(); cur = conn.cursor()
     cur.execute("DELETE FROM atas_itens WHERE id=?", (item_id,))
     conn.commit(); conn.close()
+
+def ata_vinculos_contar(ata_id: int) -> Dict[str, int]:
+    """
+    Retorna {'empenhos': X, 'notas_itens': Y} para qualquer item desta ATA.
+    Usado para bloquear exclusão de ATA com vínculos.
+    """
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("SELECT id FROM atas_itens WHERE ata_id=?", (ata_id,))
+    item_ids = [r[0] for r in cur.fetchall()]
+    if not item_ids:
+        conn.close()
+        return {"empenhos": 0, "notas_itens": 0}
+
+    ids_tuple = tuple(item_ids)
+    qmarks = ",".join(["?"] * len(ids_tuple))
+
+    cur.execute(f"SELECT COUNT(*) FROM empenhos WHERE ata_item_id IN ({qmarks})", ids_tuple)
+    emp = int(cur.fetchone()[0] or 0)
+
+    cur.execute(f"SELECT COUNT(*) FROM notas_itens WHERE ata_item_id IN ({qmarks})", ids_tuple)
+    ni = int(cur.fetchone()[0] or 0)
+
+    conn.close()
+    return {"empenhos": emp, "notas_itens": ni}
 
 # ------ Empenhos ------
 def empenho_inserir(d: Dict[str, Any]) -> int:
@@ -516,7 +569,6 @@ def empenhos_listar(fornecedor_id: Optional[int] = None, busca_cod: str = "", nu
     rows = [dict(r) for r in cur.fetchall()]
     conn.close(); return rows
 
-# ------ Empenhos (cabeçalho "virtual" agrupado) ------
 def empenho_cabecalhos_listar(fornecedor_id: Optional[int]=None, busca_numero: str="") -> List[Dict[str,Any]]:
     """
     Retorna cabeçalhos agrupados por numero_empenho:
@@ -541,6 +593,25 @@ def empenho_cabecalhos_listar(fornecedor_id: Optional[int]=None, busca_numero: s
     cur.execute(sql, tuple(params))
     rows = [dict(r) for r in cur.fetchall()]
     conn.close(); return rows
+
+def empenho_excluir_por_numero(fornecedor_id: int, numero_empenho: str) -> int:
+    """
+    Exclui todos os itens de um Nº de empenho para o fornecedor.
+    Retorna a quantidade de linhas afetadas.
+    """
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        DELETE FROM empenhos
+         WHERE fornecedor_id=? AND IFNULL(numero_empenho,'-')=IFNULL(?, '-')
+    """, (fornecedor_id, numero_empenho))
+    afetados = cur.rowcount
+    conn.commit(); conn.close()
+    return int(afetados or 0)
+
+def empenho_item_excluir(item_id: int) -> None:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("DELETE FROM empenhos WHERE id=?", (item_id,))
+    conn.commit(); conn.close()
 
 # ------ Notas (cabeçalho + itens) ------
 def nota_inserir(d: Dict[str, Any]) -> int:
@@ -804,7 +875,7 @@ def mensagens_obter(id_: int) -> Optional[Dict[str, Any]]:
     row = cur.fetchone(); conn.close()
     return dict(row) if row else None
 
-# alias compatível com a tela antiga
+# alias compatível com alguma tela antiga
 def mensagem_obter(id_: int) -> Optional[Dict[str, Any]]:
     return mensagens_obter(id_)
 
