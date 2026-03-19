@@ -315,6 +315,23 @@ class TelaAtasEmpenhos(tk.Frame):
         tk.Label(frm, text="Vlr Unit*:").grid(row=3, column=2, sticky="w", padx=6)
         self.e_emp_vu = MoedaEntry(frm, width=18); self.e_emp_vu.grid(row=3, column=3, sticky="w", padx=6)
 
+        self.e_emp_cod.configure(state="readonly")
+        self.e_emp_nome.configure(state="readonly")
+        
+        # Vlr Unit com trava padrão
+        self._lock_vu = tk.BooleanVar(value=True)
+        # ao alternar a checkbox, muda o state do e_emp_vu
+        def _toggle_lock_vu(self):
+            try:
+                self.e_emp_vu.configure(state="readonly" if self._lock_vu.get() else "normal")
+            except Exception:
+                pass
+
+        frm_chk = tk.Frame(frm, bg="white")
+        frm_chk.grid(row=3, column=6, sticky="nw", padx=(10,0))
+        ttk.Checkbutton(frm_chk, text="Liberar edição de Vlr Unit", variable=self._lock_vu,
+                        command=self._toggle_lock_vu).pack(anchor="w")
+
         # Trava/Libera edição do VU (padrão: travado)
         self._lock_vu = tk.BooleanVar(value=True)
         frm_chk = tk.Frame(frm, bg="white")
