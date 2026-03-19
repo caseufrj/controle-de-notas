@@ -399,6 +399,15 @@ class TelaAtasEmpenhos(tk.Frame):
 
     def _popular_itens_ata(self, parent_iid, ata_id: int):
         itens = banco.ata_itens_listar_por_ata(ata_id)
+    
+        # 1) "subcabeçalho" dos itens
+        self.tv_atas.insert(
+            parent_iid, "end", text="",
+            values=("Itens", "Cód AGHU", "Descrição", "Qtde", "Vlr Unit", "", "Vlr Total", "", "", ""),
+            tags=("subheader",)
+        )
+    
+        # 2) Itens (Item, Cód, Descrição, Qtde, VU, VT)
         for idx, it in enumerate(itens, start=1):
             payload = {
                 "id": it["id"], "ata_id": ata_id,
@@ -408,14 +417,21 @@ class TelaAtasEmpenhos(tk.Frame):
                 "vt": float(Decimal(str(it.get("vl_total",0))).quantize(Decimal("0.01"))),
                 "obs": it.get("observacao","") or ""
             }
-            self.tv_atas.insert(parent_iid, "end", text="",
-                                values=(f"Item {idx}", payload["cod"], payload["nome"],
-                                        str(payload["qt"]),
-                                        formatar_moeda_br(payload["vu"]),
-                                        "",  # coluna "Itens" não se aplica a linha filho
-                                        formatar_moeda_br(payload["vt"]),
-                                        "", str(payload["id"]), str(payload)),
-                                tags=("item",))
+            self.tv_atas.insert(
+                parent_iid, "end", text="",
+                values=(
+                    f"Item {idx}", payload["cod"], payload["nome"],
+                    str(payload["qt"]),
+                    formatar_moeda_br(payload["vu"]),
+                    "",  # coluna 'Itens' (cabeçalho) não se aplica aos filhos
+                    formatar_moeda_br(payload["vt"]),
+                    "",  # _ata_id (oculto) — deixamos vazio nos filhos
+                    str(payload["id"]),  # _item_id (oculto)
+                    str(payload)         # _payload (oculto) - para editar/excluir
+                ),
+                tags=("item",)
+            )
+
 
     def _atas_on_double_click(self, _evt):
         # Duplo clique no cabeçalho → carrega a ATA no formulário
