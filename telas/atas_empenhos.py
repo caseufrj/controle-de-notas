@@ -9,6 +9,8 @@ import banco
 # Reaproveita widgets e util de moeda/data da tela de Notas
 from telas.notas import MoedaEntry, DataEntry, formatar_moeda_br
 
+from tkinter.scrolledtext import ScrolledText
+
 
 class TelaAtasEmpenhos(tk.Frame):
     def __init__(self, master):
@@ -136,11 +138,152 @@ class TelaAtasEmpenhos(tk.Frame):
 
         bar = tk.Frame(box, bg="white"); bar.pack(fill="x", padx=6, pady=(0,6))
         ttk.Button(bar, text="Recarregar", command=self._carregar_atas).pack(side="left")
+        ttk.Button(bar, text="Debug", command=self._debug_ata).pack(side="left", padx=6)
 
         # estado de edição
         self._ata_id_editando = None
         self._ata_item_editando = None
 
+    #==========================================================
+                        TEMPORÁRIO
+    #==========================================================
+
+    def _debug_ata(self):
+        """Abre um relatório com o estado atual da ATA no banco (itens, empenhos, view de saldo e triggers)."""
+        # 1) Descobrir qual ATA analisar
+        ata_id = None
+        # a) se há uma ATA carregada no cabeçalho
+        if getattr(self, "_ata_id_editando", None):
+            ata_id = self._ata_id_editando
+        else:
+            # b) se houver seleção no tree, e for cabeçalho
+            try:
+                iid = self.tv_atas.focus()
+                if iid:
+                    tags = self.tv_atas.item(iid, "tags")
+                    if "cab" in tags:
+                        ata_id = int(self.tv_atas.set(iid, "_ata_id") or 0)
+            except Exception:
+                ata_id = None
+    
+        if not ata_id:
+            messagebox.showinfo("Debug", "Selecione o cabeçalho da ATA (ou carregue-a no formulário) e tente novamente.")
+            return
+    
+        # 2) Consultas no banco
+        try:
+            conn = banco.conectar()
+            cur = conn.cursor()
+    
+            # Cabeçalho (view de saldo por valor)
+            cur.execute("SELECT * FROM vw_saldo_ata_total WHERE ata_id=?", (ata_id,))
+            row_hdr = cur.fetchone()
+            hdr_lines = []
+            if row_hdr:
+                r = dict(row_hdr)
+                hdr_lines.append(f"ATA id={r.get('ata_id')}  numero={r.get('numero')}  fornecedor_id={r.get('fornecedor_id')}")
+                hdr_lines.append(f"vigencia_ini={r.get('vigencia_ini')}  vigencia_fim={r.get('vigencia_fim')}  status={r.get('status')}")
+                hdr_lines.append(f"valor_total_ata={r.get('valor_total_ata')}  valor_empenhado={r.get('valor_empenhado') if 'valor_empenhado' in r else 'N/A'}  valor_consumido={r.get('valor_consumido')}  valor_saldo={r.get('valor_saldo')}")
+            else:
+                hdr_lines.append("(sem linha na view vw_saldo_ata_total)")
+    
+            # Itens da ATA
+            cur.execute("""
+                SELECT id, cod_aghu, nome_item, qtde_total, vl_unit, vl_total, observacao
+                  FROM atas_itens
+                 WHERE ata_id=?
+                 ORDER BY id
+            """, (ata_id,))
+            itens = [dict(x) for x in cur.fetchall()]
+    
+            # Empenhos que apontam para os itens desta ATA
+            cur.execute("""
+                SELECT e.id, e.numero_empenho, e.cod_aghu, e.qtde, e.vl_unit, e.vl_total, e.ata_item_id
+                  FROM empenhos e
+                 WHERE e.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = ?)
+                 ORDER BY e.id
+            """, (ata_id,))
+            emps = [dict(x) for x in cur.fetchall()]
+    
+            # Triggers existentes
+            cur.execute("""
+                SELECT name, tbl_name, sql
+                  FROM sqlite_master
+                 WHERE type='trigger'
+                 ORDER BY name
+            """)
+            triggers = [dict(name=r[0], tbl_name=r[1], sql=r[2]) for r in cur.fetchall()]
+    
+            conn.close()
+        except Exception as ex:
+            messagebox.showerror("Debug", f"Falha ao consultar o banco: {ex}")
+            return
+    
+        # 3) Montar texto do relatório
+        def fmt_money(v):
+            try:
+                return formatar_moeda_br(Decimal(str(v)).quantize(Decimal("0.01")))
+            except Exception:
+                return str(v)
+    
+        lines = []
+        lines.append("===== DEBUG ATA =====")
+        lines.append(f"ata_id: {ata_id}")
+        lines.append("\n-- Cabeçalho (vw_saldo_ata_total) --")
+        lines.extend(hdr_lines)
+    
+        lines.append("\n-- Itens da ATA (atas_itens) --")
+        lines.append(f"total_itens={len(itens)}")
+        for it in itens:
+            lines.append(
+                f"[item_id={it['id']}] cod={it.get('cod_aghu','')}  nome={it.get('nome_item','')}"
+                f"  qtde_total={it.get('qtde_total',0)}  vl_unit={fmt_money(it.get('vl_unit',0))}  vl_total={fmt_money(it.get('vl_total',0))}"
+            )
+    
+        lines.append("\n-- Empenhos vinculados a itens desta ATA (empenhos) --")
+        lines.append(f"total_empenhos={len(emps)}")
+        for e in emps:
+            lines.append(
+                f"[emp_id={e['id']}] num={e.get('numero_empenho','')}  cod={e.get('cod_aghu','')}  qtde={e.get('qtde',0)}"
+                f"  vl_unit={fmt_money(e.get('vl_unit',0))}  vl_total={fmt_money(e.get('vl_total',0))}  ata_item_id={e.get('ata_item_id')}"
+            )
+    
+        lines.append("\n-- Triggers existentes --")
+        if not triggers:
+            lines.append("(nenhum trigger)")
+        else:
+            for t in triggers:
+                # Mostra só o cabeçalho para não ficar gigante; se quiser o SQL completo, me avise.
+                lines.append(f"name={t['name']}  tbl={t['tbl_name']}")
+    
+        texto = "\n".join(lines)
+    
+        # 4) Mostrar em janela com rolagem + botão copiar
+        top = tk.Toplevel(self)
+        top.title(f"Debug ATA {ata_id}")
+        top.geometry("900x600+120+80")
+        try:
+            top.iconbitmap(default='')  # ignora
+        except Exception:
+            pass
+    
+        frm = tk.Frame(top, bg="white"); frm.pack(fill="both", expand=True)
+        st = ScrolledText(frm, wrap="word")
+        st.pack(fill="both", expand=True, padx=8, pady=8)
+        st.insert("1.0", texto)
+        st.configure(state="disabled")
+    
+        bar = tk.Frame(frm, bg="white"); bar.pack(fill="x", padx=8, pady=(0,8))
+        def _copy():
+            try:
+                top.clipboard_clear()
+                top.clipboard_append(texto)
+                messagebox.showinfo("Debug","Conteúdo copiado para a área de transferência.")
+            except Exception:
+                pass
+        ttk.Button(bar, text="Copiar tudo", command=_copy).pack(side="left")
+        ttk.Button(bar, text="Fechar", command=top.destroy).pack(side="right")
+        
     # =========================================================
     #                     ABA EMPENHOS
     # =========================================================
