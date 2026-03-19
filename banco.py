@@ -403,6 +403,13 @@ def atas_hdr_listar(fornecedor_id: Optional[int]=None, busca_numero: str="") -> 
     rows = [dict(r) for r in cur.fetchall()]
     conn.close(); return rows
 
+
+def ata_hdr_obter(ata_id: int) -> Optional[Dict[str, Any]]:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("SELECT * FROM atas WHERE id = ?", (ata_id,))
+    row = cur.fetchone(); conn.close()
+    return dict(row) if row else None
+
 # ------ ATAS (itens) ------
 def ata_item_inserir_v2(d: Dict[str,Any]) -> int:
     """
