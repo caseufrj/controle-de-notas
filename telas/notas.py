@@ -252,18 +252,23 @@ class DataEntry(ttk.Entry):
             self.after(0, lambda: (self.focus_set(), self.selection_range(0, "end")))
 
     def _on_keypress(self, event):
-        # navegação padrão
+        # 1) Permitir navegação padrão por Tab e Shift+Tab
+        if event.keysym in {"Tab", "ISO_Left_Tab"}:
+            return  # deixa o Tk mover o foco
+    
+        # 2) Navegação padrão por setas/home/end
         if event.keysym in {"Left", "Right", "Home", "End"}:
             return
-
-        # Ctrl+A/C/X: padrão; Ctrl+V tratado pelo <<Paste>>
+    
+        # 3) Ctrl+A/C/X: comportamento padrão; Ctrl+V é tratado no <<Paste>>
         if (event.state & 0x4) and event.keysym.upper() in {"A", "C", "X"}:
             return
-
+    
+        # --- a partir daqui, o resto do seu handler continua igual ---
         masked = self.get()
         pos = self.index("insert")
         dindex = self._pos_to_dindex(masked, pos)
-
+    
         if event.keysym == "BackSpace":
             if self._has_selection():
                 self._delete_selection()
@@ -272,7 +277,7 @@ class DataEntry(ttk.Entry):
                 self._digits = self._digits[:dindex-1] + self._digits[dindex:]
                 self._render(dindex=dindex-1)
             return "break"
-
+    
         if event.keysym == "Delete":
             if self._has_selection():
                 self._delete_selection()
@@ -281,7 +286,7 @@ class DataEntry(ttk.Entry):
                 self._digits = self._digits[:dindex] + self._digits[dindex+1:]
                 self._render(dindex=dindex)
             return "break"
-
+    
         if event.char and event.char.isdigit():
             if self._has_selection():
                 sel_start = self.index("sel.first")
@@ -297,8 +302,8 @@ class DataEntry(ttk.Entry):
             self._digits = self._digits[:dindex] + event.char + self._digits[dindex:]
             self._render(dindex=dindex+1)
             return "break"
-
-        # ignora "/" digitada manualmente e outras teclas
+    
+        # ignora "/" digitada e outras teclas
         return "break"
 
     def _on_paste(self, *_):
