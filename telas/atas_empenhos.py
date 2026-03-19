@@ -8,7 +8,6 @@ import ast
 import banco
 # Reaproveita widgets e util de moeda/data da tela de Notas
 from telas.notas import MoedaEntry, DataEntry, formatar_moeda_br
-
 from tkinter.scrolledtext import ScrolledText
 
 
@@ -16,10 +15,7 @@ class TelaAtasEmpenhos(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="white")
         try:
-            
-            # Opção 2 (se quiser manter aspas internas, use aspas simples por fora)
-            master.winfo_toplevel().title('Controle de Notas e Empenhos - "Atas & Empenhos"')
-
+            master.winfo_toplevel().title("Controle de Notas e Empenhos - Atas & Empenhos")
         except Exception:
             pass
 
@@ -116,7 +112,6 @@ class TelaAtasEmpenhos(tk.Frame):
         box = ttk.LabelFrame(aba, text="Atas cadastradas (clique no cabeçalho para ver os itens)")
         box.pack(fill="both", expand=True, padx=6, pady=6)
 
-        # colunas: cabeçalho visível. Para itens, mapeamos colunas (Item, Cód, ... variam no subcabeçalho)
         self.tv_atas = ttk.Treeview(
             box,
             columns=("forn","numero","vig_i","vig_f","status","qtd","saldo","_ata_id","_item_id","_payload"),
@@ -135,30 +130,28 @@ class TelaAtasEmpenhos(tk.Frame):
         self.tv_atas.pack(fill="both", expand=True, padx=6, pady=6)
         self.tv_atas.bind("<<TreeviewOpen>>", self._atas_on_open)
         self.tv_atas.bind("<Double-1>", self._atas_on_double_click)
+        self.tv_atas.bind("<<TreeviewClose>>", self._atas_on_close)
 
         bar = tk.Frame(box, bg="white"); bar.pack(fill="x", padx=6, pady=(0,6))
         ttk.Button(bar, text="Recarregar", command=self._carregar_atas).pack(side="left")
         ttk.Button(bar, text="Expandir tudo", command=self._atas_expandir_tudo).pack(side="left", padx=6)
         ttk.Button(bar, text="Debug", command=self._debug_ata).pack(side="left", padx=6)
 
-        # estado de edição
+        # estado de edição e expansão
         self._ata_id_editando = None
         self._ata_item_editando = None
         self._atas_expandidas = set()
 
-    #==========================================================
-                        #TEMPORÁRIO
-    #==========================================================
-
+    # ========================================================
+    #                     DEBUG TEMPORÁRIO
+    # ========================================================
     def _debug_ata(self):
         """Abre um relatório com o estado atual da ATA no banco (itens, empenhos, view de saldo e triggers)."""
-        # 1) Descobrir qual ATA analisar
+        # 1) Qual ATA?
         ata_id = None
-        # a) se há uma ATA carregada no cabeçalho
         if getattr(self, "_ata_id_editando", None):
             ata_id = self._ata_id_editando
         else:
-            # b) se houver seleção no tree, e for cabeçalho
             try:
                 iid = self.tv_atas.focus()
                 if iid:
@@ -167,17 +160,15 @@ class TelaAtasEmpenhos(tk.Frame):
                         ata_id = int(self.tv_atas.set(iid, "_ata_id") or 0)
             except Exception:
                 ata_id = None
-    
+
         if not ata_id:
             messagebox.showinfo("Debug", "Selecione o cabeçalho da ATA (ou carregue-a no formulário) e tente novamente.")
             return
-    
-        # 2) Consultas no banco
+
+        # 2) Consultas
         try:
-            conn = banco.conectar()
-            cur = conn.cursor()
-    
-            # Cabeçalho (view de saldo por valor)
+            conn = banco.conectar(); cur = conn.cursor()
+
             cur.execute("SELECT * FROM vw_saldo_ata_total WHERE ata_id=?", (ata_id,))
             row_hdr = cur.fetchone()
             hdr_lines = []
@@ -188,8 +179,7 @@ class TelaAtasEmpenhos(tk.Frame):
                 hdr_lines.append(f"valor_total_ata={r.get('valor_total_ata')}  valor_empenhado={r.get('valor_empenhado') if 'valor_empenhado' in r else 'N/A'}  valor_consumido={r.get('valor_consumido')}  valor_saldo={r.get('valor_saldo')}")
             else:
                 hdr_lines.append("(sem linha na view vw_saldo_ata_total)")
-    
-            # Itens da ATA
+
             cur.execute("""
                 SELECT id, cod_aghu, nome_item, qtde_total, vl_unit, vl_total, observacao
                   FROM atas_itens
@@ -197,8 +187,7 @@ class TelaAtasEmpenhos(tk.Frame):
                  ORDER BY id
             """, (ata_id,))
             itens = [dict(x) for x in cur.fetchall()]
-    
-            # Empenhos que apontam para os itens desta ATA
+
             cur.execute("""
                 SELECT e.id, e.numero_empenho, e.cod_aghu, e.qtde, e.vl_unit, e.vl_total, e.ata_item_id
                   FROM empenhos e
@@ -206,8 +195,7 @@ class TelaAtasEmpenhos(tk.Frame):
                  ORDER BY e.id
             """, (ata_id,))
             emps = [dict(x) for x in cur.fetchall()]
-    
-            # Triggers existentes
+
             cur.execute("""
                 SELECT name, tbl_name, sql
                   FROM sqlite_master
@@ -215,25 +203,25 @@ class TelaAtasEmpenhos(tk.Frame):
                  ORDER BY name
             """)
             triggers = [dict(name=r[0], tbl_name=r[1], sql=r[2]) for r in cur.fetchall()]
-    
+
             conn.close()
         except Exception as ex:
             messagebox.showerror("Debug", f"Falha ao consultar o banco: {ex}")
             return
-    
-        # 3) Montar texto do relatório
+
+        # 3) Monta relatório
         def fmt_money(v):
             try:
                 return formatar_moeda_br(Decimal(str(v)).quantize(Decimal("0.01")))
             except Exception:
                 return str(v)
-    
+
         lines = []
         lines.append("===== DEBUG ATA =====")
         lines.append(f"ata_id: {ata_id}")
         lines.append("\n-- Cabeçalho (vw_saldo_ata_total) --")
         lines.extend(hdr_lines)
-    
+
         lines.append("\n-- Itens da ATA (atas_itens) --")
         lines.append(f"total_itens={len(itens)}")
         for it in itens:
@@ -241,7 +229,7 @@ class TelaAtasEmpenhos(tk.Frame):
                 f"[item_id={it['id']}] cod={it.get('cod_aghu','')}  nome={it.get('nome_item','')}"
                 f"  qtde_total={it.get('qtde_total',0)}  vl_unit={fmt_money(it.get('vl_unit',0))}  vl_total={fmt_money(it.get('vl_total',0))}"
             )
-    
+
         lines.append("\n-- Empenhos vinculados a itens desta ATA (empenhos) --")
         lines.append(f"total_empenhos={len(emps)}")
         for e in emps:
@@ -249,32 +237,27 @@ class TelaAtasEmpenhos(tk.Frame):
                 f"[emp_id={e['id']}] num={e.get('numero_empenho','')}  cod={e.get('cod_aghu','')}  qtde={e.get('qtde',0)}"
                 f"  vl_unit={fmt_money(e.get('vl_unit',0))}  vl_total={fmt_money(e.get('vl_total',0))}  ata_item_id={e.get('ata_item_id')}"
             )
-    
+
         lines.append("\n-- Triggers existentes --")
         if not triggers:
             lines.append("(nenhum trigger)")
         else:
             for t in triggers:
-                # Mostra só o cabeçalho para não ficar gigante; se quiser o SQL completo, me avise.
                 lines.append(f"name={t['name']}  tbl={t['tbl_name']}")
-    
+
         texto = "\n".join(lines)
-    
-        # 4) Mostrar em janela com rolagem + botão copiar
+
+        # 4) Mostra janela
         top = tk.Toplevel(self)
         top.title(f"Debug ATA {ata_id}")
         top.geometry("900x600+120+80")
-        try:
-            top.iconbitmap(default='')  # ignora
-        except Exception:
-            pass
-    
+
         frm = tk.Frame(top, bg="white"); frm.pack(fill="both", expand=True)
         st = ScrolledText(frm, wrap="word")
         st.pack(fill="both", expand=True, padx=8, pady=8)
         st.insert("1.0", texto)
         st.configure(state="disabled")
-    
+
         bar = tk.Frame(frm, bg="white"); bar.pack(fill="x", padx=8, pady=(0,8))
         def _copy():
             try:
@@ -285,7 +268,7 @@ class TelaAtasEmpenhos(tk.Frame):
                 pass
         ttk.Button(bar, text="Copiar tudo", command=_copy).pack(side="left")
         ttk.Button(bar, text="Fechar", command=top.destroy).pack(side="right")
-        
+
     # =========================================================
     #                     ABA EMPENHOS
     # =========================================================
@@ -329,9 +312,9 @@ class TelaAtasEmpenhos(tk.Frame):
 
         tk.Label(frm, text="Vlr Unit*:").grid(row=3, column=2, sticky="w", padx=6)
         self.e_emp_vu = MoedaEntry(frm, width=18); self.e_emp_vu.grid(row=3, column=3, sticky="w", padx=6)
-        # travas de edição
-        self._lock_vu = tk.BooleanVar(value=True)  # por padrão Vlr Unit travado (usa o da ATA)
-        
+
+        # Trava/Libera edição do VU (padrão: travado)
+        self._lock_vu = tk.BooleanVar(value=True)
         frm_chk = tk.Frame(frm, bg="white")
         frm_chk.grid(row=3, column=6, sticky="nw", padx=(10,0))
         ttk.Checkbutton(frm_chk, text="Liberar edição de Vlr Unit", variable=self._lock_vu,
@@ -386,96 +369,6 @@ class TelaAtasEmpenhos(tk.Frame):
         except Exception:
             pass
 
-    def _emp_excluir_cabecalho(self):
-        sel = self.tv_emp.selection()
-        if not sel:
-            messagebox.showinfo("Empenho","Selecione um Nº de empenho (linha de cabeçalho).")
-            return
-        iid = sel[0]
-        if "cab" not in self.tv_emp.item(iid, "tags"):
-            messagebox.showinfo("Empenho","Selecione a linha do Nº de empenho (cabeçalho).")
-            return
-        num = self.tv_emp.set(iid, "_num") or self.tv_emp.item(iid, "values")[1]
-        if not num:
-            messagebox.showwarning("Empenho","Nº do empenho não identificado.")
-            return
-        if not messagebox.askyesno("Confirmar", f"Excluir TODOS os itens do Nº de empenho '{num}'?"):
-            return
-        try:
-            afetados = banco.empenho_excluir_por_numero(self._fid(), num)
-            self._carregar_empenhos()
-            messagebox.showinfo("Empenho", f"Itens excluídos: {afetados}.")
-        except Exception as e:
-            messagebox.showerror("Empenho", f"Falha ao excluir Nº de empenho: {e}")
-
-    def _emp_listar_atas_do_fornecedor(self):
-        fid = self._fid()
-        if not fid:
-            self.cb_emp_ata["values"] = []; return
-        rows = banco.atas_hdr_listar(fornecedor_id=fid)
-        # mapa: "Nº ATA (vig_i → vig_f)" -> ata_id
-        vals = []
-        for r in rows:
-            txt = f"{r.get('numero','')} ({self._fmt_data(r.get('vigencia_ini'))} → {self._fmt_data(r.get('vigencia_fim'))})"
-            vals.append((txt, r["ata_id"]))
-        self._map_emp_ata = dict(vals)  # texto -> id
-        self.cb_emp_ata["values"] = [k for k,_ in vals]
-        if vals and not self.cb_emp_ata.get():
-            self.cb_emp_ata.current(0)
-            self._emp_carregar_itens_da_ata()
-
-    def _emp_carregar_itens_da_ata(self):
-        self._emp_ata_item_id_sel = None
-        for i in self.tv_emp_ata.get_children():
-            self.tv_emp_ata.delete(i)
-        txt = self.cb_emp_ata.get()
-        ata_id = self._map_emp_ata.get(txt)
-        if not ata_id:
-            return
-        itens = banco.ata_itens_listar_por_ata(ata_id)
-        for it in itens:
-            self.tv_emp_ata.insert(
-                "", "end",
-                values=(it.get("cod_aghu",""),
-                        it.get("nome_item",""),
-                        formatar_moeda_br(Decimal(str(it.get('vl_unit',0))).quantize(Decimal("0.01"))),
-                        it.get("id"))
-            )
-
-    def _emp_puxar_item_ata(self):
-        sel = self.tv_emp_ata.selection()
-        if not sel:
-            return
-        v = self.tv_emp_ata.item(sel[0], "values")
-        cod, desc, vu_fmt, ata_item_id = v[0], v[1], v[2], v[3]
-        self._emp_ata_item_id_sel = int(ata_item_id)
-    
-        # preenche os campos do item do empenho (Cód/Desc/Valor Unit)
-        # 1) Cód
-        self.e_emp_cod.configure(state="normal")
-        self.e_emp_cod.delete(0, "end"); self.e_emp_cod.insert(0, cod)
-        self.e_emp_cod.configure(state="readonly")
-    
-        # 2) Descrição
-        self.e_emp_nome.configure(state="normal")
-        self.e_emp_nome.delete(0, "end"); self.e_emp_nome.insert(0, desc)
-        self.e_emp_nome.configure(state="readonly")
-    
-        # 3) Vlr Unit (vem da ATA)
-        try:
-            vu = Decimal(str(vu_fmt).replace("R$", "").strip().replace(".", "").replace(",", "."))
-        except Exception:
-            vu = Decimal("0")
-        self.e_emp_vu.set_value(vu)
-        # respeita trava de edição
-        self.e_emp_vu.configure(state="readonly" if self._lock_vu.get() else "normal")
-    
-        # limpa qtde/vtotal para o usuário digitar
-        self.e_emp_qt.delete(0, "end")
-        self.e_emp_vt.configure(state="normal"); self.e_emp_vt.delete(0, "end"); self.e_emp_vt.configure(state="readonly")
-        # força recalcular quando o usuário digitar qtde
-        self._calc_total(self.e_emp_qt, self.e_emp_vu, self.e_emp_vt)
-
     # =========================================================
     #                     Utilidades Comuns
     # =========================================================
@@ -522,16 +415,16 @@ class TelaAtasEmpenhos(tk.Frame):
         fid = self._fid()
         if not fid:
             messagebox.showwarning("ATA", "Selecione o fornecedor."); return
-    
+
         numero = (self.e_ata_num.get() or "").strip()
         if not numero:
             messagebox.showwarning("ATA", "Informe o Nº da ATA."); return
-    
+
         def gui_to_iso(s):
             if not s: return None
             try: return datetime.strptime(s, "%d/%m/%Y").strftime("%Y-%m-%d")
             except Exception: return None
-    
+
         d = {
             "fornecedor_id": fid,
             "numero": numero,
@@ -540,7 +433,7 @@ class TelaAtasEmpenhos(tk.Frame):
             "status": self.cb_ata_status.get(),
             "observacao": (self.e_ata_obs.get() or "").strip()
         }
-    
+
         try:
             if self._ata_id_editando:
                 banco.ata_hdr_atualizar(self._ata_id_editando, d)
@@ -550,21 +443,21 @@ class TelaAtasEmpenhos(tk.Frame):
                 messagebox.showinfo("ATA", "ATA criada. Agora adicione os itens.")
         except Exception as e:
             messagebox.showerror("ATA", f"Falha ao salvar: {e}")
-    
+
         self._carregar_atas()
-        self._emp_listar_atas_do_fornecedor()  # 👈 ESSENCIAL
+        self._emp_listar_atas_do_fornecedor()  # manter combo atualizada
 
     def _excluir_ata(self):
         if not self._ata_id_editando:
             messagebox.showwarning("ATA", "Nenhuma ATA carregada no cabeçalho.")
             return
-    
+
         if not messagebox.askyesno("Confirmar", "Excluir a ATA e todos os itens? Os empenhos vinculados serão removidos."):
             return
         try:
             banco.ata_hdr_excluir(self._ata_id_editando)
             self._nova_ata()
-            # Recarrega listas para refletir a exclusão em toda a UI
+            # Recarrega listas
             self._carregar_atas()
             self._carregar_empenhos()
             self._emp_listar_atas_do_fornecedor()
@@ -654,16 +547,16 @@ class TelaAtasEmpenhos(tk.Frame):
         for i in self.tv_atas.get_children():
             self.tv_atas.delete(i)
         if not fid: return
-    
+
         rows = banco.atas_hdr_listar(fornecedor_id=fid)
         forn_nome = self.cb_fornec.get()
-    
-        # quais ATAs reabrir? (preferência: refresh_items_of; senão, as que estavam em _atas_expandidas)
+
+        # Reabrir o que estava expandido
         reabrir = set()
         if refresh_items_of:
             reabrir.add(int(refresh_items_of))
         reabrir.update(getattr(self, "_atas_expandidas", set()))
-    
+
         for r in rows:
             vig_i = self._fmt_data(r.get("vigencia_ini"))
             vig_f = self._fmt_data(r.get("vigencia_fim"))
@@ -676,7 +569,6 @@ class TelaAtasEmpenhos(tk.Frame):
                         ata_id, "", ""),
                 tags=("cab", f"ata_{ata_id}")
             )
-            # reabrir se estava expandida antes
             if ata_id in reabrir:
                 # limpa filhos e repopula
                 for ch in self.tv_atas.get_children(iid):
@@ -698,8 +590,6 @@ class TelaAtasEmpenhos(tk.Frame):
                 self.tv_atas.delete(ch)
             self._popular_itens_ata(iid, ata_id)
 
-    self.tv_atas.bind("<<TreeviewClose>>", self._atas_on_close)
-
     def _atas_on_close(self, _evt):
         iid = self.tv_atas.focus()
         tags = self.tv_atas.item(iid, "tags")
@@ -711,16 +601,16 @@ class TelaAtasEmpenhos(tk.Frame):
                 break
 
     def _popular_itens_ata(self, parent_iid, ata_id: int):
-        # Itens da ATA sempre aparecem; só exibimos Qtde Empenhada e Saldo
+        # Itens da ATA sempre aparecem; exibimos Qtde Empenhada e Saldo (por quantidade)
         itens = banco.ata_itens_listar_por_ata_com_saldo(ata_id)
-    
+
         # Subcabeçalho mapeado às 7 colunas do treeview
         self.tv_atas.insert(
             parent_iid, "end", text="",
             values=("Itens", "Cód AGHU", "Qtde ATA", "Empenhado", "Saldo", "Vlr Unit", "Vlr Total", "", "", ""),
             tags=("subheader",)
         )
-    
+
         for idx, it in enumerate(itens, start=1):
             qt_total = it.get("qtde_total", 0)
             qt_emp   = it.get("qtde_empenhada", 0)
@@ -740,7 +630,22 @@ class TelaAtasEmpenhos(tk.Frame):
                         "", str(payload["id"]), str(payload)),
                 tags=("item",)
             )
-            
+
+    def _atas_expandir_tudo(self):
+        # Registra todas como expandidas e popula
+        self._atas_expandidas = set()
+        for iid in self.tv_atas.get_children(""):
+            try:
+                ata_id = int(self.tv_atas.set(iid, "_ata_id") or 0)
+            except Exception:
+                ata_id = 0
+            if ata_id:
+                self._atas_expandidas.add(ata_id)
+                # limpa filhos e repopula
+                for ch in self.tv_atas.get_children(iid):
+                    self.tv_atas.delete(ch)
+                self._popular_itens_ata(iid, ata_id)
+
     def _atas_on_double_click(self, _evt):
         # Duplo clique no cabeçalho → carrega a ATA no formulário
         iid = self.tv_atas.focus()
@@ -758,22 +663,6 @@ class TelaAtasEmpenhos(tk.Frame):
         self.cb_ata_status.set(row.get("status","Em vigência"))
         self.e_ata_obs.delete(0, "end")  # view não traz obs; fica em branco
         self.btn_ata_add.config(text="Adicionar item")
-
-    def _atas_expandir_tudo(self):
-        # registra todas como expandidas e popula
-        self._atas_expandidas = set()
-        for iid in self.tv_atas.get_children(""):
-            # descobre o ata_id da linha
-            try:
-                ata_id = int(self.tv_atas.set(iid, "_ata_id") or 0)
-            except Exception:
-                ata_id = 0
-            if ata_id:
-                self._atas_expandidas.add(ata_id)
-                # limpa filhos e repopula
-                for ch in self.tv_atas.get_children(iid):
-                    self.tv_atas.delete(ch)
-                self._popular_itens_ata(iid, ata_id)
 
     # =========================================================
     #                      EMPENHOS: Ações
@@ -810,12 +699,14 @@ class TelaAtasEmpenhos(tk.Frame):
             else:
                 banco.empenho_inserir(d)
             self._carregar_empenhos(refresh_num=num)
-            # dentro de _emp_add_or_save_item, após self._carregar_empenhos(...)
+
+            # Atualiza ATA em edição (ver Empenhado/Saldo imediatamente)
             if getattr(self, "_ata_id_editando", None):
                 self._carregar_atas(refresh_items_of=self._ata_id_editando)
 
             # limpa
-            self.e_emp_cod.delete(0, "end"); self.e_emp_nome.delete(0, "end")
+            self.e_emp_cod.configure(state="normal"); self.e_emp_cod.delete(0, "end"); self.e_emp_cod.configure(state="readonly")
+            self.e_emp_nome.configure(state="normal"); self.e_emp_nome.delete(0, "end"); self.e_emp_nome.configure(state="readonly")
             self.e_emp_qt.delete(0, "end"); self.e_emp_vu.set_value(0)
             self.e_emp_vt.configure(state="normal"); self.e_emp_vt.delete(0, "end"); self.e_emp_vt.configure(state="readonly")
             self.e_emp_obs.delete(0, "end")
@@ -828,7 +719,7 @@ class TelaAtasEmpenhos(tk.Frame):
         iid = sel[0]
         if "item" not in self.tv_emp.item(iid, "tags"):
             messagebox.showinfo("Empenho","Selecione um item (linha abaixo do cabeçalho do número)."); return
-    
+
         payload = self.tv_emp.set(iid, "_payload")
         if not payload:
             messagebox.showerror("Empenho","Não foi possível obter os dados do item (payload vazio)."); return
@@ -837,12 +728,12 @@ class TelaAtasEmpenhos(tk.Frame):
         except Exception as ex:
             messagebox.showerror("Empenho", f"Não foi possível ler os dados do item.\nDetalhe: {ex}")
             return
-    
+
         self._emp_item_editando = d.get("id")
         # joga nos campos
         self.e_emp_num.delete(0,"end"); self.e_emp_num.insert(0, d.get("num") or "")
-        self.e_emp_cod.delete(0,"end"); self.e_emp_cod.insert(0, d.get("cod") or "")
-        self.e_emp_nome.delete(0,"end"); self.e_emp_nome.insert(0, d.get("nome") or "")
+        self.e_emp_cod.configure(state="normal"); self.e_emp_cod.delete(0,"end"); self.e_emp_cod.insert(0, d.get("cod") or ""); self.e_emp_cod.configure(state="readonly")
+        self.e_emp_nome.configure(state="normal"); self.e_emp_nome.delete(0,"end"); self.e_emp_nome.insert(0, d.get("nome") or ""); self.e_emp_nome.configure(state="readonly")
         self.e_emp_qt.delete(0,"end"); self.e_emp_qt.insert(0, str(d.get("qt") or 0))
         self.e_emp_vu.set_value(Decimal(str(d.get("vu") or 0)))
         self._calc_total(self.e_emp_qt, self.e_emp_vu, self.e_emp_vt)
@@ -855,7 +746,7 @@ class TelaAtasEmpenhos(tk.Frame):
         iid = sel[0]
         if "item" not in self.tv_emp.item(iid,"tags"):
             messagebox.showinfo("Empenho","Selecione um item (linha abaixo do cabeçalho do número)."); return
-    
+
         payload = self.tv_emp.set(iid, "_payload")
         if not payload:
             messagebox.showerror("Empenho","Não foi possível obter os dados do item (payload vazio)."); return
@@ -864,7 +755,7 @@ class TelaAtasEmpenhos(tk.Frame):
         except Exception as ex:
             messagebox.showerror("Empenho", f"Não foi possível ler os dados do item.\nDetalhe: {ex}")
             return
-    
+
         if not messagebox.askyesno("Confirmar","Excluir o item do empenho?"):
             return
         try:
@@ -873,7 +764,28 @@ class TelaAtasEmpenhos(tk.Frame):
         except Exception as e:
             messagebox.showerror("Empenho", f"Falha ao excluir item: {e}")
 
-    
+    def _emp_excluir_cabecalho(self):
+        sel = self.tv_emp.selection()
+        if not sel:
+            messagebox.showinfo("Empenho","Selecione um Nº de empenho (linha de cabeçalho).")
+            return
+        iid = sel[0]
+        if "cab" not in self.tv_emp.item(iid, "tags"):
+            messagebox.showinfo("Empenho","Selecione a linha do Nº de empenho (cabeçalho).")
+            return
+        num = self.tv_emp.set(iid, "_num") or self.tv_emp.item(iid, "values")[1]
+        if not num:
+            messagebox.showwarning("Empenho","Nº do empenho não identificado.")
+            return
+        if not messagebox.askyesno("Confirmar", f"Excluir TODOS os itens do Nº de empenho '{num}'?"):
+            return
+        try:
+            afetados = banco.empenho_excluir_por_numero(self._fid(), num)
+            self._carregar_empenhos()
+            messagebox.showinfo("Empenho", f"Itens excluídos: {afetados}.")
+        except Exception as e:
+            messagebox.showerror("Empenho", f"Falha ao excluir Nº de empenho: {e}")
+
     def _carregar_empenhos(self, refresh_num: str | None = None):
         fid = self._fid()
         for i in self.tv_emp.get_children():
