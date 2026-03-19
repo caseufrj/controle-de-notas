@@ -172,9 +172,11 @@ class TelaAtasEmpenhos(tk.Frame):
 
         tk.Label(frm, text="Cód AGHU*:").grid(row=2, column=2, sticky="w", padx=6)
         self.e_emp_cod = ttk.Entry(frm, width=18); self.e_emp_cod.grid(row=2, column=3, sticky="w", padx=6)
+        self.e_emp_cod.configure(state="readonly")
 
         tk.Label(frm, text="Descrição*:").grid(row=2, column=4, sticky="w", padx=6)
         self.e_emp_nome = ttk.Entry(frm, width=40); self.e_emp_nome.grid(row=2, column=5, sticky="w", padx=6)
+        self.e_emp_nome.configure(state="readonly")
 
         # Linha 3: Qtde, Vlr Unit, Vlr Total
         tk.Label(frm, text="Qtde*:").grid(row=3, column=0, sticky="w", padx=6)
@@ -182,6 +184,13 @@ class TelaAtasEmpenhos(tk.Frame):
 
         tk.Label(frm, text="Vlr Unit*:").grid(row=3, column=2, sticky="w", padx=6)
         self.e_emp_vu = MoedaEntry(frm, width=18); self.e_emp_vu.grid(row=3, column=3, sticky="w", padx=6)
+        # travas de edição
+        self._lock_vu = tk.BooleanVar(value=True)  # por padrão Vlr Unit travado (usa o da ATA)
+        
+        frm_chk = tk.Frame(frm, bg="white")
+        frm_chk.grid(row=3, column=6, sticky="nw", padx=(10,0))
+        ttk.Checkbutton(frm_chk, text="Liberar edição de Vlr Unit", variable=self._lock_vu,
+                        command=self._toggle_lock_vu).pack(anchor="w")
 
         tk.Label(frm, text="Vlr Total:").grid(row=3, column=4, sticky="w", padx=6)
         self.e_emp_vt = ttk.Entry(frm, width=18, state="readonly"); self.e_emp_vt.grid(row=3, column=5, sticky="w", padx=6)
@@ -225,6 +234,12 @@ class TelaAtasEmpenhos(tk.Frame):
 
         self._ata_item_editando = None
         self._emp_item_editando = None
+
+    def _toggle_lock_vu(self):
+        try:
+            self.e_emp_vu.configure(state="readonly" if self._lock_vu.get() else "normal")
+        except Exception:
+            pass
 
     def _emp_excluir_cabecalho(self):
         sel = self.tv_emp.selection()
@@ -289,15 +304,30 @@ class TelaAtasEmpenhos(tk.Frame):
         v = self.tv_emp_ata.item(sel[0], "values")
         cod, desc, vu_fmt, ata_item_id = v[0], v[1], v[2], v[3]
         self._emp_ata_item_id_sel = int(ata_item_id)
-
-        # preenche os campos do item do empenho
+    
+        # preenche os campos do item do empenho (Cód/Desc/Valor Unit)
+        # 1) Cód
+        self.e_emp_cod.configure(state="normal")
         self.e_emp_cod.delete(0, "end"); self.e_emp_cod.insert(0, cod)
+        self.e_emp_cod.configure(state="readonly")
+    
+        # 2) Descrição
+        self.e_emp_nome.configure(state="normal")
         self.e_emp_nome.delete(0, "end"); self.e_emp_nome.insert(0, desc)
-        # VU vem da ATA
+        self.e_emp_nome.configure(state="readonly")
+    
+        # 3) Vlr Unit (vem da ATA)
         try:
-            self.e_emp_vu.set_value(Decimal(str(vu_fmt).replace("R$", "").strip().replace(".", "").replace(",", ".")))
+            vu = Decimal(str(vu_fmt).replace("R$", "").strip().replace(".", "").replace(",", "."))
         except Exception:
-            self.e_emp_vu.set_value(0)
+            vu = Decimal("0")
+        self.e_emp_vu.set_value(vu)
+        # respeita trava de edição
+        self.e_emp_vu.configure(state="readonly" if self._lock_vu.get() else "normal")
+    
+        # limpa qtde/vtotal para o usuário digitar
+        self.e_emp_qt.delete(0, "end")
+        self.e_emp_vt.configure(state="normal"); self.e_emp_vt.delete(0, "end"); self.e_emp_vt.configure(state="readonly")
         # força recalcular quando o usuário digitar qtde
         self._calc_total(self.e_emp_qt, self.e_emp_vu, self.e_emp_vt)
 
