@@ -145,7 +145,7 @@ class TelaAtasEmpenhos(tk.Frame):
         self._ata_item_editando = None
 
     #==========================================================
-                        TEMPORÁRIO
+                        #TEMPORÁRIO
     #==========================================================
 
     def _debug_ata(self):
