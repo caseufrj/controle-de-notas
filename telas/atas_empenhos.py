@@ -37,6 +37,8 @@ class TelaAtasEmpenhos(tk.Frame):
         self._montar_aba_empenhos()
         self._emp_ata_item_id_sel = None
 
+        self._map_emp_ata = {}
+
         # Estado
         self.map_fornec = {}
         self._carregar_fornecedores()
@@ -368,6 +370,32 @@ class TelaAtasEmpenhos(tk.Frame):
             self.e_emp_vu.configure(state="readonly" if self._lock_vu.get() else "normal")
         except Exception:
             pass
+
+    def _emp_carregar_itens_da_ata(self):
+        self._emp_ata_item_id_sel = None
+        # limpa a grade
+        for i in self.tv_emp_ata.get_children():
+            self.tv_emp_ata.delete(i)
+    
+        # Mapa pode não existir no primeiro disparo do evento
+        map_atas = getattr(self, "_map_emp_ata", {})
+        if not isinstance(map_atas, dict):
+            map_atas = {}
+    
+        txt = self.cb_emp_ata.get() or ""
+        ata_id = map_atas.get(txt)
+        if not ata_id:
+            return
+    
+        itens = banco.ata_itens_listar_por_ata(ata_id)
+        for it in itens:
+            self.tv_emp_ata.insert(
+                "", "end",
+                values=(it.get("cod_aghu",""),
+                        it.get("nome_item",""),
+                        formatar_moeda_br(Decimal(str(it.get('vl_unit',0))).quantize(Decimal("0.01"))),
+                        it.get("id"))
+            )
 
     # =========================================================
     #                     Utilidades Comuns
