@@ -129,16 +129,30 @@ def criar_tabelas() -> None:
         a.vigencia_fim,
         a.status,
         IFNULL(SUM(ai.vl_total),0) AS valor_total_ata,
+    
+        /* Consumo real (notas) - mantemos para referência */
         IFNULL((
             SELECT SUM(ni.vl_total)
               FROM notas_itens ni
               WHERE ni.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = a.id)
         ), 0) AS valor_consumido,
-        (IFNULL(SUM(ai.vl_total),0) - IFNULL((
-            SELECT SUM(ni.vl_total)
-              FROM notas_itens ni
-              WHERE ni.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = a.id)
-        ), 0)) AS valor_saldo,
+    
+        /* Empenhado (valor) - NOVO */
+        IFNULL((
+            SELECT SUM(e.vl_total)
+              FROM empenhos e
+             WHERE e.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = a.id)
+        ), 0) AS valor_empenhado,
+    
+        /* Saldo considerando empenhos (o que você quer enxergar no cabeçalho) */
+        (IFNULL(SUM(ai.vl_total),0)
+          - IFNULL((
+              SELECT SUM(e.vl_total)
+                FROM empenhos e
+               WHERE e.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = a.id)
+          ), 0)) AS valor_saldo,
+    
+        /* quantidade de itens cadastrados na ata */
         (SELECT COUNT(1) FROM atas_itens x WHERE x.ata_id = a.id) AS itens_qtd
     FROM atas a
     LEFT JOIN atas_itens ai ON ai.ata_id = a.id
