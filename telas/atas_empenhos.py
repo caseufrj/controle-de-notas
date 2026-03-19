@@ -624,6 +624,9 @@ class TelaAtasEmpenhos(tk.Frame):
             else:
                 banco.empenho_inserir(d)
             self._carregar_empenhos(refresh_num=num)
+            # dentro de _emp_add_or_save_item, após self._carregar_empenhos(...)
+            if getattr(self, "_ata_id_editando", None):
+                self._carregar_atas(refresh_items_of=self._ata_id_editando)
 
             # limpa
             self.e_emp_cod.delete(0, "end"); self.e_emp_nome.delete(0, "end")
