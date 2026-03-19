@@ -358,13 +358,13 @@ class TelaAtasEmpenhos(tk.Frame):
         if not self._ata_id_editando:
             messagebox.showwarning("ATA", "Nenhuma ATA carregada no cabeçalho.")
             return
-
-        # BLOQUEIA exclusão se houver vínculos (empenhos / notas)
+    
+        # Bloqueia se houver vínculos
         try:
             vinc = banco.ata_vinculos_contar(self._ata_id_editando)
         except Exception:
             vinc = {"empenhos": 0, "notas_itens": 0}
-
+    
         if vinc.get("empenhos", 0) > 0 or vinc.get("notas_itens", 0) > 0:
             messagebox.showwarning(
                 "ATA",
@@ -374,7 +374,7 @@ class TelaAtasEmpenhos(tk.Frame):
                 "Sugestão: altere o Status para 'Encerrada'."
             )
             return
-
+    
         if not messagebox.askyesno("Confirmar", "Excluir a ATA e todos os itens?"):
             return
         try:
