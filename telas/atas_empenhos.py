@@ -14,7 +14,7 @@ class TelaAtasEmpenhos(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="white")
         try:
-            master.winfo_toplevel().title("Controle de Notas e Empenhos - Atas & Empenhos")
+            master.winfo_toplevel().title("Controle de Notas e Empenhos - "Atas & Empenhos")
         except Exception:
             pass
 
