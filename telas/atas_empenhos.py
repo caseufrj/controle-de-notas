@@ -322,15 +322,16 @@ class TelaAtasEmpenhos(tk.Frame):
         fid = self._fid()
         if not fid:
             messagebox.showwarning("ATA", "Selecione o fornecedor."); return
+    
         numero = (self.e_ata_num.get() or "").strip()
         if not numero:
             messagebox.showwarning("ATA", "Informe o Nº da ATA."); return
-
+    
         def gui_to_iso(s):
             if not s: return None
             try: return datetime.strptime(s, "%d/%m/%Y").strftime("%Y-%m-%d")
             except Exception: return None
-
+    
         d = {
             "fornecedor_id": fid,
             "numero": numero,
@@ -339,6 +340,7 @@ class TelaAtasEmpenhos(tk.Frame):
             "status": self.cb_ata_status.get(),
             "observacao": (self.e_ata_obs.get() or "").strip()
         }
+    
         try:
             if self._ata_id_editando:
                 banco.ata_hdr_atualizar(self._ata_id_editando, d)
@@ -348,7 +350,9 @@ class TelaAtasEmpenhos(tk.Frame):
                 messagebox.showinfo("ATA", "ATA criada. Agora adicione os itens.")
         except Exception as e:
             messagebox.showerror("ATA", f"Falha ao salvar: {e}")
+    
         self._carregar_atas()
+        self._emp_listar_atas_do_fornecedor()  # 👈 ESSENCIAL
 
     def _excluir_ata(self):
         if not self._ata_id_editando:
