@@ -552,7 +552,7 @@ class TelaAtasEmpenhos(tk.Frame):
                         "", str(payload["id"]), str(payload)),
                 tags=("item",)
             )
-
+            
     def _atas_on_double_click(self, _evt):
         # Duplo clique no cabeçalho → carrega a ATA no formulário
         iid = self.tv_atas.focus()
@@ -656,28 +656,7 @@ class TelaAtasEmpenhos(tk.Frame):
         except Exception as e:
             messagebox.showerror("Empenho", f"Falha ao excluir item: {e}")
 
-    def _emp_excluir_cabecalho(self):
-        sel = self.tv_emp.selection()
-        if not sel:
-            messagebox.showinfo("Empenho","Selecione um Nº de empenho (linha de cabeçalho).")
-            return
-        iid = sel[0]
-        if "cab" not in self.tv_emp.item(iid, "tags"):
-            messagebox.showinfo("Empenho","Selecione a linha do Nº de empenho (cabeçalho).")
-            return
-        num = self.tv_emp.set(iid, "_num") or self.tv_emp.item(iid, "values")[1]
-        if not num:
-            messagebox.showwarning("Empenho","Nº do empenho não identificado.")
-            return
-        if not messagebox.askyesno("Confirmar", f"Excluir TODOS os itens do Nº de empenho '{num}'?"):
-            return
-        try:
-            afetados = banco.empenho_excluir_por_numero(self._fid(), num)
-            self._carregar_empenhos()
-            messagebox.showinfo("Empenho", f"Itens excluídos: {afetados}.")
-        except Exception as e:
-            messagebox.showerror("Empenho", f"Falha ao excluir Nº de empenho: {e}")
-
+    
     def _carregar_empenhos(self, refresh_num: str | None = None):
         fid = self._fid()
         for i in self.tv_emp.get_children():
