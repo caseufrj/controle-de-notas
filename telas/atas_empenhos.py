@@ -111,7 +111,7 @@ class TelaAtasEmpenhos(tk.Frame):
         box = ttk.LabelFrame(aba, text="Atas cadastradas (clique no cabeçalho para ver os itens)")
         box.pack(fill="both", expand=True, padx=6, pady=6)
 
-        # colunas: cabeçalho visível. Para itens, mapeamos colunas (Item, Cód, Desc, Qtde, VU, VT)
+        # colunas: cabeçalho visível. Para itens, mapeamos colunas (Item, Cód, ... variam no subcabeçalho)
         self.tv_atas = ttk.Treeview(
             box,
             columns=("forn","numero","vig_i","vig_f","status","qtd","saldo","_ata_id","_item_id","_payload"),
@@ -218,6 +218,7 @@ class TelaAtasEmpenhos(tk.Frame):
 
         bar = tk.Frame(box, bg="white"); bar.pack(fill="x", padx=6, pady=(0,6))
         ttk.Button(bar, text="Recarregar", command=self._carregar_empenhos).pack(side="left")
+        ttk.Button(bar, text="Excluir Nº empenho selec.", command=self._emp_excluir_cabecalho).pack(side="left", padx=6)
 
         self._ata_item_editando = None
         self._emp_item_editando = None
@@ -353,6 +354,23 @@ class TelaAtasEmpenhos(tk.Frame):
         if not self._ata_id_editando:
             messagebox.showwarning("ATA", "Nenhuma ATA carregada no cabeçalho.")
             return
+
+        # BLOQUEIA exclusão se houver vínculos (empenhos / notas)
+        try:
+            vinc = banco.ata_vinculos_contar(self._ata_id_editando)
+        except Exception:
+            vinc = {"empenhos": 0, "notas_itens": 0}
+
+        if vinc.get("empenhos", 0) > 0 or vinc.get("notas_itens", 0) > 0:
+            messagebox.showwarning(
+                "ATA",
+                "Não é possível excluir a ATA pois existem vínculos:\n"
+                f"  • Itens de Empenho: {vinc.get('empenhos',0)}\n"
+                f"  • Itens em Notas: {vinc.get('notas_itens',0)}\n\n"
+                "Sugestão: altere o Status para 'Encerrada'."
+            )
+            return
+
         if not messagebox.askyesno("Confirmar", "Excluir a ATA e todos os itens?"):
             return
         try:
@@ -476,37 +494,34 @@ class TelaAtasEmpenhos(tk.Frame):
             self._popular_itens_ata(iid, ata_id)
 
     def _popular_itens_ata(self, parent_iid, ata_id: int):
-        itens = banco.ata_itens_listar_por_ata(ata_id)
+        # Usa versão COM SALDO (itens NUNCA somem; apenas exibimos Qtde Empenhada e Saldo)
+        itens = banco.ata_itens_listar_por_ata_com_saldo(ata_id)
 
-        # 1) "subcabeçalho" dos itens
+        # Subcabeçalho mapeado às 7 colunas do treeview
+        # forn, numero,  vig_i,       vig_f,       status,    qtd,        saldo
         self.tv_atas.insert(
             parent_iid, "end", text="",
-            values=("Itens", "Cód AGHU", "Descrição", "Qtde", "Vlr Unit", "", "Vlr Total", "", "", ""),
+            values=("Itens", "Cód AGHU", "Qtde ATA", "Empenhado", "Saldo", "Vlr Unit", "Vlr Total", "", "", ""),
             tags=("subheader",)
         )
 
-        # 2) Itens (Item, Cód, Descrição, Qtde, VU, VT)
         for idx, it in enumerate(itens, start=1):
+            qt_total = it.get("qtde_total", 0)
+            qt_emp   = it.get("qtde_empenhada", 0)
+            qt_saldo = it.get("qtde_saldo", 0)
+            vu = Decimal(str(it.get("vl_unit",0))).quantize(Decimal("0.01"))
+            vt = Decimal(str(it.get("vl_total",0))).quantize(Decimal("0.01"))
             payload = {
                 "id": it["id"], "ata_id": ata_id,
                 "cod": it.get("cod_aghu",""), "nome": it.get("nome_item",""),
-                "qt": it.get("qtde_total",0),
-                "vu": float(Decimal(str(it.get("vl_unit",0))).quantize(Decimal("0.01"))),
-                "vt": float(Decimal(str(it.get("vl_total",0))).quantize(Decimal("0.01"))),
-                "obs": it.get("observacao","") or ""
+                "qt": qt_total, "qt_empenhada": qt_emp, "qt_saldo": qt_saldo,
+                "vu": float(vu), "vt": float(vt), "obs": it.get("observacao","") or ""
             }
             self.tv_atas.insert(
                 parent_iid, "end", text="",
-                values=(
-                    f"Item {idx}", payload["cod"], payload["nome"],
-                    str(payload["qt"]),
-                    formatar_moeda_br(payload["vu"]),
-                    "",  # coluna 'Itens' (cabeçalho) não se aplica aos filhos
-                    formatar_moeda_br(payload["vt"]),
-                    "",  # _ata_id (oculto) — deixamos vazio nos filhos
-                    str(payload["id"]),  # _item_id (oculto)
-                    str(payload)         # _payload (oculto) - para editar/excluir
-                ),
+                values=(f"Item {idx}", payload["cod"], str(qt_total), str(qt_emp), str(qt_saldo),
+                        formatar_moeda_br(vu), formatar_moeda_br(vt),
+                        "", str(payload["id"]), str(payload)),
                 tags=("item",)
             )
 
@@ -612,6 +627,28 @@ class TelaAtasEmpenhos(tk.Frame):
             self._carregar_empenhos(refresh_num=d.get("num"))
         except Exception as e:
             messagebox.showerror("Empenho", f"Falha ao excluir item: {e}")
+
+    def _emp_excluir_cabecalho(self):
+        sel = self.tv_emp.selection()
+        if not sel:
+            messagebox.showinfo("Empenho","Selecione um Nº de empenho (linha de cabeçalho).")
+            return
+        iid = sel[0]
+        if "cab" not in self.tv_emp.item(iid, "tags"):
+            messagebox.showinfo("Empenho","Selecione a linha do Nº de empenho (cabeçalho).")
+            return
+        num = self.tv_emp.set(iid, "_num") or self.tv_emp.item(iid, "values")[1]
+        if not num:
+            messagebox.showwarning("Empenho","Nº do empenho não identificado.")
+            return
+        if not messagebox.askyesno("Confirmar", f"Excluir TODOS os itens do Nº de empenho '{num}'?"):
+            return
+        try:
+            afetados = banco.empenho_excluir_por_numero(self._fid(), num)
+            self._carregar_empenhos()
+            messagebox.showinfo("Empenho", f"Itens excluídos: {afetados}.")
+        except Exception as e:
+            messagebox.showerror("Empenho", f"Falha ao excluir Nº de empenho: {e}")
 
     def _carregar_empenhos(self, refresh_num: str | None = None):
         fid = self._fid()
