@@ -414,9 +414,31 @@ def ata_hdr_obter(ata_id: int) -> Optional[Dict[str, Any]]:
 def ata_item_inserir_v2(d: Dict[str,Any]) -> int:
     """
     d = {'ata_id','cod_aghu','nome_item','qtde_total','vl_unit','vl_total','observacao'}
+    Compatível com schema legado (atas_itens) que exige fornecedor_id e pregao (NOT NULL).
     """
-    campos = ("ata_id","cod_aghu","nome_item","qtde_total","vl_unit","vl_total","observacao")
-    vals = tuple(d.get(k) for k in campos)
+    ata_id = d.get("ata_id")
+    if not ata_id:
+        raise ValueError("ata_item_inserir_v2: 'ata_id' é obrigatório.")
+
+    hdr = ata_hdr_obter(int(ata_id))
+    if not hdr:
+        raise ValueError(f"Ata cabeçalho não encontrado (id={ata_id}).")
+
+    fornecedor_id = hdr.get("fornecedor_id")
+    pregao = hdr.get("numero")  # usamos o 'numero' da ATA como 'pregao' legado
+
+    campos = ("fornecedor_id","pregao","cod_aghu","nome_item","qtde_total","vl_unit","vl_total","observacao","ata_id")
+    vals = (
+        fornecedor_id,
+        pregao,
+        d.get("cod_aghu"),
+        d.get("nome_item"),
+        float(d.get("qtde_total") or 0),
+        float(d.get("vl_unit") or 0),
+        float(d.get("vl_total") or 0),
+        d.get("observacao"),
+        ata_id
+    )
     conn = conectar(); cur = conn.cursor()
     cur.execute(f"INSERT INTO atas_itens ({','.join(campos)}) VALUES ({','.join(['?']*len(campos))})", vals)
     conn.commit(); iid = cur.lastrowid; conn.close()
