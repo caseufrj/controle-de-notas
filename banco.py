@@ -1,8 +1,6 @@
-# banco.py
 import os
 import sqlite3
 from typing import List, Dict, Any, Optional, Tuple
-from contextlib import closing
 
 # =========================
 #  Caminho do banco (UNC)
@@ -19,7 +17,8 @@ def conectar() -> sqlite3.Connection:
         if base_dir and not os.path.exists(base_dir) and not base_dir.startswith("\\\\"):
             os.makedirs(base_dir, exist_ok=True)
     except Exception:
-        pass  # em UNC, diretório já existe
+        # Em UNC, o diretório já existe ou não há permissão para criar (ok).
+        pass
 
     conn = sqlite3.connect(CAMINHO_BANCO)
     conn.row_factory = sqlite3.Row
@@ -111,14 +110,13 @@ def criar_tabelas() -> None:
     """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_atas_fornec ON atas(fornecedor_id);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_atas_num ON atas(numero);")
-    
+
     # Itens de ata passam a aceitar 'ata_id' (FK)
     if not _coluna_existe(cur, "atas_itens", "ata_id"):
         cur.execute("ALTER TABLE atas_itens ADD COLUMN ata_id INTEGER REFERENCES atas(id) ON DELETE CASCADE;")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_atas_itens_ata ON atas_itens(ata_id);")
-    
+
     # Saldo agregado por ATA (valor total dos itens - consumo em notas)
-    # Consumo: soma de ni.vl_total em notas_itens onde ni.ata_item_id = ai.id
     if _view_existe(cur, "vw_saldo_ata_total"):
         cur.execute("DROP VIEW vw_saldo_ata_total;")
     cur.execute("""
@@ -136,13 +134,11 @@ def criar_tabelas() -> None:
               FROM notas_itens ni
               WHERE ni.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = a.id)
         ), 0) AS valor_consumido,
-        -- saldo financeiro
         (IFNULL(SUM(ai.vl_total),0) - IFNULL((
             SELECT SUM(ni.vl_total)
               FROM notas_itens ni
               WHERE ni.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = a.id)
         ), 0)) AS valor_saldo,
-        -- quantidade de itens cadastrados na ata
         (SELECT COUNT(1) FROM atas_itens x WHERE x.ata_id = a.id) AS itens_qtd
     FROM atas a
     LEFT JOIN atas_itens ai ON ai.ata_id = a.id
@@ -167,7 +163,7 @@ def criar_tabelas() -> None:
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emp_fornecedor ON empenhos(fornecedor_id);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emp_cod ON empenhos(cod_aghu);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_emp_numero ON empenhos(numero_empenho);")
-    # dentro de criar_tabelas(), após criar a tabela empenhos:
+    # Migrações idempotentes
     if not _coluna_existe(cur, "empenhos", "qtde"):
         cur.execute("ALTER TABLE empenhos ADD COLUMN qtde REAL NOT NULL DEFAULT 0;")
     if not _coluna_existe(cur, "empenhos", "ata_item_id"):
@@ -178,9 +174,9 @@ def criar_tabelas() -> None:
     CREATE TABLE IF NOT EXISTS notas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         fornecedor_id INTEGER NOT NULL REFERENCES fornecedores(id) ON DELETE CASCADE,
-        numero TEXT NOT NULL,               -- numero+série (ex: 1234-1)
-        data_expedicao TEXT NOT NULL,       -- 'YYYY-MM-DD' (ou dd/mm/aaaa se preferir)
-        vl_total REAL NOT NULL DEFAULT 0,   -- total da nota
+        numero TEXT NOT NULL,
+        data_expedicao TEXT NOT NULL,       -- YYYY-MM-DD
+        vl_total REAL NOT NULL DEFAULT 0,
         codigo_sei TEXT,
         data_envio_processo TEXT,
         observacao TEXT,
@@ -246,7 +242,7 @@ def criar_tabelas() -> None:
     cur.execute("CREATE INDEX IF NOT EXISTS idx_msgs_tipo ON mensagens_padrao(tipo);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_msgs_forn ON mensagens_padrao(fornecedor_id);")
 
-    # -------- Itens em rascunho (persistência da grade de orçamento antes do envio) --------
+    # -------- Itens em rascunho --------
     cur.execute("""
     CREATE TABLE IF NOT EXISTS itens_rascunho (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -300,6 +296,7 @@ def criar_tabelas() -> None:
 # =========================
 #   CRUDs / Consultas
 # =========================
+
 # ------ Fornecedores ------
 def fornecedores_listar(busca: str = "") -> List[Dict[str, Any]]:
     conn = conectar(); cur = conn.cursor()
@@ -344,30 +341,7 @@ def fornecedor_excluir(id_: int) -> None:
     cur.execute("DELETE FROM fornecedores WHERE id=?", (id_,))
     conn.commit(); conn.close()
 
-# ------ Atas (itens) ------
-def ata_item_inserir(d: Dict[str, Any]) -> int:
-    campos = ("fornecedor_id","pregao","cod_aghu","nome_item","qtde_total","vl_unit","vl_total","observacao")
-    vals = tuple(d.get(k) for k in campos)
-    conn = conectar(); cur = conn.cursor()
-    cur.execute(f"INSERT INTO atas_itens ({','.join(campos)}) VALUES ({','.join(['?']*len(campos))})", vals)
-    conn.commit(); novo_id = cur.lastrowid; conn.close()
-    return novo_id
-
-def ata_itens_listar(fornecedor_id: Optional[int] = None, busca_cod: str = "", busca_pregao: str = "") -> List[Dict[str, Any]]:
-    conn = conectar(); cur = conn.cursor()
-    sql = "SELECT * FROM atas_itens WHERE 1=1"; params: Tuple[Any, ...] = tuple()
-    if fornecedor_id:
-        sql += " AND fornecedor_id=?"; params += (fornecedor_id,)
-    if busca_cod:
-        sql += " AND cod_aghu LIKE ?"; params += (f"%{busca_cod}%",)
-    if busca_pregao:
-        sql += " AND pregao LIKE ?"; params += (f"%{busca_pregao}%",)
-    sql += " ORDER BY pregao, cod_aghu;"
-    cur.execute(sql, params)
-    rows = [dict(r) for r in cur.fetchall()]
-    conn.close(); return rows
-
-# ------ ATAS (cabeçalho) ------
+# ------ ATA - cabeçalho ------
 def ata_hdr_inserir(d: Dict[str,Any]) -> int:
     """
     d = {'fornecedor_id','numero','vigencia_ini','vigencia_fim','status','observacao'}
@@ -408,16 +382,27 @@ def atas_hdr_listar(fornecedor_id: Optional[int]=None, busca_numero: str="") -> 
     rows = [dict(r) for r in cur.fetchall()]
     conn.close(); return rows
 
-
 def ata_hdr_obter(ata_id: int) -> Optional[Dict[str, Any]]:
     conn = conectar(); cur = conn.cursor()
     cur.execute("SELECT * FROM atas WHERE id = ?", (ata_id,))
     row = cur.fetchone(); conn.close()
     return dict(row) if row else None
 
+# ------ ATA - itens ------
+def ata_item_inserir(d: Dict[str, Any]) -> int:
+    """Compatibilidade com fluxo legado (usa fornecedor_id/pregao direto)."""
+    campos = ("fornecedor_id","pregao","cod_aghu","nome_item","qtde_total","vl_unit","vl_total","observacao")
+    vals = tuple(d.get(k) for k in campos)
+    conn = conectar(); cur = conn.cursor()
+    cur.execute(f"INSERT INTO atas_itens ({','.join(campos)}) VALUES ({','.join(['?']*len(campos))})", vals)
+    conn.commit(); novo_id = cur.lastrowid; conn.close()
+    return novo_id
 
-# ------ ATAS (itens) ------
 def ata_item_inserir_v2(d: Dict[str,Any]) -> int:
+    """
+    Novo fluxo: recebe 'ata_id' e resolve fornecedor/pregão com base no cabeçalho.
+    d = {'ata_id','cod_aghu','nome_item','qtde_total','vl_unit','vl_total','observacao'}
+    """
     ata_id = d.get("ata_id")
     if not ata_id:
         raise ValueError("ata_item_inserir_v2: 'ata_id' é obrigatório.")
@@ -441,6 +426,20 @@ def ata_item_inserir_v2(d: Dict[str,Any]) -> int:
     cur.execute(f"INSERT INTO atas_itens ({','.join(campos)}) VALUES ({','.join(['?']*len(campos))})", vals)
     conn.commit(); iid = cur.lastrowid; conn.close()
     return iid
+
+def ata_itens_listar(fornecedor_id: Optional[int] = None, busca_cod: str = "", busca_pregao: str = "") -> List[Dict[str, Any]]:
+    conn = conectar(); cur = conn.cursor()
+    sql = "SELECT * FROM atas_itens WHERE 1=1"; params: Tuple[Any, ...] = tuple()
+    if fornecedor_id:
+        sql += " AND fornecedor_id=?"; params += (fornecedor_id,)
+    if busca_cod:
+        sql += " AND cod_aghu LIKE ?"; params += (f"%{busca_cod}%",)
+    if busca_pregao:
+        sql += " AND pregao LIKE ?"; params += (f"%{busca_pregao}%",)
+    sql += " ORDER BY pregao, cod_aghu;"
+    cur.execute(sql, params)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close(); return rows
 
 def ata_itens_listar_por_ata(ata_id: int) -> List[Dict[str,Any]]:
     conn = conectar(); cur = conn.cursor()
@@ -542,33 +541,6 @@ def empenho_cabecalhos_listar(fornecedor_id: Optional[int]=None, busca_numero: s
     cur.execute(sql, tuple(params))
     rows = [dict(r) for r in cur.fetchall()]
     conn.close(); return rows
-
-def empenho_itens_listar(numero_empenho: str, fornecedor_id: int) -> List[Dict[str,Any]]:
-    conn = conectar(); cur = conn.cursor()
-    cur.execute("""
-        SELECT id, cod_aghu, nome_item, vl_unit, vl_total, observacao
-          FROM empenhos
-         WHERE fornecedor_id=? AND IFNULL(numero_empenho,'-')=IFNULL(?, '-')
-         ORDER BY id ASC
-    """, (fornecedor_id, numero_empenho))
-    rows = [dict(r) for r in cur.fetchall()]
-    conn.close(); return rows
-
-def empenho_item_atualizar(item_id: int, d: Dict[str,Any]) -> None:
-    conn = conectar(); cur = conn.cursor()
-    cur.execute("""
-        UPDATE empenhos SET
-            cod_aghu=?, nome_item=?, vl_unit=?, vl_total=?, observacao=?,
-            atualizado_em = datetime('now','localtime')
-        WHERE id=?
-    """, (d.get("cod_aghu"), d.get("nome_item"), float(d.get("vl_unit") or 0),
-          float(d.get("vl_total") or 0), d.get("observacao"), item_id))
-    conn.commit(); conn.close()
-
-def empenho_item_excluir(item_id: int) -> None:
-    conn = conectar(); cur = conn.cursor()
-    cur.execute("DELETE FROM empenhos WHERE id=?", (item_id,))
-    conn.commit(); conn.close()
 
 # ------ Notas (cabeçalho + itens) ------
 def nota_inserir(d: Dict[str, Any]) -> int:
@@ -816,7 +788,6 @@ def mensagens_listar(tipo: Optional[str] = None, fornecedor_id: Optional[int] = 
     sql = "SELECT * FROM mensagens_padrao WHERE 1=1"; params: List[Any] = []
     if tipo:
         sql += " AND tipo=?"; params.append(tipo)
-    # inclui globais (NULL) E do fornecedor (quando fornecedor_id for dado)
     if fornecedor_id is not None:
         sql += " AND (fornecedor_id IS NULL OR fornecedor_id=?)"; params.append(fornecedor_id)
     if busca:
@@ -833,7 +804,7 @@ def mensagens_obter(id_: int) -> Optional[Dict[str, Any]]:
     row = cur.fetchone(); conn.close()
     return dict(row) if row else None
 
-# alias compatível com a tela
+# alias compatível com a tela antiga
 def mensagem_obter(id_: int) -> Optional[Dict[str, Any]]:
     return mensagens_obter(id_)
 
