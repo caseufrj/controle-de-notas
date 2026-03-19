@@ -145,6 +145,16 @@ def criar_tabelas() -> None:
     GROUP BY a.id;
     """)
 
+    # --- TRIGGERS: ao excluir um item da ATA, exclui os empenhos vinculados a ele ---
+    cur.execute("DROP TRIGGER IF EXISTS trg_ai_delete_empenhos;")
+    cur.execute("""
+    CREATE TRIGGER trg_ai_delete_empenhos
+    AFTER DELETE ON atas_itens
+    BEGIN
+        DELETE FROM empenhos WHERE ata_item_id = OLD.id;
+    END;
+    """)
+
     # -------- Empenhos --------
     cur.execute("""
     CREATE TABLE IF NOT EXISTS empenhos (
@@ -365,7 +375,17 @@ def ata_hdr_atualizar(ata_id: int, d: Dict[str,Any]) -> None:
     conn.commit(); conn.close()
 
 def ata_hdr_excluir(ata_id: int) -> None:
+    """
+    Exclui a ATA, todos os seus itens (CASCADE) e, ANTES, todos os empenhos
+    vinculados a QUALQUER item dessa ATA (garantia adicional além do trigger).
+    """
     conn = conectar(); cur = conn.cursor()
+    # 1) Apaga empenhos vinculados aos itens desta ATA
+    cur.execute("""
+        DELETE FROM empenhos
+         WHERE ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = ?)
+    """, (ata_id,))
+    # 2) Apaga a ATA (atas_itens caem por CASCADE)
     cur.execute("DELETE FROM atas WHERE id=?", (ata_id,))
     conn.commit(); conn.close()
 
