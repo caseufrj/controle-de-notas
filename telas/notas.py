@@ -58,86 +58,250 @@ def validar_data_ddmmaa(s: str) -> bool:
 
 
 class MoedaEntry(ttk.Entry):
-    """Entry que formata como moeda BR enquanto digita. value() retorna Decimal."""
+    """
+    Entry de moeda BR com digitação fluida:
+      • Enquanto DIGITA: sem "R$ " e sem separadores de milhar (apenas validação leve).
+      • Ao SAIR do campo (FocusOut): formata bonito (R$ 1.234,56).
+    A posição do cursor é preservada mesmo após a normalização.
+    """
     def __init__(self, master=None, prefixo=True, **kw):
         super().__init__(master, **kw)
         self._prefixo = prefixo
         self._sv = tk.StringVar()
         self.configure(textvariable=self._sv)
+        self._formatando = False
+        self._tem_foco = False
+
+        # eventos
         self._sv.trace_add("write", self._on_write)
         self.bind("<FocusIn>", self._on_focus_in)
         self.bind("<FocusOut>", self._on_focus_out)
-        self._formatando = False
+
+    # ---------- helpers ----------
+    def _texto_para_digitacao(self, s: str) -> str:
+        """
+        Modo digitação (sem prefixo, sem milhar). Mantém só dígitos e 1 vírgula.
+        Converte ponto para vírgula e permite no máx. 2 casas decimais.
+        """
+        s = (s or "").strip()
+        s = s.replace("R$", "").replace(" ", "")
+        s = s.replace(".", ",")
+        # mantém apenas dígitos e vírgulas
+        s = "".join(ch for ch in s if (ch.isdigit() or ch == ","))
+        # deixa apenas uma vírgula (a primeira)
+        if s.count(",") > 1:
+            partes = s.split(",")
+            s = partes[0] + "," + "".join(partes[1:]).replace(",", "")
+        # limita 2 decimais
+        if "," in s:
+            inteira, dec = s.split(",", 1)
+            dec = dec[:2]
+            s = inteira + "," + dec
+        return s
+
+    def _formatar_exibicao(self, s: str) -> str:
+        """Formata bonitinho para exibição (com prefixo, milhar, vírgula decimal)."""
+        if not s.strip():
+            return ""
+        dec = parse_moeda_br(s)  # aceita "1234,56"
+        return formatar_moeda_br(dec, com_prefixo=self._prefixo)
+
+    # ---------- eventos ----------
+    def _on_focus_in(self, *_):
+        self._tem_foco = True
+        # ao focar, tira o "R$" e milhar para digitar leve
+        atual = self._sv.get()
+        leve = self._texto_para_digitacao(atual)
+        self._sv.set(leve)
+        # não mexe no cursor aqui
+
+    def _on_focus_out(self, *_):
+        self._tem_foco = False
+        # ao sair, formata bonito
+        atual = self._sv.get()
+        if not atual.strip():
+            return
+        self._set_text_preservando_cursor(self._formatar_exibicao(atual), force_end=True)
 
     def _on_write(self, *_):
         if self._formatando:
             return
         self._formatando = True
-        texto = self._sv.get()
-        if not texto.strip():
-            self._formatando = False
-            return
-        dec = parse_moeda_br(texto)
-        self._sv.set(formatar_moeda_br(dec, com_prefixo=self._prefixo))
         try:
-            self.icursor("end")
+            old = self._sv.get()
+            # posição/cenário antes da mudança
+            try:
+                old_pos = self.index("insert")
+            except Exception:
+                old_pos = len(old)
+            dist_right = max(0, len(old) - old_pos)
+
+            # durante digitação: normaliza leve (sem "R$" e sem milhar)
+            if self._tem_foco:
+                novo = self._texto_para_digitacao(old)
+            else:
+                # fora do foco (caso programático), já deixa formatado bonito
+                novo = self._formatar_exibicao(old) if old.strip() else ""
+
+            # aplica preservando cursor relativo ao fim
+            self._sv.set(novo)
+            try:
+                new_len = len(novo)
+                new_pos = max(0, new_len - dist_right)
+                self.icursor(new_pos)
+            except Exception:
+                pass
+        finally:
+            self._formatando = False
+
+    # ---------- util ----------
+    def _set_text_preservando_cursor(self, texto: str, force_end: bool = False):
+        """
+        Seta texto mantendo a posição lógica do cursor.
+        Quando force_end=True, posiciona no final (usado ao sair do campo).
+        """
+        try:
+            old = self._sv.get()
+            old_pos = self.index("insert")
+            dist_right = max(0, len(old) - old_pos)
+        except Exception:
+            old = ""
+            dist_right = 0
+
+        self._sv.set(texto)
+        try:
+            if force_end:
+                self.icursor("end")
+            else:
+                new_len = len(texto)
+                new_pos = max(0, new_len - dist_right)
+                self.icursor(new_pos)
         except Exception:
             pass
-        self._formatando = False
 
-    def _on_focus_in(self, *_):
-        txt = self._sv.get().replace("R$", "").strip()
-        self._sv.set(txt)
-
-    def _on_focus_out(self, *_):
-        if not self._sv.get().strip():
-            return
-        dec = parse_moeda_br(self._sv.get())
-        self._sv.set(formatar_moeda_br(dec, com_prefixo=self._prefixo))
-
+    # ---------- API ----------
     def value(self) -> Decimal:
+        # aceita tanto o texto leve quanto formatado
         return parse_moeda_br(self._sv.get())
 
     def set_value(self, val):
-        self._sv.set(formatar_moeda_br(val, com_prefixo=self._prefixo))
-
+        # set programático já em modo bonito
+        val_fmt = formatar_moeda_br(val, com_prefixo=self._prefixo)
+        self._set_text_preservando_cursor(val_fmt, force_end=True)
 
 class DataEntry(ttk.Entry):
-    """Entry que mascara data DD/MM/AAAA; value() retorna 'DD/MM/AAAA' válido ou ''."""
+    """
+    Entry que mascara data DD/MM/AAAA com cursor estável.
+    • Enquanto digita: injeta '/' automaticamente, preservando a posição do cursor.
+    • Ao sair do campo: valida data; se inválida, mantém foco e avisa.
+    • F4: preenche com a data de hoje.
+    """
     def __init__(self, master=None, **kw):
         super().__init__(master, **kw)
         self._sv = tk.StringVar()
         self.configure(textvariable=self._sv)
-        self._sv.trace_add("write", self._on_write)
-        self.bind("<FocusOut>", self._on_focus_out)
-        self.bind("<F4>", self._hoje)  # atalho: F4 = hoje
+        self._formatando = False
+        self._tem_foco = False
 
-    def _on_write(self, *_):
-        cur = self.index("insert")
-        antes = self._sv.get()
-        mas = mascarar_data_ddmmaa(antes)
-        self._sv.set(mas)
+        # eventos
+        self._sv.trace_add("write", self._on_write)
+        self.bind("<FocusIn>", self._on_focus_in)
+        self.bind("<FocusOut>", self._on_focus_out)
+        self.bind("<F4>", self._hoje)
+
+        # melhora experiência com delete/backspace perto das barras
+        self.bind("<KeyPress>", self._on_keypress)
+
+    # ---------- utils ----------
+    def _texto_mascarado(self, s: str) -> str:
+        """Retorna s apenas com dígitos e formato 'DD/MM/AAAA' conforme tamanho."""
+        return mascarar_data_ddmmaa(s)
+
+    def _set_text_preservando_cursor(self, texto: str, force_end: bool = False):
+        """Aplica texto preservando posição lógica do cursor (pela distância até o fim)."""
         try:
-            if cur in (2, 5):
-                cur += 1
-            self.icursor(min(cur, len(mas)))
+            old = self._sv.get()
+            old_pos = self.index("insert")
+            dist_right = max(0, len(old) - old_pos)
+        except Exception:
+            dist_right = 0
+
+        self._sv.set(texto)
+        try:
+            if force_end:
+                self.icursor("end")
+            else:
+                new_len = len(texto)
+                new_pos = max(0, new_len - dist_right)
+                self.icursor(new_pos)
         except Exception:
             pass
 
+    # ---------- eventos ----------
+    def _on_focus_in(self, *_):
+        self._tem_foco = True
+        # nada especial aqui; deixamos o texto como está
+
     def _on_focus_out(self, *_):
+        self._tem_foco = False
         s = self._sv.get()
-        if s and not validar_data_ddmmaa(s):
+        if not s.strip():
+            return
+        # normaliza e valida
+        mas = self._texto_mascarado(s)
+        self._set_text_preservando_cursor(mas, force_end=True)
+        if not validar_data_ddmmaa(mas):
             messagebox.showwarning("Data", "Data inválida. Use DD/MM/AAAA.")
+            # volta o foco para o campo
             self.focus_set()
+            # opcional: selecionar tudo para facilitar correção
+            try:
+                self.selection_range(0, "end")
+            except Exception:
+                pass
+
+    def _on_write(self, *_):
+        if self._formatando:
+            return
+        self._formatando = True
+        try:
+            atual = self._sv.get()
+            # mascarar sem perder cursor
+            mascarado = self._texto_mascarado(atual)
+            self._set_text_preservando_cursor(mascarado, force_end=False)
+        finally:
+            self._formatando = False
+
+    def _on_keypress(self, event):
+        """
+        Pequenas gentilezas com backspace/delete ao lado das barras:
+        • Se tentar apagar exatamente sobre '/', movemos uma casa e apagamos o dígito.
+        """
+        try:
+            pos = self.index("insert")
+            s = self._sv.get()
+        except Exception:
+            return
+
+        if event.keysym in ("BackSpace", "Delete") and s:
+            if event.keysym == "BackSpace" and pos > 0 and s[pos-1:pos] == "/":
+                # pula a barra para a esquerda
+                self.icursor(pos-1)
+                return "break"
+            if event.keysym == "Delete" and pos < len(s) and s[pos:pos+1] == "/":
+                # pula a barra para a direita
+                self.icursor(pos+1)
+                return "break"
 
     def _hoje(self, *_):
         self._sv.set(datetime.now().strftime("%d/%m/%Y"))
 
+    # ---------- API ----------
     def value(self) -> str:
         return self._sv.get()
 
     def set_value(self, s: str):
-        self._sv.set(mascarar_data_ddmmaa(s))
+        self._set_text_preservando_cursor(mascarar_data_ddmmaa(s), force_end=True)
 
 
 # ===========================
