@@ -1,6 +1,7 @@
 # telas/atas_empenhos.py
 import tkinter as tk
 from tkinter import ttk, messagebox
+from tkinter.scrolledtext import ScrolledText
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
 import ast
@@ -8,7 +9,6 @@ import ast
 import banco
 # Reaproveita widgets e util de moeda/data da tela de Notas
 from telas.notas import MoedaEntry, DataEntry, formatar_moeda_br
-from tkinter.scrolledtext import ScrolledText
 
 
 class TelaAtasEmpenhos(tk.Frame):
@@ -37,6 +37,7 @@ class TelaAtasEmpenhos(tk.Frame):
         self._montar_aba_empenhos()
         self._emp_ata_item_id_sel = None
 
+        # mapa "texto_da_combo" -> ata_id (usado no handler da combo na aba Empenhos)
         self._map_emp_ata = {}
 
         # Estado
@@ -149,7 +150,6 @@ class TelaAtasEmpenhos(tk.Frame):
     # ========================================================
     def _debug_ata(self):
         """Abre um relatório com o estado atual da ATA no banco (itens, empenhos, view de saldo e triggers)."""
-        # 1) Qual ATA?
         ata_id = None
         if getattr(self, "_ata_id_editando", None):
             ata_id = self._ata_id_editando
@@ -167,7 +167,6 @@ class TelaAtasEmpenhos(tk.Frame):
             messagebox.showinfo("Debug", "Selecione o cabeçalho da ATA (ou carregue-a no formulário) e tente novamente.")
             return
 
-        # 2) Consultas
         try:
             conn = banco.conectar(); cur = conn.cursor()
 
@@ -179,8 +178,6 @@ class TelaAtasEmpenhos(tk.Frame):
                 hdr_lines.append(f"ATA id={r.get('ata_id')}  numero={r.get('numero')}  fornecedor_id={r.get('fornecedor_id')}")
                 hdr_lines.append(f"vigencia_ini={r.get('vigencia_ini')}  vigencia_fim={r.get('vigencia_fim')}  status={r.get('status')}")
                 hdr_lines.append(f"valor_total_ata={r.get('valor_total_ata')}  valor_empenhado={r.get('valor_empenhado') if 'valor_empenhado' in r else 'N/A'}  valor_consumido={r.get('valor_consumido')}  valor_saldo={r.get('valor_saldo')}")
-            else:
-                hdr_lines.append("(sem linha na view vw_saldo_ata_total)")
 
             cur.execute("""
                 SELECT id, cod_aghu, nome_item, qtde_total, vl_unit, vl_total, observacao
@@ -211,7 +208,6 @@ class TelaAtasEmpenhos(tk.Frame):
             messagebox.showerror("Debug", f"Falha ao consultar o banco: {ex}")
             return
 
-        # 3) Monta relatório
         def fmt_money(v):
             try:
                 return formatar_moeda_br(Decimal(str(v)).quantize(Decimal("0.01")))
@@ -249,7 +245,6 @@ class TelaAtasEmpenhos(tk.Frame):
 
         texto = "\n".join(lines)
 
-        # 4) Mostra janela
         top = tk.Toplevel(self)
         top.title(f"Debug ATA {ata_id}")
         top.geometry("900x600+120+80")
@@ -315,24 +310,7 @@ class TelaAtasEmpenhos(tk.Frame):
         tk.Label(frm, text="Vlr Unit*:").grid(row=3, column=2, sticky="w", padx=6)
         self.e_emp_vu = MoedaEntry(frm, width=18); self.e_emp_vu.grid(row=3, column=3, sticky="w", padx=6)
 
-        self.e_emp_cod.configure(state="readonly")
-        self.e_emp_nome.configure(state="readonly")
-        
-        # Vlr Unit com trava padrão
-        self._lock_vu = tk.BooleanVar(value=True)
-        # ao alternar a checkbox, muda o state do e_emp_vu
-        def _toggle_lock_vu(self):
-            try:
-                self.e_emp_vu.configure(state="readonly" if self._lock_vu.get() else "normal")
-            except Exception:
-                pass
-
-        frm_chk = tk.Frame(frm, bg="white")
-        frm_chk.grid(row=3, column=6, sticky="nw", padx=(10,0))
-        ttk.Checkbutton(frm_chk, text="Liberar edição de Vlr Unit", variable=self._lock_vu,
-                        command=self._toggle_lock_vu).pack(anchor="w")
-
-        # Trava/Libera edição do VU (padrão: travado)
+        # Vlr Unit com trava padrão (pode liberar pela checkbox)
         self._lock_vu = tk.BooleanVar(value=True)
         frm_chk = tk.Frame(frm, bg="white")
         frm_chk.grid(row=3, column=6, sticky="nw", padx=(10,0))
@@ -382,132 +360,12 @@ class TelaAtasEmpenhos(tk.Frame):
         self._ata_item_editando = None
         self._emp_item_editando = None
 
-    def _emp_listar_atas_do_fornecedor(self):
-        """
-        Preenche a combo 'Vincular à ATA' com as ATAs do fornecedor selecionado,
-        populando self._map_emp_ata = {texto_da_combo: ata_id}.
-        Depois de popular, se houver uma ATA selecionável, carrega seus itens na grade de baixo.
-        """
-        fid = self._fid()
-        # Limpa combo e mapa caso não haja fornecedor
-        if not fid:
-            self._map_emp_ata = {}
-            self.cb_emp_ata["values"] = []
-            return
-    
-        # Busca ATAs do fornecedor (view agrega saldo/itens)
-        rows = banco.atas_hdr_listar(fornecedor_id=fid)
-    
-        # Monta tuplas (texto visível -> ata_id)
-        vals = []
-        for r in rows:
-            num = r.get("numero", "")
-            Ini = self._fmt_data(r.get("vigencia_ini"))
-            Fim = self._fmt_data(r.get("vigencia_fim"))
-            texto = f"{num} ({Ini} → {Fim})"
-            vals.append((texto, r["ata_id"]))
-    
-        # Atualiza mapa e combo
-        self._map_emp_ata = dict(vals)
-        self.cb_emp_ata["values"] = [k for k, _ in vals]
-    
-        # Se a combo está vazia e temos opções, seleciona a primeira e carrega os itens
-        if vals and not self.cb_emp_ata.get():
-            self.cb_emp_ata.current(0)
-            self._emp_carregar_itens_da_ata()
-
+    # ---- helpers do VU (checkbox) ----
     def _toggle_lock_vu(self):
         try:
             self.e_emp_vu.configure(state="readonly" if self._lock_vu.get() else "normal")
         except Exception:
             pass
-
-    def _emp_carregar_itens_da_ata(self):
-        """Carrega na grade (tv_emp_ata) os itens da ATA escolhida na combo 'Vincular à ATA'."""
-        # Zera seleção atual de item
-        self._emp_ata_item_id_sel = None
-    
-        # Limpa a grid
-        for i in self.tv_emp_ata.get_children():
-            self.tv_emp_ata.delete(i)
-    
-        # Mapa pode não existir no primeiro disparo em alguns temas do Tk
-        map_atas = getattr(self, "_map_emp_ata", {})
-        if not isinstance(map_atas, dict):
-            map_atas = {}
-    
-        texto = self.cb_emp_ata.get() or ""
-        ata_id = map_atas.get(texto)
-        if not ata_id:
-            return  # nada a carregar
-    
-        # Busca itens da ATA e preenche a grid abaixo (cód, desc, vl unit, id)
-        itens = banco.ata_itens_listar_por_ata(ata_id)
-        for it in itens:
-            self.tv_emp_ata.insert(
-                "", "end",
-                values=(
-                    it.get("cod_aghu", ""),
-                    it.get("nome_item", ""),
-                    formatar_moeda_br(Decimal(str(it.get('vl_unit', 0))).quantize(Decimal("0.01"))),
-                    it.get("id")
-                )
-            )
-
-    def _emp_puxar_item_ata(self):
-        """
-        Handler de duplo clique na grade de itens da ATA (aba Empenhos).
-        Preenche o formulário do empenho com Cód/Descrição/Vlr Unit (travados por padrão).
-        """
-        sel = self.tv_emp_ata.selection()
-        if not sel:
-            return
-    
-        # Lê a linha selecionada: (cod, desc, vu_formatado, ata_item_id)
-        v = self.tv_emp_ata.item(sel[0], "values")
-        if not v or len(v) < 4:
-            return
-        cod, desc, vu_fmt, ata_item_id = v[0], v[1], v[2], v[3]
-    
-        # guarda o vínculo ao item da ATA
-        try:
-            self._emp_ata_item_id_sel = int(ata_item_id)
-        except Exception:
-            self._emp_ata_item_id_sel = None
-    
-        # 1) Cód (readonly)
-        self.e_emp_cod.configure(state="normal")
-        self.e_emp_cod.delete(0, "end")
-        self.e_emp_cod.insert(0, cod)
-        self.e_emp_cod.configure(state="readonly")
-    
-        # 2) Descrição (readonly)
-        self.e_emp_nome.configure(state="normal")
-        self.e_emp_nome.delete(0, "end")
-        self.e_emp_nome.insert(0, desc)
-        self.e_emp_nome.configure(state="readonly")
-    
-        # 3) Vlr Unit (vem da ATA) — readonly por padrão; checkbox pode liberar
-        try:
-            vu = Decimal(str(vu_fmt).replace("R$", "").strip().replace(".", "").replace(",", "."))
-        except Exception:
-            vu = Decimal("0")
-        self.e_emp_vu.set_value(vu)
-        # respeita travamento atual
-        self.e_emp_vu.configure(state="readonly" if getattr(self, "_lock_vu", tk.BooleanVar(value=True)).get() else "normal")
-    
-        # 4) Limpa Qtde e Vlr Total para o usuário informar e recalcular
-        self.e_emp_qt.delete(0, "end")
-        self.e_emp_vt.configure(state="normal"); self.e_emp_vt.delete(0, "end"); self.e_emp_vt.configure(state="readonly")
-        self._calc_total(self.e_emp_qt, self.e_emp_vu, self.e_emp_vt)
-    
-        # foco amigável (opcional): põe o cursor no Nº do empenho
-        try:
-            self.e_emp_num.focus_set()
-        except Exception:
-            pass
-    ``
-
 
     # =========================================================
     #                     Utilidades Comuns
@@ -609,7 +467,6 @@ class TelaAtasEmpenhos(tk.Frame):
         if not self._ata_id_editando:
             messagebox.showwarning("ATA", "Salve o cabeçalho da ATA antes de incluir itens."); return
 
-        # leitura
         try:
             qt = float((self.e_ai_qt.get() or "0").replace(",", "."))
         except Exception:
@@ -974,6 +831,116 @@ class TelaAtasEmpenhos(tk.Frame):
     def _emp_on_double_click(self, _evt):
         # Duplo clique no cabeçalho apenas expande
         pass
+
+    # =========================================================
+    #                Métodos da aba Empenhos (combo/itens)
+    # =========================================================
+    def _emp_listar_atas_do_fornecedor(self):
+        """
+        Preenche a combo 'Vincular à ATA' com as ATAs do fornecedor selecionado,
+        populando self._map_emp_ata = {texto_da_combo: ata_id}.
+        Depois de popular, se houver uma ATA selecionável, carrega seus itens na grade de baixo.
+        """
+        fid = self._fid()
+        if not fid:
+            self._map_emp_ata = {}
+            self.cb_emp_ata["values"] = []
+            return
+
+        rows = banco.atas_hdr_listar(fornecedor_id=fid)
+        vals = []
+        for r in rows:
+            num = r.get("numero", "")
+            ini = self._fmt_data(r.get("vigencia_ini"))
+            fim = self._fmt_data(r.get("vigencia_fim"))
+            texto = f"{num} ({ini} → {fim})"
+            vals.append((texto, r["ata_id"]))
+
+        self._map_emp_ata = dict(vals)
+        self.cb_emp_ata["values"] = [k for k, _ in vals]
+
+        if vals and not self.cb_emp_ata.get():
+            self.cb_emp_ata.current(0)
+            self._emp_carregar_itens_da_ata()
+
+    def _emp_carregar_itens_da_ata(self):
+        """Carrega na grade (tv_emp_ata) os itens da ATA escolhida na combo 'Vincular à ATA'."""
+        self._emp_ata_item_id_sel = None
+
+        # Limpa a grid
+        for i in self.tv_emp_ata.get_children():
+            self.tv_emp_ata.delete(i)
+
+        mapa = getattr(self, "_map_emp_ata", {}) or {}
+        texto = self.cb_emp_ata.get() or ""
+        ata_id = mapa.get(texto)
+        if not ata_id:
+            return
+
+        itens = banco.ata_itens_listar_por_ata(ata_id)
+        for it in itens:
+            self.tv_emp_ata.insert(
+                "", "end",
+                values=(
+                    it.get("cod_aghu", ""),
+                    it.get("nome_item", ""),
+                    formatar_moeda_br(Decimal(str(it.get('vl_unit', 0))).quantize(Decimal("0.01"))),
+                    it.get("id")
+                )
+            )
+
+    def _emp_puxar_item_ata(self):
+        """
+        Handler de duplo clique na grade de itens da ATA (aba Empenhos).
+        Preenche o formulário do empenho com Cód/Descrição/Vlr Unit (travados por padrão).
+        """
+        sel = self.tv_emp_ata.selection()
+        if not sel:
+            return
+
+        # Lê a linha selecionada: (cod, desc, vu_formatado, ata_item_id)
+        v = self.tv_emp_ata.item(sel[0], "values")
+        if not v or len(v) < 4:
+            return
+        cod, desc, vu_fmt, ata_item_id = v[0], v[1], v[2], v[3]
+
+        # guarda o vínculo ao item da ATA
+        try:
+            self._emp_ata_item_id_sel = int(ata_item_id)
+        except Exception:
+            self._emp_ata_item_id_sel = None
+
+        # 1) Cód (readonly)
+        self.e_emp_cod.configure(state="normal")
+        self.e_emp_cod.delete(0, "end")
+        self.e_emp_cod.insert(0, cod)
+        self.e_emp_cod.configure(state="readonly")
+
+        # 2) Descrição (readonly)
+        self.e_emp_nome.configure(state="normal")
+        self.e_emp_nome.delete(0, "end")
+        self.e_emp_nome.insert(0, desc)
+        self.e_emp_nome.configure(state="readonly")
+
+        # 3) Vlr Unit (vem da ATA) — readonly por padrão; checkbox pode liberar
+        try:
+            vu = Decimal(str(vu_fmt).replace("R$", "").strip().replace(".", "").replace(",", "."))
+        except Exception:
+            vu = Decimal("0")
+        self.e_emp_vu.set_value(vu)
+        # respeita travamento atual
+        self.e_emp_vu.configure(state="readonly" if self._lock_vu.get() else "normal")
+
+        # 4) Limpa Qtde e Vlr Total para o usuário informar e recalcular
+        self.e_emp_qt.delete(0, "end")
+        self.e_emp_vt.configure(state="normal"); self.e_emp_vt.delete(0, "end"); self.e_emp_vt.configure(state="readonly")
+        self._calc_total(self.e_emp_qt, self.e_emp_vu, self.e_emp_vt)
+
+        # foco amigável: Nº do empenho
+        try:
+            self.e_emp_num.focus_set()
+        except Exception:
+            pass
 
     # =========================================================
     #                         Helpers
