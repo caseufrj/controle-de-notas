@@ -1,41 +1,88 @@
-name: Build Windows EXE (PyInstaller)
+name: Build EXE (debug + release)
 
 on:
+  workflow_dispatch:        # permite disparar manualmente no GitHub → Actions → Run workflow
   push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
-  workflow_dispatch:
+    branches: [ "main" ]    # opcional: build automático nos commits da branch main
 
 jobs:
-  build-windows:
+  build:
     runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.11"    # use a mesma versão local se possível
 
       - name: Install dependencies
+        shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          if (Test-Path requirements.txt) { pip install -r requirements.txt }
+          if (Test-Path requirements.txt) {
+            pip install -r requirements.txt
+          }
           pip install pyinstaller
 
-      - name: Show tree
+      # (Opcional, mas recomendado) mostrar estrutura para depuração
+      - name: Print tree
+        shell: pwsh
         run: |
-          Get-ChildItem -Recurse | Format-List
+          Get-ChildItem -Recurse | Select-Object FullName
 
-      - name: Build EXE with PyInstaller
-        run: pyinstaller --name "ControleNotas" --onefile --console --add-data "telas;telas" main.py
+      # ========= DEBUG (COM CONSOLE) =========
+      - name: Build DEBUG (console)
+        shell: pwsh
+        env:
+          APP_PEPPER: ${{ secrets.APP_PEPPER }}   # opcional: define o pepper em build
+        run: |
+          pyinstaller --noconfirm --clean `
+            --name SICONAE-debug `
+            --onefile `
+            --console `
+            --hidden-import banco `
+            --hidden-import bd `
+            --hidden-import auth `
+            --hidden-import telas.sistema `
+            --hidden-import telas.dashboard `
+            --hidden-import telas.fornecedores `
+            --hidden-import telas.atas_empenhos `
+            --hidden-import telas.notas `
+            --hidden-import telas.orcamento `
+            --hidden-import telas.configuracoes `
+            --add-data ".\telas;.\telas" `
+            main.py
 
-      - name: Archive artifact
+      # ========= RELEASE (SEM CONSOLE) =========
+      - name: Build RELEASE (windowed)
+        shell: pwsh
+        env:
+          APP_PEPPER: ${{ secrets.APP_PEPPER }}   # opcional
+        run: |
+          pyinstaller --noconfirm --clean `
+            --name SICONAE `
+            --onefile `
+            --windowed `
+            --hidden-import banco `
+            --hidden-import bd `
+            --hidden-import auth `
+            --hidden-import telas.sistema `
+            --hidden-import telas.dashboard `
+            --hidden-import telas.fornecedores `
+            --hidden-import telas.atas_empenhos `
+            --hidden-import telas.notas `
+            --hidden-import telas.orcamento `
+            --hidden-import telas.configuracoes `
+            --add-data ".\telas;.\telas" `
+            main.py
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ControleNotas-win
+          name: siconae-exes
           path: |
-            dist/ControleNotas.exe
+            dist/SICONAE-debug.exe
+            dist/SICONAE.exe
