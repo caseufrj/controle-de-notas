@@ -31,7 +31,7 @@ jobs:
           Get-ChildItem -Recurse | Format-List
 
       - name: Build EXE with PyInstaller
-        run: pyinstaller --name "ControleNotas" --onefile --noconsole --add-data "telas;telas" main.py
+        run: pyinstaller --name "ControleNotas" --onefile --console --add-data "telas;telas" main.py
 
       - name: Archive artifact
         uses: actions/upload-artifact@v4
