@@ -237,7 +237,7 @@ def montar_tela_inicial(root: tk.Tk):
             if CAMINHO_LOGO and os.path.exists(CAMINHO_LOGO):
                 try:
                     img = tk.PhotoImage(file=CAMINHO_LOGO)
-                    max_w = 100
+                    max_w = 250
                     iw = img.width()
                     if iw > max_w:
                         fator = max(1, iw // max_w)
@@ -253,10 +253,10 @@ def montar_tela_inicial(root: tk.Tk):
 
             # ✅ Reposiciona as JANELAS dos botões (sem recriar os botões)
             if getattr(root, "_login_win", None):
-                canvas.coords(root._login_win, cx, y_logo + 96)
+                canvas.coords(root._login_win, cx, y_logo + 150)
                 canvas.tag_raise(root._login_win)   # sempre acima do desenho
             if getattr(root, "_reg_win", None):
-                canvas.coords(root._reg_win, cx, y_logo + 150)
+                canvas.coords(root._reg_win, cx, y_logo + 200)
                 canvas.tag_raise(root._reg_win)
 
             # Barra inferior
