@@ -598,32 +598,85 @@ class TelaAtasEmpenhos(tk.Frame):
                 break
 
     def _popular_itens_ata(self, parent_iid, ata_id: int):
-        # Itens da ATA sempre aparecem; exibimos Qtde Empenhada e Saldo (por quantidade)
-        itens = banco.ata_itens_listar_por_ata_com_saldo(ata_id)
+        """
+        Popula os itens da ATA mostrando:
+        - Qtde total, Empenhada (qtde) e Saldo (qtde)
+        - Empenhado (R$) e Consumido (R$) por item
+        """
+        # Consulta única (melhor performance)
+        conn = banco.conectar(); cur = conn.cursor()
 
-        # Subcabeçalho mapeado às 7 colunas do treeview
+        # Itens da ATA
+        cur.execute("""
+            SELECT id, cod_aghu, nome_item, qtde_total, vl_unit, vl_total, observacao
+              FROM atas_itens
+             WHERE ata_id=?
+             ORDER BY id
+        """, (ata_id,))
+        itens = [dict(x) for x in cur.fetchall()]
+
+        # Empenhado por item (valor)
+        cur.execute("""
+            SELECT ata_item_id AS id, IFNULL(SUM(vl_total),0) AS emp
+              FROM empenhos
+             WHERE ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id=?)
+             GROUP BY ata_item_id
+        """, (ata_id,))
+        emp_map = {int(r["id"]): float(r["emp"] or 0.0) for r in cur.fetchall()}
+
+        # Consumido por item (valor)
+        cur.execute("""
+            SELECT ata_item_id AS id, IFNULL(SUM(vl_total),0) AS cons
+              FROM notas_itens
+             WHERE ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id=?)
+             GROUP BY ata_item_id
+        """, (ata_id,))
+        cons_map = {int(r["id"]): float(r["cons"] or 0.0) for r in cur.fetchall()}
+
+        # Empenhado (qtde) já vem da view nova usada em outro lugar,
+        # aqui calculamos pelas quantidades de empenhos (se houver campo 'qtde' na tabela empenhos).
+        cur.execute("""
+            SELECT ata_item_id AS id, IFNULL(SUM(qtde),0) AS qt_emp
+              FROM empenhos
+             WHERE ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id=?)
+             GROUP BY ata_item_id
+        """, (ata_id,))
+        qt_emp_map = {int(r["id"]): float(r["qt_emp"] or 0.0) for r in cur.fetchall()}
+
+        conn.close()
+
+        # Subcabeçalho mapeado às 7 colunas visíveis do treeview
+        # [forn, numero, vig_i, vig_f, status, qtd, saldo]
         self.tv_atas.insert(
             parent_iid, "end", text="",
-            values=("Itens", "Cód AGHU", "Qtde ATA", "Empenhado", "Saldo", "Vlr Unit", "Vlr Total", "", "", ""),
+            values=("Itens", "Cód AGHU", "Qtde ATA", "Empenhado (Qtde)", "Saldo (Qtde)",
+                    "Empenhado (R$)", "Consumido (R$)", "", "", ""),
             tags=("subheader",)
         )
 
         for idx, it in enumerate(itens, start=1):
-            qt_total = it.get("qtde_total", 0)
-            qt_emp   = it.get("qtde_empenhada", 0)
-            qt_saldo = it.get("qtde_saldo", 0)
+            iid = int(it["id"])
+            qt_total = float(it.get("qtde_total", 0) or 0.0)
+            qt_emp   = float(qt_emp_map.get(iid, 0.0))
+            qt_saldo = max(0.0, qt_total - qt_emp)
+
             vu = Decimal(str(it.get("vl_unit",0))).quantize(Decimal("0.01"))
             vt = Decimal(str(it.get("vl_total",0))).quantize(Decimal("0.01"))
+
+            vl_emp = Decimal(str(emp_map.get(iid, 0.0))).quantize(Decimal("0.01"))
+            vl_con = Decimal(str(cons_map.get(iid, 0.0))).quantize(Decimal("0.01"))
+
             payload = {
-                "id": it["id"], "ata_id": ata_id,
+                "id": iid, "ata_id": ata_id,
                 "cod": it.get("cod_aghu",""), "nome": it.get("nome_item",""),
                 "qt": qt_total, "qt_empenhada": qt_emp, "qt_saldo": qt_saldo,
                 "vu": float(vu), "vt": float(vt), "obs": it.get("observacao","") or ""
             }
+            # Numa única linha exibimos as visões de quantidade e de valor
             self.tv_atas.insert(
                 parent_iid, "end", text="",
-                values=(f"Item {idx}", payload["cod"], str(qt_total), str(qt_emp), str(qt_saldo),
-                        formatar_moeda_br(vu), formatar_moeda_br(vt),
+                values=(f"Item {idx}", payload["cod"], f"{qt_total:.0f}", f"{qt_emp:.0f}", f"{qt_saldo:.0f}",
+                        formatar_moeda_br(vl_emp), formatar_moeda_br(vl_con),
                         "", str(payload["id"]), str(payload)),
                 tags=("item",)
             )
@@ -682,6 +735,16 @@ class TelaAtasEmpenhos(tk.Frame):
         if not (cod and nome and qt and vu):
             messagebox.showwarning("Empenho", "Preencha cód, descrição, qtde e Vlr Unit."); return
 
+        # Se não estiver vinculado à ATA, avisa (opcional continuar)
+        if not self._emp_ata_item_id_sel:
+            if not messagebox.askyesno(
+                "Empenho sem vínculo",
+                "Este empenho não está vinculado a um item da ATA.\n"
+                "Sem vínculo, os saldos da ATA não serão afetados.\n\n"
+                "Deseja salvar mesmo assim?"
+            ):
+                return
+
         d = {
             "fornecedor_id": fid, "cod_aghu": cod, "nome_item": nome,
             "qtde": qt, "vl_unit": vu, "vl_total": vt,
@@ -697,7 +760,7 @@ class TelaAtasEmpenhos(tk.Frame):
                 banco.empenho_inserir(d)
             self._carregar_empenhos(refresh_num=num)
 
-            # Atualiza ATA em edição (ver Empenhado/Saldo imediatamente)
+            # Atualiza ATA em edição (ver Empenhado/Saldo e valores imediatamente)
             if getattr(self, "_ata_id_editando", None):
                 self._carregar_atas(refresh_items_of=self._ata_id_editando)
 
