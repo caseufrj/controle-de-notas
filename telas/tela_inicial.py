@@ -233,7 +233,7 @@ def montar_tela_inicial(root: tk.Tk):
                                font=("Segoe UI", 12), fill="#1f4c77", tags=("ui",))
 
             # Logo (com redimensionamento leve por subsample)
-            y_logo = 150
+            y_logo = 300
             if CAMINHO_LOGO and os.path.exists(CAMINHO_LOGO):
                 try:
                     img = tk.PhotoImage(file=CAMINHO_LOGO)
