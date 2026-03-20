@@ -16,19 +16,50 @@ BG_TOP = "#cfe9ff"
 BG_MID = "#e8f4ff"
 BG_BOTTOM = "#f6fbff"
 
+# Se quiser forçar sem gradiente (debug/performance), defina no Windows:
+# setx SICONAE_NO_GRADIENT 1
+NO_GRADIENT = os.environ.get("SICONAE_NO_GRADIENT") == "1"
+
 # ---------- utils visual ----------
-def desenhar_gradiente(canvas: tk.Canvas, w: int, h: int, top: str, mid: str, bottom: str) -> None:
-    def hex_to_rgb(hx): return tuple(int(hx[i:i+2], 16) for i in (1,3,5))
-    t = hex_to_rgb(top); m = hex_to_rgb(mid); b = hex_to_rgb(bottom)
-    for y in range(h):
-        ratio = y / (h - 1) if h > 1 else 0
-        if ratio <= 0.5:
-            r2 = ratio / 0.5
-            rgb = tuple(int(t[i] + (m[i] - t[i]) * r2) for i in range(3))
-        else:
-            r2 = (ratio - 0.5) / 0.5
-            rgb = tuple(int(m[i] + (b[i] - m[i]) * r2) for i in range(3))
-        canvas.create_line(0, y, w, y, fill="#%02x%02x%02x" % rgb)
+def _hex_to_rgb(hx: str):
+    return tuple(int(hx[i:i+2], 16) for i in (1,3,5))
+
+def desenhar_gradiente(canvas: tk.Canvas, w: int, h: int, top: str, mid: str, bottom: str, steps: int = 120) -> None:
+    """
+    Gradiente vertical leve (no máximo 'steps' retângulos).
+    Evita desenhar 1 linha por pixel para não estourar GDI/recursos do Tk.
+    """
+    canvas.delete("grad")  # apaga só o que for gradiente
+    if w <= 0 or h <= 0 or steps <= 0:
+        return
+
+    t = _hex_to_rgb(top); m = _hex_to_rgb(mid); b = _hex_to_rgb(bottom)
+
+    # Primeira metade: top -> mid | Segunda: mid -> bottom
+    half = max(1, steps // 2)
+    # Altura de cada faixa
+    band_h = max(1, h // steps)
+
+    def interp(c1, c2, r):
+        return tuple(int(c1[i] + (c2[i] - c1[i]) * r) for i in range(3))
+
+    y = 0
+    # top -> mid
+    for i in range(half):
+        r = i / max(1, half - 1)
+        rgb = interp(t, m, r)
+        color = "#%02x%02x%02x" % rgb
+        canvas.create_rectangle(0, y, w, min(h, y + band_h), outline="", fill=color, tags=("grad",))
+        y += band_h
+
+    # mid -> bottom
+    remain = steps - half
+    for j in range(remain):
+        r = j / max(1, remain - 1)
+        rgb = interp(m, b, r)
+        color = "#%02x%02x%02x" % rgb
+        canvas.create_rectangle(0, y, w, min(h, y + band_h), outline="", fill=color, tags=("grad",))
+        y += band_h
 
 def estilizar(root: tk.Tk):
     st = ttk.Style(root)
@@ -55,6 +86,13 @@ def desmontar_tela_inicial(root: tk.Tk):
             except Exception:
                 pass
         root._tela_inicial_widgets = []
+    # cancela render pendente (debounce)
+    if hasattr(root, "_render_after") and root._render_after:
+        try:
+            root.after_cancel(root._render_after)
+        except Exception:
+            pass
+        root._render_after = None
 
 def montar_tela_inicial(root: tk.Tk):
     print("[DEBUG] tela_inicial: montar_tela_inicial()")
@@ -100,44 +138,64 @@ def montar_tela_inicial(root: tk.Tk):
 
     # guardar referências para destruir depois
     root._tela_inicial_widgets = [canvas]
+    root._render_after = None  # para debounce
 
-    def render(_evt=None):
-        canvas.delete("all")
-        w, h = root.winfo_width(), root.winfo_height()
-        desenhar_gradiente(canvas, w, h, BG_TOP, BG_MID, BG_BOTTOM)
-        cx = w // 2
+    def render():
+        try:
+            canvas.delete("all")
+            w, h = root.winfo_width(), root.winfo_height()
+            if not NO_GRADIENT:
+                # gradiente leve e sem tempestade de desenho
+                desenhar_gradiente(canvas, w, h, BG_TOP, BG_MID, BG_BOTTOM, steps=120)
+            else:
+                # fundo sólido (fallback)
+                canvas.create_rectangle(0, 0, w, h, fill=BG_MID, outline="")
 
-        canvas.create_text(cx, 70, text=TITULO, font=("Segoe UI Semibold", 20), fill="#113a5e")
-        canvas.create_text(cx, 108, text=APP_NAME, font=("Segoe UI", 12), fill="#1f4c77")
+            cx = w // 2
+            canvas.create_text(cx, 70, text=TITULO, font=("Segoe UI Semibold", 20), fill="#113a5e")
+            canvas.create_text(cx, 108, text=APP_NAME, font=("Segoe UI", 12), fill="#1f4c77")
 
-        y_logo = 150
-        if CAMINHO_LOGO and os.path.exists(CAMINHO_LOGO):
-            try:
-                img = tk.PhotoImage(file=CAMINHO_LOGO)
-                # manter referência para não perder a imagem
-                canvas.image = img
-                canvas.create_image(cx, y_logo, image=img)
-            except Exception:
+            y_logo = 150
+            if CAMINHO_LOGO and os.path.exists(CAMINHO_LOGO):
+                try:
+                    img = tk.PhotoImage(file=CAMINHO_LOGO)
+                    # manter referência para não perder a imagem
+                    canvas.image = img
+                    canvas.create_image(cx, y_logo, image=img)
+                except Exception:
+                    canvas.create_oval(cx - 34, y_logo - 34, cx + 34, y_logo + 34, outline="#0d3758", width=3)
+            else:
                 canvas.create_oval(cx - 34, y_logo - 34, cx + 34, y_logo + 34, outline="#0d3758", width=3)
-        else:
-            canvas.create_oval(cx - 34, y_logo - 34, cx + 34, y_logo + 34, outline="#0d3758", width=3)
 
-        # LOGIN
-        btn_login = ttk.Button(root, text="LOGIN", style="Primary.TButton",
-                               command=lambda: abrir_modal_login(root))
-        canvas.create_window(cx, y_logo + 96, window=btn_login, anchor="center")
-        root._tela_inicial_widgets.append(btn_login)
+            # LOGIN
+            btn_login = ttk.Button(root, text="LOGIN", style="Primary.TButton",
+                                   command=lambda: abrir_modal_login(root))
+            canvas.create_window(cx, y_logo + 96, window=btn_login, anchor="center")
+            root._tela_inicial_widgets.append(btn_login)
 
-        # REGISTRO
-        btn_reg = ttk.Button(root, text="REGISTRO / CADASTRO", style="Outline.TButton",
-                             command=lambda: abrir_modal_registro(root))
-        canvas.create_window(cx, y_logo + 150, window=btn_reg, anchor="center")
-        root._tela_inicial_widgets.append(btn_reg)
+            # REGISTRO
+            btn_reg = ttk.Button(root, text="REGISTRO / CADASTRO", style="Outline.TButton",
+                                 command=lambda: abrir_modal_registro(root))
+            canvas.create_window(cx, y_logo + 150, window=btn_reg, anchor="center")
+            root._tela_inicial_widgets.append(btn_reg)
 
-        canvas.create_rectangle(0, h - 48, w, h, fill="#0b2f4a", width=0)
+            canvas.create_rectangle(0, h - 48, w, h, fill="#0b2f4a", width=0)
+        finally:
+            # limpa a flag do debounce
+            root._render_after = None
 
-    root.bind("<Configure>", render)
-    root.after(30, render)
+    def schedule_render(_evt=None):
+        # Debounce: renderiza no máx. a cada 60ms, cancelando chamadas anteriores
+        if root._render_after:
+            try:
+                root.after_cancel(root._render_after)
+            except Exception:
+                pass
+        root._render_after = root.after(60, render)
+
+    root.bind("<Configure>", schedule_render)
+    # Render inicial
+    schedule_render()
 
 # ---------- modais ----------
 def abrir_modal_login(root: tk.Tk):
