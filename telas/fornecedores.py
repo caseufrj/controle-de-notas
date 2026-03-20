@@ -20,7 +20,7 @@ class TelaFornecedores(tk.Frame):
         self.page_size = 20
         self.page = 1
         self._dados_filtrados = []
-        self._endereco_editavel = False  # <--- NOVO: controla se rua/bairro/município/estado podem ser editados
+        self._endereco_editavel = False  # controla se rua/bairro/município/estado podem ser editados
 
         # ----- Lado esquerdo: lista + busca -----
         left = tk.Frame(self, bg="white")
@@ -35,15 +35,15 @@ class TelaFornecedores(tk.Frame):
         ttk.Button(barra, text="Novo", command=self._novo).pack(side="left", padx=4)
         ttk.Button(barra, text="Excluir", command=self._excluir).pack(side="left", padx=4)
 
-        cols = ("id","nome","email","telefone","municipio","estado")
+        cols = ("id", "nome", "email", "telefone", "municipio", "estado")
         self.tv = ttk.Treeview(left, columns=cols, show="headings", height=16)
-        cabecas = ("ID","Nome","E-mail","Telefone","Município","Estado")
-        larguras = (60,220,200,120,120,80)
+        cabecas = ("ID", "Nome", "E-mail", "Telefone", "Município", "Estado")
+        larguras = (60, 220, 200, 120, 120, 80)
         for c, t, w in zip(cols, cabecas, larguras):
             self.tv.heading(c, text=t)
             self.tv.column(c, width=w, anchor="w")
         self.tv.column("id", anchor="center")
-        self.tv.pack(fill="both", expand=True, pady=(8,0))
+        self.tv.pack(fill="both", expand=True, pady=(8, 0))
         self.tv.bind("<<TreeviewSelect>>", lambda e: self._carregar_form())
 
         # ---- Paginação (controles) ----
@@ -79,7 +79,7 @@ class TelaFornecedores(tk.Frame):
         self._id_var = tk.StringVar()
 
         tk.Label(right, text="Cadastro de Fornecedores",
-                 font=("Segoe UI", 12, "bold"), bg="white").pack(anchor="w", pady=(0,8))
+                 font=("Segoe UI", 12, "bold"), bg="white").pack(anchor="w", pady=(0, 8))
 
         self.e_nome = row("Razão Social*:")
 
@@ -97,9 +97,9 @@ class TelaFornecedores(tk.Frame):
         self.e_email = row("E-mail:")
         self.e_tel = row("Telefone:")
 
-        # Campos de endereço iniciam bloqueados
+        # Campos de endereço iniciam bloqueados e não são focáveis via Tab
         for ent in (self.e_rua, self.e_bairro, self.e_municipio, self.e_estado):
-            ent.config(state="readonly")
+            ent.config(state="readonly", takefocus=0)
 
         # Observação com borda visível
         lf_obs = ttk.LabelFrame(right, text="Observação:")
@@ -131,16 +131,17 @@ class TelaFornecedores(tk.Frame):
         return "".join(ch for ch in s if ch.isdigit())
 
     def _set_endereco_editavel(self, editavel: bool):
-        """Ativa/Desativa edição manual de rua/bairro/município/estado."""
+        """Ativa/Desativa edição manual de rua/bairro/município/estado e sua focabilidade."""
         self._endereco_editavel = editavel
         state = "normal" if editavel else "readonly"
+        takefocus = 1 if editavel else 0
         for ent in (self.e_rua, self.e_bairro, self.e_municipio, self.e_estado):
-            # preserva o texto e só muda o state
+            # preserva o texto e só muda o estado e a focabilidade
             cur = ent.get()
             ent.config(state="normal")
             ent.delete(0, "end")
             ent.insert(0, cur)
-            ent.config(state=state)
+            ent.config(state=state, takefocus=takefocus)
 
     # ----------------- ViaCEP (CEP -> endereço) -----------------
     def _buscar_cep(self, cep: str):
@@ -171,7 +172,8 @@ class TelaFornecedores(tk.Frame):
                 for ent in (self.e_rua, self.e_bairro, self.e_municipio, self.e_estado):
                     ent.config(state="normal")
                     ent.delete(0, "end")
-                self.e_rua.focus_set()
+                # Foco no Endereço após a navegação padrão do Tk
+                self.after_idle(self.e_rua.focus_set)
             else:
                 # mantém bloqueado e não altera nada
                 self._set_endereco_editavel(False)
@@ -191,8 +193,8 @@ class TelaFornecedores(tk.Frame):
         # garante bloqueio (modo automático)
         self._set_endereco_editavel(False)
 
-        # Foco natural no Número
-        self.e_numero.focus_set()
+        # Foco natural no Número (após a navegação padrão do Tk)
+        self.after_idle(self.e_numero.focus_set)
 
     def _buscar_cep_event(self, _evt):
         self._buscar_cep(self.e_cep.get())
@@ -232,12 +234,12 @@ class TelaFornecedores(tk.Frame):
         end = min(start + self.page_size, total)
         for f in self._dados_filtrados[start:end]:
             self.tv.insert("", "end", values=(
-                f.get("id",""),
-                f.get("nome",""),
-                f.get("email",""),
-                f.get("telefone",""),
-                f.get("municipio",""),
-                f.get("estado",""),
+                f.get("id", ""),
+                f.get("nome", ""),
+                f.get("email", ""),
+                f.get("telefone", ""),
+                f.get("municipio", ""),
+                f.get("estado", ""),
             ))
 
         self.lbl_pag.config(text=f"Página {self.page} de {total_pages} • Registros: {total}")
@@ -300,22 +302,22 @@ class TelaFornecedores(tk.Frame):
             return
 
         self._novo()
-        self._id_var.set(str(d.get("id","")))
-        self.e_nome.insert(0, d.get("nome",""))
+        self._id_var.set(str(d.get("id", "")))
+        self.e_nome.insert(0, d.get("nome", ""))
 
-        cep_val = d.get("cep","")
+        cep_val = d.get("cep", "")
         self.e_cep.insert(0, cep_val)
 
         # Preenche endereço (mantém bloqueado)
-        self._entry_set_readonly(self.e_rua, d.get("rua",""))
-        self.e_numero.insert(0, d.get("numero",""))
-        self.e_compl.insert(0, d.get("complemento",""))
-        self._entry_set_readonly(self.e_bairro, d.get("bairro",""))
-        self._entry_set_readonly(self.e_municipio, d.get("municipio",""))
-        self._entry_set_readonly(self.e_estado, d.get("estado",""))
-        self.e_email.insert(0, d.get("email",""))
-        self.e_tel.insert(0, d.get("telefone",""))
-        self.txt_obs.insert("1.0", d.get("observacao",""))
+        self._entry_set_readonly(self.e_rua, d.get("rua", ""))
+        self.e_numero.insert(0, d.get("numero", ""))
+        self.e_compl.insert(0, d.get("complemento", ""))
+        self._entry_set_readonly(self.e_bairro, d.get("bairro", ""))
+        self._entry_set_readonly(self.e_municipio, d.get("municipio", ""))
+        self._entry_set_readonly(self.e_estado, d.get("estado", ""))
+        self.e_email.insert(0, d.get("email", ""))
+        self.e_tel.insert(0, d.get("telefone", ""))
+        self.txt_obs.insert("1.0", d.get("observacao", ""))
 
     def _coletar_form(self):
         return {
