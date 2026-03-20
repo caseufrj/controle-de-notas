@@ -1030,3 +1030,111 @@ def itens_rascunho_limpar_por_fornecedor(fornecedor_id: Optional[int]) -> None:
     else:
         cur.execute("DELETE FROM itens_rascunho WHERE fornecedor_id = ?", (fornecedor_id,))
     conn.commit(); conn.close()
+
+# ===============================================================
+# Indicadores / Agregações por período
+# ===============================================================
+
+from typing import List, Dict, Any, Optional
+
+def consumo_por_ata(fornecedor_id: int,
+                    data_ini: Optional[str] = None,
+                    data_fim: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Retorna lista de ATAs do fornecedor com:
+      - ata_id, pregao (numero),
+      - vl_empenhado (soma de empenhos dos itens da ata),
+      - vl_consumido (soma de notas_itens no período),
+      - perc_consumo (consumido/empenhado * 100, se empenhado > 0)
+    Período aplicado em notas_itens.data_uso (YYYY-MM-DD). Se None, sem filtro.
+    """
+    conn = conectar(); cur = conn.cursor()
+
+    where_periodo = ""
+    params: Dict[str, Any] = {"forn": fornecedor_id}
+    if data_ini:
+        where_periodo += " AND date(ni.data_uso) >= date(:data_ini)"
+        params["data_ini"] = data_ini
+    if data_fim:
+        where_periodo += " AND date(ni.data_uso) <= date(:data_fim)"
+        params["data_fim"] = data_fim
+
+    sql = f"""
+        SELECT
+            a.id AS ata_id,
+            a.numero AS pregao,
+
+            -- Empenhado total desta ATA (não filtrado por data)
+            IFNULL((
+                SELECT SUM(e.vl_total)
+                  FROM empenhos e
+                  JOIN atas_itens ai2 ON ai2.id = e.ata_item_id
+                 WHERE ai2.ata_id = a.id
+            ), 0) AS vl_empenhado,
+
+            -- Consumido no período
+            IFNULL((
+                SELECT SUM(ni.vl_total)
+                  FROM notas_itens ni
+                 WHERE ni.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = a.id)
+                   {where_periodo}
+            ), 0) AS vl_consumido
+
+        FROM atas a
+        WHERE a.fornecedor_id = :forn
+        ORDER BY a.numero
+    """
+    cur.execute(sql, params)
+    rows = []
+    for r in cur.fetchall():
+        emp = float(r["vl_empenhado"] or 0.0)
+        cons = float(r["vl_consumido"] or 0.0)
+        perc = (cons / emp * 100.0) if emp > 0 else 0.0
+        rows.append({
+            "ata_id": r["ata_id"],
+            "pregao": r["pregao"],
+            "vl_empenhado": emp,
+            "vl_consumido": cons,
+            "perc_consumo": perc
+        })
+    conn.close()
+    return rows
+
+
+def ranking_fornecedores_consumo(data_ini: Optional[str] = None,
+                                 data_fim: Optional[str] = None,
+                                 limit: int = 10) -> List[Dict[str, Any]]:
+    """
+    Ranking de fornecedores por valor CONSUMIDO (somatório de notas_itens.vl_total)
+    no período informado (YYYY-MM-DD). Se data_ini/data_fim None, sem filtro.
+    Resolve fornecedor por COALESCE(empenhos.fornecedor_id, atas_itens.fornecedor_id).
+    """
+    conn = conectar(); cur = conn.cursor()
+    where = "WHERE 1=1"
+    params: Dict[str, Any] = {"limit": int(limit)}
+
+    if data_ini:
+        where += " AND date(ni.data_uso) >= date(:data_ini)"
+        params["data_ini"] = data_ini
+    if data_fim:
+        where += " AND date(ni.data_uso) <= date(:data_fim)"
+        params["data_fim"] = data_fim
+
+    sql = f"""
+        SELECT
+            COALESCE(e.fornecedor_id, ai.fornecedor_id) AS fornecedor_id,
+            IFNULL(f.nome, '(sem fornecedor)') AS fornecedor_nome,
+            IFNULL(SUM(ni.vl_total), 0) AS valor_consumido
+        FROM notas_itens ni
+        LEFT JOIN empenhos e  ON e.id  = ni.empenho_id
+        LEFT JOIN atas_itens ai ON ai.id = ni.ata_item_id
+        LEFT JOIN fornecedores f ON f.id = COALESCE(e.fornecedor_id, ai.fornecedor_id)
+        {where}
+        GROUP BY fornecedor_id, fornecedor_nome
+        ORDER BY valor_consumido DESC
+        LIMIT :limit
+    """
+    cur.execute(sql, params)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
