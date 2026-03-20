@@ -101,6 +101,8 @@ def abrir_app_principal(root: tk.Tk, auth: Dict[str, Any]):
     Troque este placeholder pela chamada da SUA tela principal.
     Exemplo: importar telas.dashboard e abrir a janela que você já usa.
     """
+    from telas.dashboard import abrir_dashboard
+    abrir_dashboard(root, auth)   # você implementa no dashboard a recepção do 'auth'
     # Exemplo mínimo (placeholder):
     win = tk.Toplevel(root); win.title("SICONAE - Principal")
     win.geometry("800x500")
