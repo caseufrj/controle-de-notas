@@ -893,9 +893,9 @@ class AnalisesWindow(tk.Toplevel):
         leg_x0 = w - 160
         leg_y0 = (title_h + 10)
         cv.create_rectangle(leg_x0, leg_y0, leg_x0 + 12, leg_y0 + 12, fill=cor_empenhado, outline=cor_empenhado)
-        cv.create_text(leg_x0 - 6, leg_y0 + 6, text="Parte A", anchor="e", font=("Segoe UI", 8), fill="#333")
+        cv.create_text(leg_x0 - 6, leg_y0 + 6, text="Empenhado", anchor="e", font=("Segoe UI", 8), fill="#333")
         cv.create_rectangle(leg_x0, leg_y0 + 16, leg_x0 + 12, leg_y0 + 28, fill=cor_restante, outline=cor_restante)
-        cv.create_text(leg_x0 - 6, leg_y0 + 22, text="Restante", anchor="e", font=("Segoe UI", 8), fill="#333")
+        cv.create_text(leg_x0 - 6, leg_y0 + 22, text="Total Ata", anchor="e", font=("Segoe UI", 8), fill="#333")
 
         # ---- Área útil com margem extra no topo ----
         top_pad    = max(8, head_h)
