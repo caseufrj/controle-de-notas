@@ -295,6 +295,11 @@ class AnalisesWindow(tk.Toplevel):
 
         self._context = {}
 
+        # --- REDESENHO REATIVO (NOVO) ---
+        self._redraw_after = None
+        for cv in (self.canvas1, self.canvas2):
+            cv.bind("<Configure>", self._on_canvas_configure)
+
         # Roteia
         if self.empenho_id:
             self.metric_buttons.pack_forget()
@@ -676,87 +681,156 @@ class AnalisesWindow(tk.Toplevel):
             tk.Label(corpo, text=titulo, bg="white", fg="#555", font=("Segoe UI", 9)).pack(anchor="w")
             tk.Label(corpo, text=str(valor), bg="white", fg="#222", font=("Segoe UI", 14, "bold")).pack(anchor="w")
 
-    def _pizza(self, cv: tk.Canvas, partes):
-        cv.delete("all")
-        w = cv.winfo_width() or cv.winfo_reqwidth()
-        h = cv.winfo_height() or cv.winfo_reqheight()
-        cx, cy = w // 2, h // 2
-        r = min(w, h) * 0.35
-        total = sum(max(0.0, float(v)) for (_r, v, _c) in partes) or 1.0
+    def _on_canvas_configure(self, _evt):
+        """Debounce do redesenho para quando o Canvas ganha tamanho real."""
+        if self._redraw_after:
+            try:
+                self.after_cancel(self._redraw_after)
+            except Exception:
+                pass
+        # agenda o redesenho para daqui 60 ms (tempo suficiente p/ layout estabilizar)
+        self._redraw_after = self.after(60, self._render_current)
+    
+    def _render_current(self):
+        """Redesenha os gráficos conforme o contexto atual, sem reconsultar o banco."""
+        if self._context.get("tipo") == "ata":
+            # Reaplica a métrica selecionada sem ir ao banco
+            self._render_metric()
+        elif self._context.get("tipo") == "empenho":
+            # Reaplica os gráficos do empenho com os dados já armazenados no contexto
+            self._render_empenho_graphs()
 
+    def _render_empenho_graphs(self):
+        """Usa self._context p/ redesenhar pizza + barras do empenho (sem SQL)."""
+        if self._context.get("tipo") != "empenho":
+            return
+        cons_val = float(self._context.get("cons_val") or 0.0)
+        saldo    = float(self._context.get("saldo") or 0.0)
+        serie    = self._prep_serie(self._context.get("serie") or [])
+        # Pizza (consumido x saldo)
+        self._pizza(self.canvas1, [("Consumido", cons_val, "#D83B01"), ("Saldo", saldo, "#0078D4")])
+        # Consumo mensal
+        self._barras_vert(self.canvas2, serie, "Consumo mensal (R$)")
+
+    def _ellipsis(self, text: str, font, max_px: int) -> str:
+        """Corta o texto para caber em max_px e coloca … no fim se necessário."""
+        if font.measure(text) <= max_px:
+            return text
+        # reserva espaço p/ '…'
+        ell = "…"
+        for i in range(len(text), 0, -1):
+            t = text[:i].rstrip() + ell
+            if font.measure(t) <= max_px:
+                return t
+        return ell
+
+    def _pizza(self, cv: tk.Canvas, partes):
+        # partes = [(rotulo, valor, cor)]
+        cv.delete("all")
+        cv.update_idletasks()
+        w = max(cv.winfo_width(),  400)  # mínimos pra evitar 1px
+        h = max(cv.winfo_height(), 220)
+        cx, cy = w // 2, h // 2
+        r = int(min(w, h) * 0.33)  # levemente menor pra não “grudar” nas bordas
+    
+        total = sum(max(0.0, float(v)) for (_r, v, _c) in partes) or 1.0
         ang = 0.0
         bbox = (cx - r, cy - r, cx + r, cy + r)
-        legend_y = 10
+    
+        # legenda no canto superior esquerdo
+        legend_x, legend_y = 12, 10
         for (rot, val, cor) in partes:
             frac = max(0.0, float(val)) / total
             ang2 = ang + frac * 360.0
             cv.create_arc(bbox, start=ang, extent=(ang2 - ang), fill=cor, outline="white")
             txt = f"{rot}: {frac*100:0.1f}%"
-            cv.create_rectangle(10, legend_y, 22, legend_y + 12, fill=cor, outline=cor)
-            cv.create_text(30, legend_y + 6, text=txt, anchor="w", font=("Segoe UI", 9), fill="#333")
+            cv.create_rectangle(legend_x, legend_y, legend_x + 12, legend_y + 12, fill=cor, outline=cor)
+            cv.create_text(legend_x + 18, legend_y + 6, text=txt, anchor="w", font=("Segoe UI", 9), fill="#333")
             legend_y += 18
             ang = ang2
 
-    def _barras_horiz(self, cv: tk.Canvas, dados, titulo=""):
-        cv.delete("all")
-        w = cv.winfo_width() or cv.winfo_reqwidth()
-        h = cv.winfo_height() or cv.winfo_reqheight()
-        margem = 8
-        x0 = 160
-        y0 = 32
-        x1 = w - 12
-        y1 = h - 16
 
+    def _barras_horiz(self, cv: tk.Canvas, dados, titulo=""):
+        # dados = [(label, valor)]
+        import tkinter.font as tkfont
+    
+        cv.delete("all")
+        cv.update_idletasks()
+        w = max(cv.winfo_width(),  600)
+        h = max(cv.winfo_height(), 240)
+    
+        # Título
         if titulo:
             cv.create_text(w//2, 14, text=titulo, font=("Segoe UI", 10, "bold"), fill="#333")
-
+    
+        # Área útil
+        top_pad   = 28 if titulo else 8
+        bottom_pad = 16
+        right_pad  = 12
+        y0 = top_pad
+        y1 = h - bottom_pad
+    
         if not dados:
-            cv.create_text(w//2, h//2, text="Sem dados", font=("Segoe UI", 10), fill="#666")
+            cv.create_text(w//2, (y0+y1)//2, text="Sem dados", font=("Segoe UI", 10), fill="#666")
             return
-
-        valores = [v for (_l, v) in dados]
+    
+        # Mede rótulos para reservar largura dinâmica à esquerda
+        fnt = tkfont.Font(family="Segoe UI", size=9)
+        max_lbl_px = max([fnt.measure(str(l)[:60]) for (l, _v) in dados] + [120])
+        max_lbl_px = min(max_lbl_px + 10, 320)  # limite superior para não “comer” o gráfico
+    
+        x_label = 10
+        x0 = x_label + max_lbl_px + 10
+        x1 = w - right_pad
+    
+        # Escala
+        valores = [float(v) for (_l, v) in dados]
         vmax = max(valores) or 1.0
-
+    
+        # Altura das barras
         n = len(dados)
         barra_h = max(14, int((y1 - y0) / max(1, n)) - 4)
         y = y0
-
+    
         for (lab, val) in dados:
-            largura = (val / vmax) * (x1 - x0)
-            cv.create_text(margem, y + barra_h / 2, text=str(lab)[:40], anchor="w", font=("Segoe UI", 9), fill="#333")
+            # Limita o texto e aplica reticências se necessário
+            lab_txt = self._ellipsis(str(lab), fnt, max_lbl_px)
+            largura = (float(val) / vmax) * (x1 - x0)
+            cv.create_text(x_label, y + barra_h/2, text=lab_txt, anchor="w", font=("Segoe UI", 9), fill="#333")
             cv.create_rectangle(x0, y, x0 + largura, y + barra_h, fill="#0078D4", outline="")
-            rot_val = self._fmt_brl(val) if "R$" in (titulo or "") else f"{val:.0f}"
-            cv.create_text(x0 + largura + 4, y + barra_h / 2, text=rot_val, anchor="w", font=("Segoe UI", 9), fill="#444")
+            cv.create_text(x0 + largura + 4, y + barra_h/2,
+                           text=(self._fmt_brl(val) if "R$" in (titulo or "") else f"{float(val):.0f}"),
+                           anchor="w", font=("Segoe UI", 9), fill="#444")
             y += barra_h + 6
 
     def _barras_vert(self, cv: tk.Canvas, serie, titulo=""):
+        # serie = [(mes_label, valor)]
         cv.delete("all")
-        w = cv.winfo_width() or cv.winfo_reqwidth()
-        h = cv.winfo_height() or cv.winfo_reqheight()
-
+        cv.update_idletasks()
+        w = max(cv.winfo_width(),  600)
+        h = max(cv.winfo_height(), 260)
+    
         margem_esq = 56
         margem_inf = 36
         margem_dir = 10
         margem_sup = 22
-
+    
         x0 = margem_esq
         y0 = margem_sup
         x1 = w - margem_dir
         y1 = h - margem_inf
-
+    
         if titulo:
             cv.create_text(w//2, 12, text=titulo, font=("Segoe UI", 10, "bold"), fill="#333")
-
+    
         if not serie:
-            cv.create_text(w//2, h//2, text="Sem dados", font=("Segoe UI", 10), fill="#666")
+            cv.create_text(w//2, (y0+y1)//2, text="Sem dados", font=("Segoe UI", 10), fill="#666")
             return
-
-        valores = [v for (_m, v) in serie]
+    
+        valores = [float(v) for (_m, v) in serie]
         vmax = max(valores) or 1.0
-        escala = self._nice_ceil(vmax)
-        if escala <= 0:
-            escala = 1.0
-
+        escala = self._nice_ceil(vmax) or 1.0
+    
         # grade
         linhas = 4
         for i in range(linhas + 1):
@@ -764,15 +838,16 @@ class AnalisesWindow(tk.Toplevel):
             cv.create_line(x0, y, x1, y, fill="#EEE")
             val = (escala * i / linhas)
             cv.create_text(x0 - 6, y, text=self._fmt_brl(val), font=("Segoe UI", 8), fill="#666", anchor="e")
-
+    
+        # barras
         n = len(serie)
         largura_total = (x1 - x0)
         gap = max(4, int(largura_total / max(12, n) * 0.25))
         largura_barra = max(8, int((largura_total - gap * (n + 1)) / n))
-
+    
         x = x0 + gap
         for (mes, valor) in serie:
-            altura = 0 if escala == 0 else (valor / escala) * (y1 - y0)
+            altura = (float(valor) / escala) * (y1 - y0)
             y_top = y1 - altura
             cv.create_rectangle(x, y_top, x + largura_barra, y1, fill="#0078D4", outline="#0078D4")
             cv.create_text(x + largura_barra / 2, y1 + 12, text=mes, font=("Segoe UI", 8), fill="#444")
@@ -780,7 +855,7 @@ class AnalisesWindow(tk.Toplevel):
                 cv.create_text(x + largura_barra / 2, y_top - 8, text=self._fmt_brl(valor),
                                font=("Segoe UI", 8), fill="#333")
             x += largura_barra + gap
-
+    
         cv.create_line(x0, y0, x0, y1, fill="#AAA")
         cv.create_line(x0, y1, x1, y1, fill="#AAA")
 
