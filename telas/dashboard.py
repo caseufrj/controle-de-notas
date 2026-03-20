@@ -370,6 +370,26 @@ class AnalisesWindow(tk.Toplevel):
             
             # Ordena por total desc (Top-N será aplicado no desenho)
             stack_vl.sort(key=lambda t: t[3], reverse=True)
+
+            # 4) Monta lista empilhada para QUANTIDADE
+            stack_qt = []
+            for it in itens_saldo:
+                nome = it.get("nome_item", "") or ""
+                total = float(it.get("qtde_total") or 0.0)
+                empenhada = float(it.get("qtde_empenhada") or 0.0)
+                saldo = float(it.get("qtde_saldo") or 0.0)
+                
+                # Empilhado: empenhada + saldo = total
+                stack_qt.append((nome, empenhada, saldo, total))
+            
+            # Ordena por total desc
+            stack_qt.sort(key=lambda t: t[3], reverse=True)
+            
+            # Guarda no contexto
+            self._context.update({
+                "stack_vl_total_consumido": stack_vl,
+                "stack_qt_total_empenhada": stack_qt  # NOVO
+            })
             
             # Guarda no contexto
             self._context.update({
@@ -596,7 +616,7 @@ class AnalisesWindow(tk.Toplevel):
         
             self._info(f"Empenhado: {self._fmt_brl(vl_empenhado)} • Consumido: {self._fmt_brl(vl_consumido)} • Saldo: {self._fmt_brl(vl_saldo)}")
             return
-        else:
+        else:  # quantidade
             qt_total, qt_empenhada, qt_saldo = self._context["kpi_qt"]
             self._kpis([
                 ("Qtde total", f"{qt_total:.0f}"),
@@ -604,7 +624,17 @@ class AnalisesWindow(tk.Toplevel):
                 ("Qtde saldo", f"{qt_saldo:.0f}"),
             ])
             self._pizza(self.canvas1, [("Empenhada", qt_empenhada, "#107C10"), ("Saldo", qt_saldo, "#0078D4")])
-            self._barras_horiz(self.canvas2, top_qt, "Top-10 itens por saldo (quantidade)")
+            
+            # USAR BARRAS EMPILHADAS PARA QUANTIDADE
+            stack_qt = self._context.get("stack_qt_total_empenhada", [])
+            self._barras_horiz_empilhada(
+                self.canvas2,
+                stack_qt,
+                titulo="Total da ATA x Empenhada (Qtde) — Top itens",
+                cor_a="#107C10",   # Empenhada (verde)
+                cor_b="#7FBAFF"    # Saldo (azul claro)
+            )
+            
             self._info(f"Itens: {len(self._context['itens'])} • Total: {qt_total:.0f} • Empenhada: {qt_empenhada:.0f} • Saldo: {qt_saldo:.0f}")
 
     # ----------------- Exportações / Salvar PNG -----------------
@@ -807,163 +837,186 @@ class AnalisesWindow(tk.Toplevel):
 
 
     def _barras_horiz(self, cv: tk.Canvas, dados, titulo=""):
-        # dados = [(label, valor)]
+        """
+        Barras horizontais simples com controle de tamanho.
+        dados = [(label, valor)]
+        """
         import tkinter.font as tkfont
-    
+        
         cv.delete("all")
         cv.update_idletasks()
-        w = max(cv.winfo_width(),  600)
+        
+        # LIMITAR DIMENSÕES PARA EVITAR GRÁFICO ESTICADO
+        w = min(max(cv.winfo_width(), 600), 900)   # Máximo 900px de largura
         h = max(cv.winfo_height(), 240)
-    
+        
         # Título
         if titulo:
             cv.create_text(w//2, 14, text=titulo, font=("Segoe UI", 10, "bold"), fill="#333")
-    
+        
         # Área útil
-        top_pad   = 28 if titulo else 8
-        bottom_pad = 16
-        right_pad  = 12
-        y0 = top_pad
-        y1 = h - bottom_pad
-    
-        if not dados:
-            cv.create_text(w//2, (y0+y1)//2, text="Sem dados", font=("Segoe UI", 10), fill="#666")
-            return
-    
-        # Mede rótulos para reservar largura dinâmica à esquerda
-        fnt = tkfont.Font(family="Segoe UI", size=9)
-        max_lbl_px = max([fnt.measure(str(l)[:60]) for (l, _v) in dados] + [120])
-        max_lbl_px = min(max_lbl_px + 10, 320)  # limite superior para não “comer” o gráfico
-    
-        x_label = 10
-        x0 = x_label + max_lbl_px + 10
-        x1 = w - right_pad
-    
-        # Escala
-        valores = [float(v) for (_l, v) in dados]
-        vmax = max(valores) or 1.0
-    
-        # Altura das barras
-        n = len(dados)
-        barra_h = max(14, int((y1 - y0) / max(1, n)) - 4)
-        y = y0
-    
-        for (lab, val) in dados:
-            # Limita o texto e aplica reticências se necessário
-            lab_txt = self._ellipsis(str(lab), fnt, max_lbl_px)
-            largura = (float(val) / vmax) * (x1 - x0)
-            cv.create_text(x_label, y + barra_h/2, text=lab_txt, anchor="w", font=("Segoe UI", 9), fill="#333")
-            cv.create_rectangle(x0, y, x0 + largura, y + barra_h, fill="#0078D4", outline="")
-            cv.create_text(x0 + largura + 4, y + barra_h/2,
-                           text=(self._fmt_brl(val) if "R$" in (titulo or "") else f"{float(val):.0f}"),
-                           anchor="w", font=("Segoe UI", 9), fill="#444")
-            y += barra_h + 6
-
-    def _barras_horiz_empilhada(self, cv: tk.Canvas, dados, titulo="", cor_a="#D83B01", cor_b="#7FBAFF"):
-        """
-        Barras empilhadas horizontais.
-        dados = [(label, parteA, parteB, total)], onde total = parteA + parteB (ou maior)
-        Parte A = Consumido; Parte B = Restante do Total.
-        """
-        import tkinter.font as tkfont
-        cv.delete("all")
-        cv.update_idletasks()
-    
-        # Top-N (se existir em self.topn)
-        try:
-            topn = int(getattr(self, "topn", tk.IntVar(value=10)).get())
-        except Exception:
-            topn = 10
-        dados = list(dados)[:max(1, topn)]
-    
-        w = max(cv.winfo_width(),  600)
-        h = max(cv.winfo_height(), 260)
-    
-        if titulo:
-            cv.create_text(w//2, 14, text=titulo, font=("Segoe UI", 10, "bold"), fill="#333")
-    
         top_pad    = 28 if titulo else 8
         bottom_pad = 16
         right_pad  = 12
         y0 = top_pad
         y1 = h - bottom_pad
-    
+        
         if not dados:
             cv.create_text(w//2, (y0+y1)//2, text="Sem dados", font=("Segoe UI", 10), fill="#666")
             return
-    
+        
+        # Mede rótulos para reservar largura dinâmica à esquerda
+        fnt = tkfont.Font(family="Segoe UI", size=9)
+        max_lbl_px = max([fnt.measure(str(l)[:60]) for (l, _v) in dados] + [120])
+        max_lbl_px = min(max_lbl_px + 10, 320)  # limite superior para não "comer" o gráfico
+        
+        x_label = 10
+        x0 = x_label + max_lbl_px + 10
+        x1 = w - right_pad
+        
+        # Escala
+        valores = [float(v) for (_l, v) in dados]
+        vmax = max(valores) or 1.0
+        
+        # Altura das barras - LIMITAR PARA EVITAR GRÁFICO MUITO COMPRIDO
+        n = len(dados)
+        barra_h = max(14, min(22, int((y1 - y0) / max(1, n)) - 4))  # Máximo 22px
+        y = y0
+        
+        for (lab, val) in dados:
+            # Limita o texto e aplica reticências se necessário
+            lab_txt = self._ellipsis(str(lab), fnt, max_lbl_px)
+            largura = (float(val) / vmax) * (x1 - x0)
+            
+            cv.create_text(x_label, y + barra_h/2, text=lab_txt, anchor="w", 
+                          font=("Segoe UI", 9), fill="#333")
+            cv.create_rectangle(x0, y, x0 + largura, y + barra_h, fill="#0078D4", outline="")
+            
+            # Formata valor conforme contexto
+            valor_txt = self._fmt_brl(val) if "R$" in (titulo or "") else f"{float(val):.0f}"
+            cv.create_text(x0 + largura + 4, y + barra_h/2,
+                          text=valor_txt, anchor="w", font=("Segoe UI", 9), fill="#444")
+            y += barra_h + 6
+
+    def _barras_horiz_empilhada(self, cv: tk.Canvas, dados, titulo="", 
+                            cor_empenhado="#107C10", cor_restante="#7FBAFF"):
+        """
+        Barras empilhadas horizontais: Total da ATA vs Empenhado.
+        
+        dados = [(label, empenhado, restante, total)]
+        - empenhado: valor já empenhado/consumido
+        - restante: saldo disponível da ATA
+        - total: soma dos dois (valor total da ATA para o item)
+        """
+        import tkinter.font as tkfont
+        
+        cv.delete("all")
+        cv.update_idletasks()
+        
+        # LIMITAR DIMENSÕES
+        w = min(max(cv.winfo_width(), 600), 900)   # Máximo 900px
+        h = max(cv.winfo_height(), 260)
+        
+        # Top-N (configurável)
+        try:
+            topn = int(getattr(self, "topn", 10))
+        except Exception:
+            topn = 10
+        dados = list(dados)[:max(1, topn)]
+        
+        if titulo:
+            cv.create_text(w//2, 14, text=titulo, font=("Segoe UI", 10, "bold"), fill="#333")
+        
+        top_pad    = 28 if titulo else 8
+        bottom_pad = 16
+        right_pad  = 12
+        y0 = top_pad
+        y1 = h - bottom_pad
+        
+        if not dados:
+            cv.create_text(w//2, (y0+y1)//2, text="Sem dados", font=("Segoe UI", 10), fill="#666")
+            return
+        
         # Mede rótulos
         fnt = tkfont.Font(family="Segoe UI", size=9)
         max_lbl_px = max([fnt.measure(str(l)[:60]) for (l, *_rest) in dados] + [120])
         max_lbl_px = min(max_lbl_px + 10, 320)
-    
+        
         x_label = 10
         x0 = x_label + max_lbl_px + 10
         x1 = w - right_pad
-    
-        # Escala baseada no 'total' da linha
-        vmax = max(float(t) for (_l, _a, _b, t) in dados) or 1.0
-    
-        # Altura das barras
+        
+        # Escala baseada no maior TOTAL
+        vmax = max(float(t) for (_l, _emp, _rest, t) in dados) or 1.0
+        
+        # Altura das barras - CONTROLADA
         n = len(dados)
-        barra_h = max(14, min(26, int((y1 - y0) / max(1, n)) - 4))
+        barra_h = max(14, min(22, int((y1 - y0) / max(1, n)) - 4))
         y = y0
-    
-        for (lab, parte_a, parte_b, total) in dados:
-            # normaliza
+        
+        # Legenda no canto superior direito
+        leg_y = 10
+        cv.create_rectangle(w - 140, leg_y, w - 12, leg_y + 12, fill=cor_empenhado, outline=cor_empenhado)
+        cv.create_text(w - 145, leg_y + 6, text="Empenhado", anchor="e", 
+                      font=("Segoe UI", 8), fill="#333")
+        cv.create_rectangle(w - 140, leg_y + 14, w - 12, leg_y + 26, fill=cor_restante, outline=cor_restante)
+        cv.create_text(w - 145, leg_y + 20, text="Restante da ATA", anchor="e", 
+                      font=("Segoe UI", 8), fill="#333")
+        
+        for (lab, empenhado, restante, total) in dados:
+            # Normaliza valores
             total = max(0.0, float(total))
-            a = max(0.0, float(parte_a))
-            b = max(0.0, float(parte_b))
-            # garante que não passe do total
-            if a + b > total:
-                b = max(0.0, total - a)
-    
+            emp = max(0.0, float(empenhado))
+            rest = max(0.0, float(restante))
+            
+            # Garante consistência: emp + rest = total
+            if emp + rest > total:
+                rest = max(0.0, total - emp)
+            
             lab_txt = self._ellipsis(str(lab), fnt, max_lbl_px)
-    
-            # Comprimentos
+            
+            # Calcula larguras proporcionais
             largura_total = (total / vmax) * max(1, (x1 - x0))
-            largura_a     = (a     / vmax) * max(1, (x1 - x0))
-            largura_b     = (b     / vmax) * max(1, (x1 - x0))
-    
-            # rótulo
+            largura_emp   = (emp   / vmax) * max(1, (x1 - x0))
+            largura_rest  = (rest  / vmax) * max(1, (x1 - x0))
+            
+            # Rótulo do item (esquerda)
             cv.create_text(x_label, y + barra_h/2, text=lab_txt, anchor="w",
-                           font=("Segoe UI", 9), fill="#333")
-    
-            # parte A (Consumido)
-            xa0 = x0
-            xa1 = x0 + largura_a
-            if largura_a > 0.5:
-                cv.create_rectangle(xa0, y, xa1, y + barra_h, fill=cor_a, outline="")
-                # valor A (preferencialmente dentro)
-                valA = self._fmt_brl(a)
-                if xa1 - xa0 > fnt.measure(valA) + 6:
-                    cv.create_text((xa0 + xa1)/2, y + barra_h/2, text=valA,
-                                   font=("Segoe UI", 9, "bold"), fill="#FFFFFF")
+                          font=("Segoe UI", 9), fill="#333")
+            
+            # Parte 1: EMPENHADO (verde)
+            xe0 = x0
+            xe1 = x0 + largura_emp
+            if largura_emp > 1:
+                cv.create_rectangle(xe0, y, xe1, y + barra_h, fill=cor_empenhado, outline="")
+                val_emp = self._fmt_brl(emp) if "R$" in titulo else f"{emp:.0f}"
+                # Texto dentro da barra se couber
+                if xe1 - xe0 > fnt.measure(val_emp) + 8:
+                    cv.create_text((xe0 + xe1)/2, y + barra_h/2, text=val_emp,
+                                  font=("Segoe UI", 8, "bold"), fill="#FFFFFF")
                 else:
-                    cv.create_text(xa1 + 4, y + barra_h/2, text=valA, anchor="w",
-                                   font=("Segoe UI", 9), fill="#444")
-    
-            # parte B (Restante do Total)
-            xb0 = xa1
-            xb1 = xa1 + largura_b
-            if largura_b > 0.5:
-                cv.create_rectangle(xb0, y, xb1, y + barra_h, fill=cor_b, outline="")
-                valB = self._fmt_brl(b)
-                if xb1 - xb0 > fnt.measure(valB) + 6:
-                    cv.create_text((xb0 + xb1)/2, y + barra_h/2, text=valB,
-                                   font=("Segoe UI", 9, "bold"), fill="#0E3B5B")
-                else:
-                    # tenta à direita, se couber
-                    if xb1 + 4 + fnt.measure(valB) < x1:
-                        cv.create_text(xb1 + 4, y + barra_h/2, text=valB, anchor="w",
-                                       font=("Segoe UI", 9), fill="#444")
-    
-            # total (em cinza claro, acima/à direita, opcional)
-            tot_txt = self._fmt_brl(total)
-            cv.create_text(min(x0 + largura_total + 6, x1 - 2), y + barra_h/2,
-                           text=tot_txt, anchor="w", font=("Segoe UI", 8), fill="#666")
-    
-            y += barra_h + 6
+                    cv.create_text(xe1 + 4, y + barra_h/2, text=val_emp, anchor="w",
+                                  font=("Segoe UI", 8), fill="#444")
+            
+            # Parte 2: RESTANTE DA ATA (azul claro)
+            xr0 = xe1
+            xr1 = xe1 + largura_rest
+            if largura_rest > 1:
+                cv.create_rectangle(xr0, y, xr1, y + barra_h, fill=cor_restante, outline="")
+                val_rest = self._fmt_brl(rest) if "R$" in titulo else f"{rest:.0f}"
+                if xr1 - xr0 > fnt.measure(val_rest) + 8:
+                    cv.create_text((xr0 + xr1)/2, y + barra_h/2, text=val_rest,
+                                  font=("Segoe UI", 8, "bold"), fill="#0E3B5B")
+                elif xr1 + 4 + fnt.measure(val_rest) < x1:
+                    cv.create_text(xr1 + 4, y + barra_h/2, text=val_rest, anchor="w",
+                                  font=("Segoe UI", 8), fill="#444")
+            
+            # TOTAL da barra (à direita, em cinza)
+            tot_txt = self._fmt_brl(total) if "R$" in titulo else f"{total:.0f}"
+            cv.create_text(min(x0 + largura_total + 8, x1 - 2), y + barra_h/2,
+                          text=f"• {tot_txt}", anchor="w", font=("Segoe UI", 8), fill="#666")
+            
+            y += barra_h + 5
 
     def _barras_vert(self, cv: tk.Canvas, serie, titulo=""):
         # serie = [(mes_label, valor)]
