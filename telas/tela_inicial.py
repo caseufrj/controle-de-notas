@@ -57,28 +57,36 @@ def desmontar_tela_inicial(root: tk.Tk):
         root._tela_inicial_widgets = []
 
 def montar_tela_inicial(root: tk.Tk):
-    # prepara banco e auth com imports tardios e tolerantes
+    print("[DEBUG] tela_inicial: montar_tela_inicial()")
+
+    # prepara banco (imports tardios e tolerantes)
     try:
         try:
             from banco import criar_tabelas as _criar_tabelas
+            print("[DEBUG] tela_inicial: import banco.criar_tabelas OK")
         except ImportError:
             from bd import criar_tabelas as _criar_tabelas
+            print("[DEBUG] tela_inicial: import bd.criar_tabelas OK (fallback)")
         try:
             _criar_tabelas()
-        except Exception:
-            # não impede a UI
-            pass
-    except Exception:
+            print("[DEBUG] tela_inicial: criar_tabelas() OK")
+        except Exception as e:
+            print("[DEBUG] tela_inicial: criar_tabelas() FALHOU:", e)
+    except Exception as e:
+        print("[DEBUG] tela_inicial: import criar_tabelas FALHOU:", e)
         log_path = os.path.join(os.path.expanduser("~"), "controle_notas_erro.log")
         with open(log_path, "a", encoding="utf-8") as f:
             f.write("\n" + "="*80 + "\n")
             f.write("Falha ao importar/rodar criar_tabelas do banco:\n")
             f.write(traceback.format_exc())
 
+    # inicializa auth
     try:
         from auth import auth_init
         auth_init()
-    except Exception:
+        print("[DEBUG] tela_inicial: auth_init() OK")
+    except Exception as e:
+        print("[DEBUG] tela_inicial: auth_init() FALHOU:", e)
         log_path = os.path.join(os.path.expanduser("~"), "controle_notas_erro.log")
         with open(log_path, "a", encoding="utf-8") as f:
             f.write("\n" + "="*80 + "\n")
@@ -128,7 +136,7 @@ def montar_tela_inicial(root: tk.Tk):
 
         canvas.create_rectangle(0, h - 48, w, h, fill="#0b2f4a", width=0)
 
-    root.bind("<Configure>", render)  # <<< corrigido (sem HTML entities)
+    root.bind("<Configure>", render)
     root.after(30, render)
 
 # ---------- modais ----------
@@ -144,7 +152,7 @@ def abrir_modal_login(root: tk.Tk):
 
     def do_login():
         try:
-            # import tardio do auth para evitar falhas no import global
+            # import tardio do auth
             from auth import usuario_login
 
             ua = f"SICONAE-Desktop/{os.name}"
@@ -199,6 +207,8 @@ def montar_sistema(root: tk.Tk, auth: Dict[str, Any]):
     Desmonta a tela inicial e monta o sistema na mesma janela.
     Se algo der errado, reconstrói a tela inicial e mostra o erro.
     """
+    print("[DEBUG] tela_inicial: montar_sistema() chamado")
+
     # Desmonta a cena da tela inicial
     desmontar_tela_inicial(root)
 
@@ -223,8 +233,11 @@ def montar_sistema(root: tk.Tk, auth: Dict[str, Any]):
     try:
         # import tardio para evitar erro no import global se houver dependências
         from telas.sistema import SistemaApp
+        print("[DEBUG] tela_inicial: import telas.sistema.SistemaApp OK")
         root._sistema = SistemaApp(root, auth, on_sair=on_sair)
+        print("[DEBUG] tela_inicial: SistemaApp montado OK")
     except Exception as e:
+        print("[DEBUG] tela_inicial: SistemaApp FALHOU:", e)
         log_path = os.path.join(os.path.expanduser("~"), "controle_notas_erro.log")
         with open(log_path, "a", encoding="utf-8") as f:
             f.write("\n" + "="*80 + "\n")
