@@ -19,6 +19,19 @@ BG_BOTTOM = "#f6fbff"
 #   setx SICONAE_NO_GRADIENT 1
 NO_GRADIENT = os.environ.get("SICONAE_NO_GRADIENT") == "1"
 
+def _center_window(win: tk.Toplevel):
+    """Centraliza a janela 'win' no centro do monitor principal."""
+    win.update_idletasks()  # garante tamanho calculado
+    w = win.winfo_reqwidth()
+    h = win.winfo_reqheight()
+    sw = win.winfo_screenwidth()
+    sh = win.winfo_screenheight()
+    x = (sw // 2) - (w // 2)
+    y = (sh // 2) - (h // 2)
+    # pequena margem para monitores com barra de tarefas grande
+    y = max(20, y)
+    win.geometry(f"+{x}+{y}")
+
 
 # -----------------------------------------------------------------------------
 # Caminho de recursos (funciona no .py e no .exe do PyInstaller)
@@ -130,6 +143,8 @@ def desmontar_tela_inicial(root: tk.Tk):
 
 def montar_tela_inicial(root: tk.Tk):
     print("[DEBUG] tela_inicial: montar_tela_inicial()")
+    # Ao estar na tela inicial, clicar no X fecha completamente o app
+    root.protocol("WM_DELETE_WINDOW", root.destroy)
 
     # prepara banco (imports tardios e tolerantes)
     try:
@@ -268,73 +283,61 @@ def montar_tela_inicial(root: tk.Tk):
 # Modais
 # -----------------------------------------------------------------------------
 def abrir_modal_login(root: tk.Tk):
-    win = tk.Toplevel(root)
-    win.title("Login - SICONAE")
-    win.transient(root)
-    win.grab_set()
-    win.resizable(False, False)
+    win = tk.Toplevel(root); win.title("Login - SICONAE")
+    win.transient(root); win.grab_set(); win.resizable(False, False)
 
-    frm = ttk.Frame(win, padding=16)
-    frm.grid(row=0, column=0, sticky="nsew")
+    frm = ttk.Frame(win, padding=16); frm.grid(row=0, column=0, sticky="nsew")
 
     ttk.Label(frm, text="E-mail EBSERH", font=("Segoe UI", 10)).grid(row=0, column=0, sticky="w")
-    ent_email = ttk.Entry(frm, width=40)
-    ent_email.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+    ent_email = ttk.Entry(frm, width=40); ent_email.grid(row=1, column=0, sticky="ew", pady=(0, 8))
 
     ttk.Label(frm, text="Senha", font=("Segoe UI", 10)).grid(row=2, column=0, sticky="w")
-    ent_senha = ttk.Entry(frm, width=40, show="•")
-    ent_senha.grid(row=3, column=0, sticky="ew", pady=(0, 12))
+    ent_senha = ttk.Entry(frm, width=40, show="•"); ent_senha.grid(row=3, column=0, sticky="ew", pady=(0, 12))
 
-    def do_login():
+    def do_login(event=None):
         try:
-            # import tardio do auth
             from auth import usuario_login
-
             ua = f"SICONAE-Desktop/{os.name}"
             ip = socket.gethostbyname(socket.gethostname())
             auth = usuario_login(ent_email.get().strip(), ent_senha.get(), ua, ip)
-
-            try:
-                win.grab_release()
-            except Exception:
-                pass
+            try: win.grab_release()
+            except Exception: pass
             win.destroy()
             montar_sistema(root, auth)
         except Exception as e:
             messagebox.showerror("Erro no login", str(e))
 
-    ttk.Button(frm, text="Entrar", style="Primary.TButton", command=do_login)\
-        .grid(row=4, column=0, sticky="ew")
+    btn = ttk.Button(frm, text="Entrar", style="Primary.TButton", command=do_login)
+    btn.grid(row=4, column=0, sticky="ew")
+
+    # ENTER envia o formulário
+    win.bind("<Return>", do_login)
+    ent_email.bind("<Return>", do_login)
+    ent_senha.bind("<Return>", do_login)
+
     ent_email.focus_set()
+    _center_window(win)  # Centraliza modal
 
 
 def abrir_modal_registro(root: tk.Tk):
-    win = tk.Toplevel(root)
-    win.title("Registro / Cadastro - SICONAE")
-    win.transient(root)
-    win.grab_set()
-    win.resizable(False, False)
+    win = tk.Toplevel(root); win.title("Registro / Cadastro - SICONAE")
+    win.transient(root); win.grab_set(); win.resizable(False, False)
 
-    frm = ttk.Frame(win, padding=16)
-    frm.grid(row=0, column=0, sticky="nsew")
+    frm = ttk.Frame(win, padding=16); frm.grid(row=0, column=0, sticky="nsew")
 
     ttk.Label(frm, text="Nome", font=("Segoe UI", 10)).grid(row=0, column=0, sticky="w")
-    ent_nome = ttk.Entry(frm, width=40)
-    ent_nome.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+    ent_nome = ttk.Entry(frm, width=40); ent_nome.grid(row=1, column=0, sticky="ew", pady=(0, 8))
 
     ttk.Label(frm, text="E-mail EBSERH (@ebserh.gov.br)", font=("Segoe UI", 10)).grid(row=2, column=0, sticky="w")
-    ent_email = ttk.Entry(frm, width=40)
-    ent_email.grid(row=3, column=0, sticky="ew", pady=(0, 8))
+    ent_email = ttk.Entry(frm, width=40); ent_email.grid(row=3, column=0, sticky="ew", pady=(0, 8))
 
     ttk.Label(frm, text="Senha (mín. 10 caracteres)", font=("Segoe UI", 10)).grid(row=4, column=0, sticky="w")
-    ent_senha = ttk.Entry(frm, width=40, show="•")
-    ent_senha.grid(row=5, column=0, sticky="ew", pady=(0, 8))
+    ent_senha = ttk.Entry(frm, width=40, show="•"); ent_senha.grid(row=5, column=0, sticky="ew", pady=(0, 8))
 
     ttk.Label(frm, text="Confirmar Senha", font=("Segoe UI", 10)).grid(row=6, column=0, sticky="w")
-    ent_conf = ttk.Entry(frm, width=40, show="•")
-    ent_conf.grid(row=7, column=0, sticky="ew", pady=(0, 12))
+    ent_conf = ttk.Entry(frm, width=40, show="•"); ent_conf.grid(row=7, column=0, sticky="ew", pady=(0, 12))
 
-    def do_registrar():
+    def do_registrar(event=None):
         try:
             from auth import usuario_registrar
             s1, s2 = ent_senha.get(), ent_conf.get()
@@ -343,13 +346,24 @@ def abrir_modal_registro(root: tk.Tk):
                 return
             usuario_registrar(ent_email.get().strip(), s1, ent_nome.get().strip() or None)
             messagebox.showinfo("Sucesso", "Usuário criado. Faça login.")
+            try: win.grab_release()
+            except Exception: pass
             win.destroy()
         except Exception as e:
             messagebox.showerror("Erro no registro", str(e))
 
-    ttk.Button(frm, text="Registrar", style="Primary.TButton", command=do_registrar)\
-        .grid(row=8, column=0, sticky="ew")
+    btn = ttk.Button(frm, text="Registrar", style="Primary.TButton", command=do_registrar)
+    btn.grid(row=8, column=0, sticky="ew")
+
+    # ENTER envia o formulário
+    win.bind("<Return>", do_registrar)
+    ent_nome.bind("<Return>", do_registrar)
+    ent_email.bind("<Return>", do_registrar)
+    ent_senha.bind("<Return>", do_registrar)
+    ent_conf.bind("<Return>", do_registrar)
+
     ent_nome.focus_set()
+    _center_window(win)  # Centraliza modal
 
 
 # -----------------------------------------------------------------------------
