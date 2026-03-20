@@ -5,7 +5,7 @@ from tkinter import ttk, messagebox
 from typing import Dict, Any
 
 from auth import auth_init, usuario_login
-from bd import criar_tabelas
+from banco import criar_tabelas
 from telas.sistema import SistemaApp
 
 APP_NAME = "SICONAE"
