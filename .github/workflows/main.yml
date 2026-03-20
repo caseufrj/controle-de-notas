@@ -33,51 +33,43 @@ jobs:
         run: |
           Get-ChildItem -Recurse | Select-Object FullName
 
-      # ========= DEBUG (COM CONSOLE) =========
-      - name: Build DEBUG (console)
-        shell: pwsh
-        env:
-          APP_PEPPER: ${{ secrets.APP_PEPPER }}   # opcional: define o pepper em build
-        run: |
-          pyinstaller --noconfirm --clean `
-            --name SICONAE-debug `
-            --onefile `
-            --console `
-            --hidden-import banco `
-            --hidden-import bd `
-            --hidden-import auth `
-            --hidden-import telas.sistema `
-            --hidden-import telas.dashboard `
-            --hidden-import telas.fornecedores `
-            --hidden-import telas.atas_empenhos `
-            --hidden-import telas.notas `
-            --hidden-import telas.orcamento `
-            --hidden-import telas.configuracoes `
-            --add-data ".\telas;.\telas" `
-            main.py
-
-      # ========= RELEASE (SEM CONSOLE) =========
-      - name: Build RELEASE (windowed)
-        shell: pwsh
-        env:
-          APP_PEPPER: ${{ secrets.APP_PEPPER }}   # opcional
-        run: |
-          pyinstaller --noconfirm --clean `
-            --name SICONAE `
-            --onefile `
-            --windowed `
-            --hidden-import banco `
-            --hidden-import bd `
-            --hidden-import auth `
-            --hidden-import telas.sistema `
-            --hidden-import telas.dashboard `
-            --hidden-import telas.fornecedores `
-            --hidden-import telas.atas_empenhos `
-            --hidden-import telas.notas `
-            --hidden-import telas.orcamento `
-            --hidden-import telas.configuracoes `
-            --add-data ".\telas;.\telas" `
-            main.py
+      # DEBUG (com console)
+      pyinstaller --noconfirm --clean `
+        --name SICONAE-debug `
+        --onefile `
+        --console `
+        --hidden-import banco `
+        --hidden-import bd `
+        --hidden-import auth `
+        --hidden-import telas.sistema `
+        --hidden-import telas.dashboard `
+        --hidden-import telas.fornecedores `
+        --hidden-import telas.atas_empenhos `
+        --hidden-import telas.notas `
+        --hidden-import telas.orcamento `
+        --hidden-import telas.configuracoes `
+        --add-data ".\telas;.\telas" `
+        --add-data ".\assets;.\assets" `
+        main.py
+      
+      # RELEASE (sem console)
+      pyinstaller --noconfirm --clean `
+        --name SICONAE `
+        --onefile `
+        --windowed `
+        --hidden-import banco `
+        --hidden-import bd `
+        --hidden-import auth `
+        --hidden-import telas.sistema `
+        --hidden-import telas.dashboard `
+        --hidden-import telas.fornecedores `
+        --hidden-import telas.atas_empenhos `
+        --hidden-import telas.notas `
+        --hidden-import telas.orcamento `
+        --hidden-import telas.configuracoes `
+        --add-data ".\telas;.\telas" `
+        --add-data ".\assets;.\assets" `
+        main.py
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
