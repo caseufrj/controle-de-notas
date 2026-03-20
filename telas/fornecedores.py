@@ -57,7 +57,7 @@ class TelaFornecedores(tk.Frame):
                  font=("Segoe UI", 12, "bold"), bg="white").pack(anchor="w", pady=(0,8))
 
         self.e_nome = row("Razão Social*:")
-        self.e_rua = row("Rua:")
+        self.e_rua = row("Endereço:")
         self.e_numero = row("Número:")
         self.e_compl = row("Complemento:")
         self.e_bairro = row("Bairro:")
