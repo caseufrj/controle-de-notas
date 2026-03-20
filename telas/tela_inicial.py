@@ -99,11 +99,30 @@ def abrir_modal_registro(root: tk.Tk):
 # dentro de telas/tela_inicial.py
 from telas.sistema import SistemaWindow  # novo import
 
+from typing import Dict, Any
+import tkinter as tk
+from telas.sistema import SistemaWindow
+
 def abrir_app_principal(root: tk.Tk, auth: Dict[str, Any]) -> None:
-    SistemaWindow(root, auth)
-    # fecha a janela inicial para ficar só a principal
-    root.withdraw()  # oculta a Tela Inicial
-    # ou root.destroy()  # encerra o Tk (apenas se SistemaWindow for Tk independente → não é o caso aqui)
+    """
+    Após login, abre a janela principal (Toplevel) e mantém uma referência
+    no objeto root para evitar garbage collection (janela fechar sozinha).
+    Evita janelas duplicadas.
+    """
+    # Se já existir uma janela principal aberta e viva, só traz para frente
+    janela = getattr(root, "_janela_sistema", None)
+    if janela and janela.winfo_exists():
+        try:
+            janela.lift()
+            janela.focus_force()
+        except Exception:
+            pass
+    else:
+        # Cria uma NOVA janela principal e guarda a referência
+        root._janela_sistema = SistemaWindow(root, auth)
+
+    # Oculta a tela inicial (fica em background)
+    root.withdraw()
     
 def tela_inicial():
     try: criar_tabelas()
