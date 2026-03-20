@@ -98,18 +98,33 @@ def abrir_modal_registro(root: tk.Tk):
 
 def abrir_app_principal(root: tk.Tk, auth: Dict[str, Any]):
     """
-    Troque este placeholder pela chamada da SUA tela principal.
-    Exemplo: importar telas.dashboard e abrir a janela que você já usa.
+    Abre a tela principal real do sistema.
+    Tenta importar o dashboard oficial; se não conseguir, mostra um fallback simples.
     """
-    from telas.dashboard import abrir_dashboard
-    abrir_dashboard(root, auth)   # você implementa no dashboard a recepção do 'auth'
-    # Exemplo mínimo (placeholder):
-    win = tk.Toplevel(root); win.title("SICONAE - Principal")
-    win.geometry("800x500")
-    ttk.Label(win, text=f"Usuário: {auth['usuario'].get('nome') or auth['usuario']['email']}",
-              font=("Segoe UI", 11)).pack(pady=8)
-    ttk.Label(win, text="Substituir por sua tela principal (ex: dashboard).").pack()
+    try:
+        from telas.dashboard import abrir_dashboard
+        # Passe o 'auth' para que o dashboard saiba quem está logado.
+        abrir_dashboard(root, auth)
+    except Exception as e:
+        # Fallback: janela simples para não quebrar o fluxo
+        import traceback
+        traceback.print_exc()
 
+        win = tk.Toplevel(root)
+        win.title("SICONAE - Principal (fallback)")
+        win.geometry("800x500")
+        ttk.Label(
+            win,
+            text=f"Usuário: {auth['usuario'].get('nome') or auth['usuario']['email']}",
+            font=("Segoe UI", 11)
+        ).pack(pady=8)
+        ttk.Label(
+            win,
+            text="Não foi possível carregar 'telas.dashboard.abrir_dashboard()'. "
+                 "Verifique o módulo. Erro:\n" + str(e),
+            wraplength=760,
+            justify="left"
+        ).pack(padx=12, pady=12)
 def tela_inicial():
     try: criar_tabelas()
     except Exception: pass
