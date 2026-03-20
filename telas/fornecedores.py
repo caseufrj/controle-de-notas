@@ -322,7 +322,8 @@ class TelaFornecedores(tk.Frame):
     def _coletar_form(self):
         return {
             "nome": self.e_nome.get().strip(),
-            # "cep": self.e_cep.get().strip(),  # <-- Ative se o banco suportar salvar CEP
+            # Salva CEP como dígitos (sem máscara). Se preferir com máscara, me avise.
+            "cep": self._somente_digitos(self.e_cep.get().strip()),
             "rua": self.e_rua.get().strip(),
             "numero": self.e_numero.get().strip(),
             "complemento": self.e_compl.get().strip(),
