@@ -422,16 +422,18 @@ def ata_hdr_atualizar(ata_id: int, d: Dict[str,Any]) -> None:
 
 def ata_hdr_excluir(ata_id: int) -> None:
     """
-    Exclui a ATA, todos os seus itens (CASCADE) e, ANTES, todos os empenhos
-    vinculados a QUALQUER item dessa ATA (garantia adicional além do trigger).
+    Exclui a ATA e garante a limpeza de itens e empenhos, mesmo em bancos
+    criados sem ON DELETE CASCADE/trigger.
     """
     conn = conectar(); cur = conn.cursor()
-    # 1) Apaga empenhos vinculados aos itens desta ATA
+    # 1) Apaga empenhos vinculados a QUALQUER item desta ATA
     cur.execute("""
         DELETE FROM empenhos
          WHERE ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = ?)
     """, (ata_id,))
-    # 2) Apaga a ATA (atas_itens caem por CASCADE)
+    # 2) Apaga itens da ATA (cobre cenários sem CASCADE)
+    cur.execute("DELETE FROM atas_itens WHERE ata_id = ?", (ata_id,))
+    # 3) Apaga o cabeçalho da ATA
     cur.execute("DELETE FROM atas WHERE id=?", (ata_id,))
     conn.commit(); conn.close()
 
