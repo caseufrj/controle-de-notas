@@ -335,37 +335,46 @@ class AnalisesWindow(tk.Toplevel):
             qt_saldo = sum(float(x.get("qtde_saldo") or 0) for x in itens_saldo)
 
             # --- NOVO: dados para barras empilhadas (VALOR: Total x Consumido) ---
-            # Totais por item (vl_total da própria ATA)
+            # 1) Totais por item (vl_total da ATA)
             itens_totais_vl = {it["id"]: float(it.get("vl_total") or 0.0) for it in itens}
             
-            # Consumido por item (já temos na consulta 'top_valor': emp/cons por item)
-            # Vamos refazer a consulta focando só no 'consumido' por item:
+            # 2) Consumo por item (no período, se informado) - LEFT style
             conn = banco.conectar(); cur = conn.cursor()
-            cur.execute("""
+            cur.execute(f"""
                 SELECT 
-                    ai.id, ai.nome_item,
-                    IFNULL((SELECT SUM(ni.vl_total) FROM notas_itens ni
-                             WHERE ni.ata_item_id = ai.id
-                               AND (? IS NULL OR date(ni.data_uso) >= date(?))
-                               AND (? IS NULL OR date(ni.data_uso) <= date(?))
-                    ),0) AS cons
-                FROM atas_itens ai
-                WHERE ai.ata_id=?
+                    ai.id,
+                    IFNULL((
+                        SELECT SUM(ni.vl_total)
+                          FROM notas_itens ni
+                         WHERE ni.ata_item_id = ai.id
+                           AND (? IS NULL OR date(ni.data_uso) >= date(?))
+                           AND (? IS NULL OR date(ni.data_uso) <= date(?))
+                    ), 0) AS cons
+                  FROM atas_itens ai
+                 WHERE ai.ata_id = ?
+                 ORDER BY ai.id
             """, (self.data_ini, self.data_ini, self.data_fim, self.data_fim, ata_id))
+            cons_map = {int(r["id"]): float(r["cons"] or 0.0) for r in cur.fetchall()}
+            conn.close()
+            
+            # 3) Monta lista empilhada para TODOS os itens (consumido + restante do total)
             stack_vl = []
-            for r in cur.fetchall():
-                iid  = int(r["id"])
-                nome = r["nome_item"] or ""
+            for it in itens:
+                iid   = int(it["id"])
+                nome  = it.get("nome_item", "") or ""
                 total = float(itens_totais_vl.get(iid, 0.0))
-                cons  = float(r["cons"] or 0.0)
-                # Normaliza para evitar barras negativas/estouradas
+                cons  = float(cons_map.get(iid, 0.0))
                 cons_cap = max(0.0, min(cons, total))
                 restante = max(0.0, total - cons_cap)
                 stack_vl.append((nome, cons_cap, restante, total))
-            conn.close()
             
-            # Ordena por 'total' desc e guarda só os necessários (top-N será aplicado no desenho)
+            # Ordena por total desc (Top-N será aplicado no desenho)
             stack_vl.sort(key=lambda t: t[3], reverse=True)
+            
+            # Guarda no contexto
+            self._context.update({
+                "stack_vl_total_consumido": stack_vl
+            })
 
             # Valores (respeitando período no consumo)
             conn = banco.conectar(); cur = conn.cursor()
