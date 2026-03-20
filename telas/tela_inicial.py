@@ -56,12 +56,14 @@ def abrir_modal_login(root: tk.Tk, on_success):
 
     def do_login():
         try:
-            ua = f"SICONAE-Desktop/{os.name}"
-            ip = socket.gethostbyname(socket.gethostname())
-            auth = usuario_login(ent_email.get().strip(), ent_senha.get(), ua, ip)
-            messagebox.showinfo("Sucesso", f"Bem-vindo(a), {auth['usuario'].get('nome') or auth['usuario']['email']}")
+            auth = usuario_login(...)
+            # solta o grab antes de destruir o modal
+            try:
+                win.grab_release()
+            except Exception:
+                pass
             win.destroy()
-            on_success(auth)
+            abrir_app_principal(root, auth)
         except Exception as e:
             messagebox.showerror("Erro no login", str(e))
 
