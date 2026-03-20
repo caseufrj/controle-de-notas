@@ -321,14 +321,15 @@ def criar_tabelas() -> None:
     CREATE VIEW vw_saldo_ata AS
     SELECT
         a.id           AS ata_id,
-        a.fornecedor_id,
+        at.fornecedor_id,
         a.pregao,
         a.cod_aghu,
         a.nome_item,
         a.qtde_total,
         IFNULL((SELECT SUM(ni.qtde) FROM notas_itens ni WHERE ni.ata_item_id = a.id), 0) AS qtde_usada,
         (a.qtde_total - IFNULL((SELECT SUM(ni.qtde) FROM notas_itens ni WHERE ni.ata_item_id = a.id), 0)) AS qtde_saldo
-    FROM atas_itens a;
+    FROM atas_itens a
+    JOIN atas at ON at.id = a.ata_id;   -- <--- garante só itens de ATAs existentes
     """)
 
     if _view_existe(cur, "vw_saldo_empenho"):
