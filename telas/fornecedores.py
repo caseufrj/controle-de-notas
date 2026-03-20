@@ -1,27 +1,26 @@
 # telas/fornecedores.py
 import tkinter as tk
 from tkinter import ttk, messagebox
-import json  # --- NOVO
-import urllib.request  # --- NOVO
-import urllib.error    # --- NOVO
+import json
+import urllib.request
+import urllib.error
 import banco
 
 
 class TelaFornecedores(tk.Frame):
     def __init__(self, master):
-        # >>> IMPORTANTE: herda de tk.Frame e chama super().__init__
         super().__init__(master, bg="white")
 
-        # Cria/atualiza schema do banco (pode manter aqui ou mover para main.py)
         try:
             banco.criar_tabelas()
         except Exception as e:
             messagebox.showerror("Banco de dados", f"Não foi possível preparar o banco:\n{e}")
 
-        # ----------------- Estado interno (paginação) -----------------  # --- NOVO
+        # ----------------- Estado interno (paginação e endereço) -----------------
         self.page_size = 20
         self.page = 1
         self._dados_filtrados = []
+        self._endereco_editavel = False  # <--- NOVO: controla se rua/bairro/município/estado podem ser editados
 
         # ----- Lado esquerdo: lista + busca -----
         left = tk.Frame(self, bg="white")
@@ -37,7 +36,7 @@ class TelaFornecedores(tk.Frame):
         ttk.Button(barra, text="Excluir", command=self._excluir).pack(side="left", padx=4)
 
         cols = ("id","nome","email","telefone","municipio","estado")
-        self.tv = ttk.Treeview(left, columns=cols, show="headings", height=16)  # --- ALTERADO (altura um pouco menor p/ paginador)
+        self.tv = ttk.Treeview(left, columns=cols, show="headings", height=16)
         cabecas = ("ID","Nome","E-mail","Telefone","Município","Estado")
         larguras = (60,220,200,120,120,80)
         for c, t, w in zip(cols, cabecas, larguras):
@@ -47,21 +46,19 @@ class TelaFornecedores(tk.Frame):
         self.tv.pack(fill="both", expand=True, pady=(8,0))
         self.tv.bind("<<TreeviewSelect>>", lambda e: self._carregar_form())
 
-        # ---- Paginação (controles) ----  # --- NOVO
+        # ---- Paginação (controles) ----
         pag = tk.Frame(left, bg="white")
         pag.pack(fill="x", pady=(6, 0))
 
         self.lbl_pag = tk.Label(pag, text="", bg="white")
         self.lbl_pag.pack(side="left")
 
-        # Tamanho da página
         tk.Label(pag, text="Itens por página:", bg="white").pack(side="right", padx=(8, 2))
         self.cb_page_size = ttk.Combobox(pag, values=[10, 20, 50], width=4, state="readonly")
         self.cb_page_size.set(self.page_size)
         self.cb_page_size.pack(side="right")
         self.cb_page_size.bind("<<ComboboxSelected>>", self._on_change_page_size)
 
-        # Botões navegação
         self.btn_prev = ttk.Button(pag, text="⟨ Anterior", command=self._pagina_anterior)
         self.btn_prev.pack(side="left", padx=(8, 4))
         self.btn_next = ttk.Button(pag, text="Próxima ⟩", command=self._proxima_pagina)
@@ -69,7 +66,7 @@ class TelaFornecedores(tk.Frame):
 
         # ----- Lado direito: formulário -----
         right = tk.Frame(self, bg="white")
-        right.pack(side="left", fill="both", expand=True, padx=12, pady=12)  # --- ALTERADO (fill both + expand)
+        right.pack(side="left", fill="both", expand=True, padx=12, pady=12)
 
         def row(lbl):
             f = tk.Frame(right, bg="white")
@@ -79,16 +76,15 @@ class TelaFornecedores(tk.Frame):
             e.pack(side="left", fill="x", expand=True)
             return e
 
-        self._id_var = tk.StringVar()  # guarda id atual (se edição)
+        self._id_var = tk.StringVar()
 
         tk.Label(right, text="Cadastro de Fornecedores",
                  font=("Segoe UI", 12, "bold"), bg="white").pack(anchor="w", pady=(0,8))
 
         self.e_nome = row("Razão Social*:")
 
-        # --- NOVO: CEP acima do Endereço
+        # CEP acima do endereço
         self.e_cep = row("CEP:")
-        # Dispara busca ao sair do campo e quando completar 8 dígitos
         self.e_cep.bind("<FocusOut>", self._buscar_cep_event)
         self.e_cep.bind("<KeyRelease>", self._buscar_cep_quando_completo)
 
@@ -101,11 +97,11 @@ class TelaFornecedores(tk.Frame):
         self.e_email = row("E-mail:")
         self.e_tel = row("Telefone:")
 
-        # --- NOVO: manter campos de endereço bloqueados para edição manual
+        # Campos de endereço iniciam bloqueados
         for ent in (self.e_rua, self.e_bairro, self.e_municipio, self.e_estado):
             ent.config(state="readonly")
 
-        # --- ALTERADO: Observação dentro de um LabelFrame com borda visível
+        # Observação com borda visível
         lf_obs = ttk.LabelFrame(right, text="Observação:")
         lf_obs.pack(fill="both", expand=True, pady=6)
         self.txt_obs = tk.Text(lf_obs, width=40, height=6, wrap="word",
@@ -120,7 +116,7 @@ class TelaFornecedores(tk.Frame):
         # Carrega lista inicial
         self._carregar_lista()
 
-    # ----------------- Helpers internos -----------------  # --- NOVO
+    # ----------------- Helpers internos -----------------
     def _entry_set_readonly(self, entry: ttk.Entry, value: str):
         """Define texto em Entry mesmo que esteja readonly."""
         cur_state = str(entry.cget("state"))
@@ -134,12 +130,24 @@ class TelaFornecedores(tk.Frame):
     def _somente_digitos(self, s: str) -> str:
         return "".join(ch for ch in s if ch.isdigit())
 
-    # ----------------- ViaCEP (CEP -> endereço) -----------------  # --- NOVO
+    def _set_endereco_editavel(self, editavel: bool):
+        """Ativa/Desativa edição manual de rua/bairro/município/estado."""
+        self._endereco_editavel = editavel
+        state = "normal" if editavel else "readonly"
+        for ent in (self.e_rua, self.e_bairro, self.e_municipio, self.e_estado):
+            # preserva o texto e só muda o state
+            cur = ent.get()
+            ent.config(state="normal")
+            ent.delete(0, "end")
+            ent.insert(0, cur)
+            ent.config(state=state)
+
+    # ----------------- ViaCEP (CEP -> endereço) -----------------
     def _buscar_cep(self, cep: str):
         """Consulta ViaCEP e preenche endereço/bairro/município/estado."""
         cep_digits = self._somente_digitos(cep)
         if len(cep_digits) != 8:
-            return  # CEP incompleto; não alerta o usuário aqui
+            return  # CEP incompleto; sem alertar
 
         url = f"https://viacep.com.br/ws/{cep_digits}/json/"
         try:
@@ -147,26 +155,41 @@ class TelaFornecedores(tk.Frame):
                 data = resp.read().decode("utf-8")
             j = json.loads(data)
         except urllib.error.URLError as e:
-            messagebox.showwarning("CEP", f"Não foi possível consultar o CEP (sem conexão?):\n{e}")
+            messagebox.showwarning("CEP", f"Não foi possível consultar o CEP (conexão?):\n{e}")
             return
         except Exception as e:
             messagebox.showwarning("CEP", f"Falha ao ler resposta do ViaCEP:\n{e}")
             return
 
         if j.get("erro"):
-            messagebox.showinfo("CEP", "CEP não encontrado.")
+            # CEP não encontrado -> pergunta se deseja cadastrar manualmente
+            if messagebox.askyesno("CEP não encontrado",
+                                   "CEP não encontrado.\nDeseja cadastrar o endereço manualmente?"):
+                # libera edição manual
+                self._set_endereco_editavel(True)
+                # limpa campos para digitação
+                for ent in (self.e_rua, self.e_bairro, self.e_municipio, self.e_estado):
+                    ent.config(state="normal")
+                    ent.delete(0, "end")
+                self.e_rua.focus_set()
+            else:
+                # mantém bloqueado e não altera nada
+                self._set_endereco_editavel(False)
             return
 
+        # CEP válido: preenche e bloqueia
         logradouro = j.get("logradouro", "")
         bairro = j.get("bairro", "")
         localidade = j.get("localidade", "")
         uf = j.get("uf", "")
 
-        # Preenche campos bloqueados
         self._entry_set_readonly(self.e_rua, logradouro)
         self._entry_set_readonly(self.e_bairro, bairro)
         self._entry_set_readonly(self.e_municipio, localidade)
         self._entry_set_readonly(self.e_estado, uf)
+
+        # garante bloqueio (modo automático)
+        self._set_endereco_editavel(False)
 
         # Foco natural no Número
         self.e_numero.focus_set()
@@ -175,7 +198,6 @@ class TelaFornecedores(tk.Frame):
         self._buscar_cep(self.e_cep.get())
 
     def _buscar_cep_quando_completo(self, _evt):
-        # Se completou 8 dígitos, consulta automaticamente
         if len(self._somente_digitos(self.e_cep.get())) == 8:
             self._buscar_cep(self.e_cep.get())
 
@@ -187,13 +209,11 @@ class TelaFornecedores(tk.Frame):
             messagebox.showerror("Erro", f"Falha ao listar fornecedores:\n{e}")
             fornecedores = []
 
-        # Armazena e reseta paginação
-        self._dados_filtrados = fornecedores  # --- NOVO
-        self.page = 1                         # --- NOVO
-        self._mostrar_pagina_atual()         # --- NOVO
+        self._dados_filtrados = fornecedores
+        self.page = 1
+        self._mostrar_pagina_atual()
 
-    def _mostrar_pagina_atual(self):  # --- NOVO
-        # Limpa TV
+    def _mostrar_pagina_atual(self):
         for i in self.tv.get_children():
             self.tv.delete(i)
 
@@ -204,7 +224,6 @@ class TelaFornecedores(tk.Frame):
             self.btn_next.config(state="disabled")
             return
 
-        # Cálculo de páginas
         total_pages = max(1, (total + self.page_size - 1) // self.page_size)
         if self.page > total_pages:
             self.page = total_pages
@@ -226,10 +245,9 @@ class TelaFornecedores(tk.Frame):
         self.btn_next.config(state=("normal" if self.page < total_pages else "disabled"))
 
     def _filtrar(self):
-        # Recarrega lista com filtro e reseta paginação
         self._carregar_lista(self.ent_busca.get().strip())
 
-    def _on_change_page_size(self, _evt):  # --- NOVO
+    def _on_change_page_size(self, _evt):
         try:
             self.page_size = int(self.cb_page_size.get())
         except Exception:
@@ -237,12 +255,12 @@ class TelaFornecedores(tk.Frame):
         self.page = 1
         self._mostrar_pagina_atual()
 
-    def _pagina_anterior(self):  # --- NOVO
+    def _pagina_anterior(self):
         if self.page > 1:
             self.page -= 1
             self._mostrar_pagina_atual()
 
-    def _proxima_pagina(self):  # --- NOVO
+    def _proxima_pagina(self):
         total = len(self._dados_filtrados)
         total_pages = max(1, (total + self.page_size - 1) // self.page_size)
         if self.page < total_pages:
@@ -257,12 +275,12 @@ class TelaFornecedores(tk.Frame):
                   self.e_email, self.e_tel):
             e.delete(0, "end")
 
-        # Limpa e mantém campos de endereço como readonly
+        # limpa campos de endereço e volta ao bloqueio padrão
+        self._set_endereco_editavel(False)
         for ent in (self.e_rua, self.e_bairro, self.e_municipio, self.e_estado):
             self._entry_set_readonly(ent, "")
 
         self.txt_obs.delete("1.0", "end")
-        # foco no nome
         self.e_nome.focus_set()
 
     def _carregar_form(self):
@@ -285,11 +303,10 @@ class TelaFornecedores(tk.Frame):
         self._id_var.set(str(d.get("id","")))
         self.e_nome.insert(0, d.get("nome",""))
 
-        # CEP (se existir no banco, preenche)
         cep_val = d.get("cep","")
         self.e_cep.insert(0, cep_val)
 
-        # Endereço (preenche entradas readonly)
+        # Preenche endereço (mantém bloqueado)
         self._entry_set_readonly(self.e_rua, d.get("rua",""))
         self.e_numero.insert(0, d.get("numero",""))
         self.e_compl.insert(0, d.get("complemento",""))
@@ -313,7 +330,6 @@ class TelaFornecedores(tk.Frame):
             "email": self.e_email.get().strip(),
             "telefone": self.e_tel.get().strip(),
             "observacao": self.txt_obs.get("1.0", "end").strip(),
-            # campos extras, se quiser expor depois
             "cnpj": None,
             "contato_vendedor": None,
         }
@@ -334,7 +350,6 @@ class TelaFornecedores(tk.Frame):
                 novo_id = banco.fornecedor_inserir(d)
                 self._id_var.set(str(novo_id))
                 messagebox.showinfo("OK", "Fornecedor cadastrado.")
-            # Recarrega mantendo o filtro e volta para a página 1
             self._carregar_lista(self.ent_busca.get().strip())
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao salvar fornecedor:\n{e}")
