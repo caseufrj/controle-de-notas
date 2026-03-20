@@ -65,8 +65,8 @@ class SistemaApp:
         # Primeira tela
         self.abrir_dashboard()
 
-        # Fechar o X da janela (opcional: tratar como sair)
-        self.root.protocol("WM_DELETE_WINDOW", self._fechar_janela)
+        # Fechar no X = encerrar COMPLETAMENTE o app
+        self.root.protocol("WM_DELETE_WINDOW", self._encerrar_app_total)
 
     # -------- util --------
     def _fechar_janela(self):
@@ -149,3 +149,21 @@ class SistemaApp:
         # volta para tela inicial
         if callable(self.on_sair):
             self.on_sair(self.root)
+
+    def _encerrar_app_total(self):
+        """Fecha todo o aplicativo ao clicar no X."""
+        try:
+            # tente encerrar sessão se existir token (não bloqueia se falhar)
+            try:
+                from auth import usuario_logout
+                token = (self.auth or {}).get("token")
+                if token:
+                    usuario_logout(token)
+            except Exception:
+                pass
+        finally:
+            try:
+                self.root.quit()
+            except Exception:
+                pass
+            self.root.destroy()
