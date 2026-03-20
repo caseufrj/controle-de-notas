@@ -1,142 +1,147 @@
 # telas/sistema.py
-import os
-import sys
+import logging
 import tkinter as tk
 from tkinter import ttk, messagebox
 import tkinter.font as tkfont
-import traceback
 
-from auth import usuario_logout  # <<--- IMPORTANTE
+from auth import usuario_logout
 
-from telas.dashboard import Dashboard
-from telas.fornecedores import TelaFornecedores
-from telas.atas_empenhos import TelaAtasEmpenhos
-from telas.notas import TelaNotas
-from telas.orcamento import TelaOrcamento
-from telas.configuracoes import TelaConfiguracoes
+logger = logging.getLogger(__name__)
 
-class SistemaWindow(tk.Toplevel):
-    def __init__(self, root: tk.Tk, auth: dict, build_tag: str = "build 2026-03-18 11:04"):
-        super().__init__(root)
 
-        self.root = root          # Tk da Tela Inicial (vamos reexibir no logout)
-        self.auth = auth          # {'token', 'usuario': {...}}
+class SistemaApp:
+    """
+    Sistema principal da aplicação.
+    Gerencia menu lateral e área de trabalho DENTRO da mesma janela root.
+    """
+    
+    def __init__(self, root: tk.Tk, auth: dict, build_tag: str = "build 2026-03-18"):
+        self.root = root
+        self.auth = auth
+        self.build_tag = build_tag
+        self.usuario = auth.get('usuario', {})
+        self.container = None  # Será criado em _criar_interface()
+        
+        self._setup_estilos()
+        self._setup_janela()
+        self._criar_interface()
+        self._carregar_dashboard()
+        
+        logger.info(f"Sistema iniciado para: {self.usuario.get('email')}")
 
-        usuario_label = auth['usuario'].get('nome') or auth['usuario']['email']
-        self.title(f"Controle de Notas e Empenhos - {build_tag} — {usuario_label}")
-        self.geometry("1100x650")
-        self.minsize(1000, 600)
-
-        self._estilos()
-        self._menu_lateral()
-        self._area_trabalho()
-
-        # Tela inicial
-        self.abrir_dashboard()
-
-        # Fechamento da janela principal → comporta como "Sair"
-        self.protocol("WM_DELETE_WINDOW", self.sair)
-
-    def _estilos(self):
+    def _setup_estilos(self):
+        """Configura fontes e temas globais."""
         default_font = tkfont.nametofont("TkDefaultFont")
         default_font.configure(family="Segoe UI", size=10)
-        self.option_add("*Font", default_font)
-
-        style = ttk.Style(self)
+        self.root.option_add("*Font", default_font)
+        
+        style = ttk.Style(self.root)
         if "vista" in style.theme_names():
             style.theme_use("vista")
         elif "clam" in style.theme_names():
             style.theme_use("clam")
 
-    def _menu_lateral(self):
-        self.menu = tk.Frame(self, width=200, bg="#2c3e50")
-        self.menu.pack(side="left", fill="y")
+    def _setup_janela(self):
+        """Configura propriedades da janela principal."""
+        nome_usuario = self.usuario.get('nome') or self.usuario.get('email', 'Usuário')
+        self.root.title(f"Controle de Atas e Empenhos — {nome_usuario}")
+        self.root.geometry("1100x650")
+        self.root.minsize(1000, 600)
+        self.root.protocol("WM_DELETE_WINDOW", self.sair)
 
-        def btn(text, cmd, bg="#34495e"):
-            b = tk.Button(
-                self.menu, text=text, command=cmd,
-                bg=bg, fg="white", bd=0, padx=12, pady=12,
-                activebackground="#3d566e", activeforeground="white",
-                anchor="w",
-            )
-            b.pack(fill="x")
-            return b
-
-        self.btn_dash = btn("Dashboard", self.abrir_dashboard)
-        self.btn_forn = btn("Fornecedores", self.abrir_fornecedores)
-        self.btn_atas = btn("Ata / Empenho", self.abrir_atas_empenhos)
-        self.btn_notas = btn("Notas Fiscais", self.abrir_notas)
-        self.btn_orc  = btn("Orçamento", self.abrir_orcamento)
-        self.btn_conf = btn("Configurações", self.abrir_configuracoes)
-
-        # --- Separador visual
-        tk.Frame(self.menu, height=1, bg="#22313f").pack(fill="x", pady=6)
-
-        # --- Botão SAIR (vermelho sutil)
-        self.btn_sair = btn("Sair", self.sair, bg="#8e2b2b")
-
-    def _area_trabalho(self):
-        self.container = tk.Frame(self, bg="#ecf0f1")
+    def _criar_interface(self):
+        """Cria menu lateral e área de trabalho."""
+        # === MENU LATERAL ===
+        self.menu_frame = tk.Frame(self.root, width=200, bg="#2c3e50")
+        self.menu_frame.pack(side="left", fill="y")
+        self.menu_frame.pack_propagate(False)
+        
+        self._criar_botao_menu("📊 Dashboard", self._carregar_dashboard)
+        self._criar_botao_menu("🏢 Fornecedores", self._carregar_fornecedores)
+        self._criar_botao_menu("📋 Ata / Empenho", self._carregar_atas_empenhos)
+        self._criar_botao_menu("🧾 Notas Fiscais", self._carregar_notas)
+        self._criar_botao_menu("💰 Orçamento", self._carregar_orcamento)
+        self._criar_botao_menu("⚙️ Configurações", self._carregar_configuracoes)
+        
+        # Separador
+        tk.Frame(self.menu_frame, height=2, bg="#22313f").pack(fill="x", pady=8)
+        
+        # Botão Sair
+        self._criar_botao_menu("🚪 Sair", self.sair, bg="#8e2b2b", hover="#a33535")
+        
+        # === ÁREA DE TRABALHO ===
+        self.container = tk.Frame(self.root, bg="#ecf0f1")
         self.container.pack(side="right", expand=True, fill="both")
 
-    def limpar(self):
+    def _criar_botao_menu(self, texto: str, comando, bg="#34495e", hover="#3d566e"):
+        """Cria botão estilizado para o menu lateral."""
+        btn = tk.Button(
+            self.menu_frame, text=texto, command=comando,
+            bg=bg, fg="white", bd=0, padx=12, pady=10,
+            activebackground=hover, activeforeground="white",
+            anchor="w", font=("Segoe UI", 10)
+        )
+        btn.pack(fill="x", padx=2, pady=1)
+        return btn
+
+    def _limpar_container(self):
+        """Remove todos os widgets da área de trabalho."""
         for widget in self.container.winfo_children():
             widget.destroy()
 
-    # --------- Navegação ----------
-    def _abrir_tela(self, classe_tela, nome_log="tela"):
-        self.limpar()
+    def _carregar_tela(self, classe_tela, nome: str):
+        """Limpa o container e instancia uma nova tela."""
+        self._limpar_container()
         try:
             tela = classe_tela(self.container)
             tela.pack(fill="both", expand=True)
+            logger.debug(f"Tela carregada: {nome}")
         except Exception as e:
-            log_path = os.path.join(os.path.expanduser("~"), "controle_notas_erro.log")
-            with open(log_path, "a", encoding="utf-8") as f:
-                f.write("\n" + "="*80 + "\n")
-                f.write(f"Erro ao abrir {nome_log}:\n")
-                f.write(traceback.format_exc())
+            logger.exception(f"Erro ao carregar {nome}")
+            messagebox.showerror("Erro", f"Falha ao abrir {nome}:\n{e}")
 
-            messagebox.showerror(
-                "Erro",
-                f"Ocorreu um erro ao abrir a tela '{nome_log}'.\n\n"
-                f"{e}\n\n"
-                f"Um log foi salvo em:\n{log_path}"
-            )
+    def _carregar_dashboard(self):
+        from telas.dashboard import Dashboard
+        self._carregar_tela(Dashboard, "Dashboard")
 
-    def abrir_dashboard(self):        self._abrir_tela(Dashboard, "Dashboard")
-    def abrir_fornecedores(self):     self._abrir_tela(TelaFornecedores, "Fornecedores")
-    def abrir_atas_empenhos(self):    self._abrir_tela(TelaAtasEmpenhos, "Ata/Empenho")
-    def abrir_notas(self):            self._abrir_tela(TelaNotas, "Notas")
-    def abrir_orcamento(self):        self._abrir_tela(TelaOrcamento, "Orçamento")
-    def abrir_configuracoes(self):
-        self.limpar()
-        tela = TelaConfiguracoes(self.container)
-        tela.pack(fill="both", expand=True)
+    def _carregar_fornecedores(self):
+        from telas.fornecedores import TelaFornecedores
+        self._carregar_tela(TelaFornecedores, "Fornecedores")
 
-    # --------- SAIR / LOGOUT ----------
-    
+    def _carregar_atas_empenhos(self):
+        from telas.atas_empenhos import TelaAtasEmpenhos
+        self._carregar_tela(TelaAtasEmpenhos, "Ata/Empenho")
+
+    def _carregar_notas(self):
+        from telas.notas import TelaNotas
+        self._carregar_tela(TelaNotas, "Notas")
+
+    def _carregar_orcamento(self):
+        from telas.orcamento import TelaOrcamento
+        self._carregar_tela(TelaOrcamento, "Orçamento")
+
+    def _carregar_configuracoes(self):
+        from telas.configuracoes import TelaConfiguracoes
+        self._carregar_tela(TelaConfiguracoes, "Configurações")
+
     def sair(self):
-            """Confirma logout, invalida sessão e volta para a Tela Inicial."""
-            if not messagebox.askyesno("Sair", "Deseja realmente sair e encerrar a sessão?"):
-                return
-    
-            try:
-                token = self.auth.get("token")
-                if token:
-                    usuario_logout(token)
-            except Exception:
-                pass
-    
-            try:
-                self.destroy()
-            finally:
-                # Volta a mostrar a Tela Inicial (que foi ocultada com withdraw)
-                if hasattr(self.master, "deiconify"):
-                    self.master.deiconify()
-                # Remove a referência para permitir nova criação depois
-                try:
-                    if hasattr(self.master, "_janela_sistema"):
-                        self.master._janela_sistema = None
-                except Exception:
-                    pass
-
+        """Logout e volta para tela inicial."""
+        if not messagebox.askyesno("Sair", "Encerrar sessão e voltar ao login?"):
+            return
+        
+        try:
+            token = self.auth.get("token")
+            if token:
+                usuario_logout(token)
+        except Exception as e:
+            logger.warning(f"Erro no logout: {e}")
+        
+        logger.info("Sessão encerrada. Voltando ao login.")
+        
+        # Limpa toda a janela e chama a tela inicial
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        
+        # Importa e renderiza a tela inicial
+        from telas.tela_inicial import TelaInicial
+        TelaInicial(self.root).render()
