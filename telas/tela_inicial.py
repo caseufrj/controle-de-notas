@@ -233,7 +233,7 @@ def montar_tela_inicial(root: tk.Tk):
                                font=("Segoe UI", 12), fill="#1f4c77", tags=("ui",))
 
             # Logo (com redimensionamento leve por subsample)
-            y_logo = 300
+            y_logo = 320
             if CAMINHO_LOGO and os.path.exists(CAMINHO_LOGO):
                 try:
                     img = tk.PhotoImage(file=CAMINHO_LOGO)
@@ -253,10 +253,10 @@ def montar_tela_inicial(root: tk.Tk):
 
             # ✅ Reposiciona as JANELAS dos botões (sem recriar os botões)
             if getattr(root, "_login_win", None):
-                canvas.coords(root._login_win, cx, y_logo + 250)
+                canvas.coords(root._login_win, cx, y_logo + 240)
                 canvas.tag_raise(root._login_win)   # sempre acima do desenho
             if getattr(root, "_reg_win", None):
-                canvas.coords(root._reg_win, cx, y_logo + 320)
+                canvas.coords(root._reg_win, cx, y_logo + 300)
                 canvas.tag_raise(root._reg_win)
 
             # Barra inferior
