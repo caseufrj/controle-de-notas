@@ -16,8 +16,8 @@ BG_TOP = "#cfe9ff"
 BG_MID = "#e8f4ff"
 BG_BOTTOM = "#f6fbff"
 
-# Se quiser forçar sem gradiente (debug/performance), defina no Windows:
-# setx SICONAE_NO_GRADIENT 1
+# Para forçar fundo sólido (sem gradiente) em debug/perf:
+#   setx SICONAE_NO_GRADIENT 1
 NO_GRADIENT = os.environ.get("SICONAE_NO_GRADIENT") == "1"
 
 # ---------- utils visual ----------
@@ -25,40 +25,29 @@ def _hex_to_rgb(hx: str):
     return tuple(int(hx[i:i+2], 16) for i in (1,3,5))
 
 def desenhar_gradiente(canvas: tk.Canvas, w: int, h: int, top: str, mid: str, bottom: str, steps: int = 120) -> None:
-    """
-    Gradiente vertical leve (no máximo 'steps' retângulos).
-    Evita desenhar 1 linha por pixel para não estourar GDI/recursos do Tk.
-    """
-    canvas.delete("grad")  # apaga só o que for gradiente
+    """Gradiente leve: até 'steps' faixas para não estourar GDI/Tk."""
+    canvas.delete("grad")
     if w <= 0 or h <= 0 or steps <= 0:
         return
-
     t = _hex_to_rgb(top); m = _hex_to_rgb(mid); b = _hex_to_rgb(bottom)
-
-    # Primeira metade: top -> mid | Segunda: mid -> bottom
     half = max(1, steps // 2)
-    # Altura de cada faixa
     band_h = max(1, h // steps)
 
     def interp(c1, c2, r):
         return tuple(int(c1[i] + (c2[i] - c1[i]) * r) for i in range(3))
 
     y = 0
-    # top -> mid
     for i in range(half):
         r = i / max(1, half - 1)
         rgb = interp(t, m, r)
-        color = "#%02x%02x%02x" % rgb
-        canvas.create_rectangle(0, y, w, min(h, y + band_h), outline="", fill=color, tags=("grad",))
+        canvas.create_rectangle(0, y, w, min(h, y + band_h), outline="", fill="#%02x%02x%02x" % rgb, tags=("grad",))
         y += band_h
 
-    # mid -> bottom
     remain = steps - half
     for j in range(remain):
         r = j / max(1, remain - 1)
         rgb = interp(m, b, r)
-        color = "#%02x%02x%02x" % rgb
-        canvas.create_rectangle(0, y, w, min(h, y + band_h), outline="", fill=color, tags=("grad",))
+        canvas.create_rectangle(0, y, w, min(h, y + band_h), outline="", fill="#%02x%02x%02x" % rgb, tags=("grad",))
         y += band_h
 
 def estilizar(root: tk.Tk):
@@ -78,21 +67,23 @@ def estilizar(root: tk.Tk):
 
 # ---------- montagem/desmontagem tela inicial ----------
 def desmontar_tela_inicial(root: tk.Tk):
-    # apaga tudo que foi criado pela tela inicial
-    if hasattr(root, "_tela_inicial_widgets"):
-        for w in root._tela_inicial_widgets:
-            try:
-                w.destroy()
-            except Exception:
-                pass
-        root._tela_inicial_widgets = []
     # cancela render pendente (debounce)
     if hasattr(root, "_render_after") and root._render_after:
-        try:
-            root.after_cancel(root._render_after)
-        except Exception:
-            pass
+        try: root.after_cancel(root._render_after)
+        except Exception: pass
         root._render_after = None
+
+    # destrói widgets gerenciados por nós
+    if hasattr(root, "_tela_inicial_widgets"):
+        for w in root._tela_inicial_widgets:
+            try: w.destroy()
+            except Exception: pass
+        root._tela_inicial_widgets = []
+
+    # limpa ids de janela do Canvas (se houver)
+    for attr in ("_login_win", "_reg_win"):
+        if hasattr(root, attr):
+            setattr(root, attr, None)
 
 def montar_tela_inicial(root: tk.Tk):
     print("[DEBUG] tela_inicial: montar_tela_inicial()")
@@ -133,22 +124,42 @@ def montar_tela_inicial(root: tk.Tk):
 
     estilizar(root)
 
+    # Canvas base
     canvas = tk.Canvas(root, highlightthickness=0, bd=0)
     canvas.pack(fill="both", expand=True)
 
     # guardar referências para destruir depois
     root._tela_inicial_widgets = [canvas]
-    root._render_after = None  # para debounce
+    root._render_after = None  # debounce id
+    root._login_win = None     # id da janela no canvas
+    root._reg_win = None
+
+    # ===== Botões criados UMA VEZ =====
+    def on_click_login():
+        print("[DEBUG] click LOGIN")
+        abrir_modal_login(root)
+
+    def on_click_registro():
+        print("[DEBUG] click REGISTRO")
+        abrir_modal_registro(root)
+
+    btn_login = ttk.Button(root, text="LOGIN", style="Primary.TButton", command=on_click_login)
+    btn_reg   = ttk.Button(root, text="REGISTRO / CADASTRO", style="Outline.TButton", command=on_click_registro)
+
+    # guardamos para destruir depois
+    root._tela_inicial_widgets.extend([btn_login, btn_reg])
+
+    # criamos as janelas do canvas (uma vez)
+    root._login_win = canvas.create_window(0, 0, window=btn_login, anchor="center")
+    root._reg_win   = canvas.create_window(0, 0, window=btn_reg,   anchor="center")
 
     def render():
         try:
-            canvas.delete("all")
             w, h = root.winfo_width(), root.winfo_height()
+            canvas.delete("all")   # limpa tudo (formas); as janelas são recriadas abaixo
             if not NO_GRADIENT:
-                # gradiente leve e sem tempestade de desenho
                 desenhar_gradiente(canvas, w, h, BG_TOP, BG_MID, BG_BOTTOM, steps=120)
             else:
-                # fundo sólido (fallback)
                 canvas.create_rectangle(0, 0, w, h, fill=BG_MID, outline="")
 
             cx = w // 2
@@ -159,43 +170,30 @@ def montar_tela_inicial(root: tk.Tk):
             if CAMINHO_LOGO and os.path.exists(CAMINHO_LOGO):
                 try:
                     img = tk.PhotoImage(file=CAMINHO_LOGO)
-                    # manter referência para não perder a imagem
-                    canvas.image = img
+                    canvas.image = img  # mantém referência
                     canvas.create_image(cx, y_logo, image=img)
                 except Exception:
                     canvas.create_oval(cx - 34, y_logo - 34, cx + 34, y_logo + 34, outline="#0d3758", width=3)
             else:
                 canvas.create_oval(cx - 34, y_logo - 34, cx + 34, y_logo + 34, outline="#0d3758", width=3)
 
-            # LOGIN
-            btn_login = ttk.Button(root, text="LOGIN", style="Primary.TButton",
-                                   command=lambda: abrir_modal_login(root))
-            canvas.create_window(cx, y_logo + 96, window=btn_login, anchor="center")
-            root._tela_inicial_widgets.append(btn_login)
-
-            # REGISTRO
-            btn_reg = ttk.Button(root, text="REGISTRO / CADASTRO", style="Outline.TButton",
-                                 command=lambda: abrir_modal_registro(root))
-            canvas.create_window(cx, y_logo + 150, window=btn_reg, anchor="center")
-            root._tela_inicial_widgets.append(btn_reg)
+            # Reposiciona as janelas dos botões (sem recriar os botões)
+            canvas.coords(root._login_win, cx, y_logo + 96)
+            canvas.coords(root._reg_win,   cx, y_logo + 150)
 
             canvas.create_rectangle(0, h - 48, w, h, fill="#0b2f4a", width=0)
         finally:
-            # limpa a flag do debounce
             root._render_after = None
 
     def schedule_render(_evt=None):
-        # Debounce: renderiza no máx. a cada 60ms, cancelando chamadas anteriores
         if root._render_after:
-            try:
-                root.after_cancel(root._render_after)
-            except Exception:
-                pass
+            try: root.after_cancel(root._render_after)
+            except Exception: pass
         root._render_after = root.after(60, render)
 
-    root.bind("<Configure>", schedule_render)
-    # Render inicial
+    # Primeira renderização + bind com debounce
     schedule_render()
+    root.bind("<Configure>", schedule_render)
 
 # ---------- modais ----------
 def abrir_modal_login(root: tk.Tk):
@@ -217,10 +215,8 @@ def abrir_modal_login(root: tk.Tk):
             ip = socket.gethostbyname(socket.gethostname())
             auth = usuario_login(ent_email.get().strip(), ent_senha.get(), ua, ip)
 
-            try:
-                win.grab_release()
-            except Exception:
-                pass
+            try: win.grab_release()
+            except Exception: pass
             win.destroy()
             montar_sistema(root, auth)
         except Exception as e:
@@ -273,23 +269,18 @@ def montar_sistema(root: tk.Tk, auth: Dict[str, Any]):
     # Se já houver um sistema montado, desmonta
     atual = getattr(root, "_sistema", None)
     if atual:
-        try:
-            atual.desmontar()
-        except Exception:
-            pass
+        try: atual.desmontar()
+        except Exception: pass
         root._sistema = None
 
-    # Monta o sistema com fallback de erro
     def on_sair(_root: tk.Tk):
         try:
             if hasattr(_root, "_sistema") and _root._sistema:
                 _root._sistema = None
-        except Exception:
-            pass
+        except Exception: pass
         montar_tela_inicial(_root)
 
     try:
-        # import tardio para evitar erro no import global se houver dependências
         from telas.sistema import SistemaApp
         print("[DEBUG] tela_inicial: import telas.sistema.SistemaApp OK")
         root._sistema = SistemaApp(root, auth, on_sair=on_sair)
@@ -301,10 +292,5 @@ def montar_sistema(root: tk.Tk, auth: Dict[str, Any]):
             f.write("\n" + "="*80 + "\n")
             f.write("Falha ao montar o SistemaApp:\n")
             f.write(traceback.format_exc())
-
-        messagebox.showerror(
-            "Erro ao abrir o sistema",
-            f"{e}\n\nUm log foi salvo em:\n{log_path}"
-        )
-        # Reconstrói a tela inicial para o usuário tentar novamente
+        messagebox.showerror("Erro ao abrir o sistema", f"{e}\n\nLog: {log_path}")
         montar_tela_inicial(root)
