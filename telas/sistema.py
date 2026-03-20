@@ -114,24 +114,29 @@ class SistemaWindow(tk.Toplevel):
         tela.pack(fill="both", expand=True)
 
     # --------- SAIR / LOGOUT ----------
+    
     def sair(self):
-        """Confirma logout, invalida sessão e volta para a Tela Inicial."""
-        if not messagebox.askyesno("Sair", "Deseja realmente sair e encerrar a sessão?"):
-            return
+            """Confirma logout, invalida sessão e volta para a Tela Inicial."""
+            if not messagebox.askyesno("Sair", "Deseja realmente sair e encerrar a sessão?"):
+                return
+    
+            try:
+                token = self.auth.get("token")
+                if token:
+                    usuario_logout(token)
+            except Exception:
+                pass
+    
+            try:
+                self.destroy()
+            finally:
+                # Volta a mostrar a Tela Inicial (que foi ocultada com withdraw)
+                if hasattr(self.master, "deiconify"):
+                    self.master.deiconify()
+                # Remove a referência para permitir nova criação depois
+                try:
+                    if hasattr(self.master, "_janela_sistema"):
+                        self.master._janela_sistema = None
+                except Exception:
+                    pass
 
-        # Tenta invalidadar a sessão no backend
-        try:
-            token = self.auth.get("token")
-            if token:
-                usuario_logout(token)
-        except Exception:
-            # não bloqueia a saída se falhar
-            pass
-
-        # Fecha a janela principal
-        try:
-            self.destroy()
-        finally:
-            # Reexibe a tela inicial (se estiver oculta)
-            if hasattr(self.root, "deiconify"):
-                self.root.deiconify()
