@@ -295,12 +295,7 @@ class AnalisesWindow(tk.Toplevel):
 
         self._context = {}
 
-        # --- REDESENHO REATIVO (NOVO) ---
-        self._redraw_after = None
-        for cv in (self.canvas1, self.canvas2):
-            cv.bind("<Configure>", self._on_canvas_configure)
-
-        # Redesenho reativo (debounce)  --- NOVO ---
+        # --- REDESENHO REATIVO (apenas 1 bind) ---
         self._redraw_after = None
         for cv in (self.canvas1, self.canvas2):
             cv.bind("<Configure>", self._on_canvas_configure)
@@ -334,13 +329,13 @@ class AnalisesWindow(tk.Toplevel):
             qt_empenhada = sum(float(x.get("qtde_empenhada") or 0) for x in itens_saldo)
             qt_saldo = sum(float(x.get("qtde_saldo") or 0) for x in itens_saldo)
 
-            # --- NOVO: dados para barras empilhadas (VALOR: Total x Consumido) ---
-            # 1) Totais por item (vl_total da ATA)
+            # Totais por item (R$) e total da ATA
             itens_totais_vl = {it["id"]: float(it.get("vl_total") or 0.0) for it in itens}
-            
-            # 2) Consumo por item (no período, se informado) - LEFT style
+            vl_total_ata = sum(itens_totais_vl.values())
+
+            # Consumo por item (LEFT: garante todos os itens)
             conn = banco.conectar(); cur = conn.cursor()
-            cur.execute(f"""
+            cur.execute("""
                 SELECT 
                     ai.id,
                     IFNULL((
@@ -356,47 +351,58 @@ class AnalisesWindow(tk.Toplevel):
             """, (self.data_ini, self.data_ini, self.data_fim, self.data_fim, ata_id))
             cons_map = {int(r["id"]): float(r["cons"] or 0.0) for r in cur.fetchall()}
             conn.close()
-            
-            # 3) Monta lista empilhada para TODOS os itens (consumido + restante do total)
-            stack_vl = []
+
+            # Empenhado por item (R$)
+            conn = banco.conectar(); cur = conn.cursor()
+            cur.execute("""
+                SELECT ata_item_id AS id, IFNULL(SUM(vl_total),0) AS emp
+                  FROM empenhos
+                 WHERE ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id=?)
+                 GROUP BY ata_item_id
+            """, (ata_id,))
+            emp_map = {int(r["id"]): float(r["emp"] or 0.0) for r in cur.fetchall()}
+            conn.close()
+
+            # Listas empilhadas (Valor: Total x Consumido / Total x Empenhado)
+            stack_vl_consumo = []
+            stack_vl_empenho = []
             for it in itens:
                 iid   = int(it["id"])
                 nome  = it.get("nome_item", "") or ""
                 total = float(itens_totais_vl.get(iid, 0.0))
+
                 cons  = float(cons_map.get(iid, 0.0))
                 cons_cap = max(0.0, min(cons, total))
-                restante = max(0.0, total - cons_cap)
-                stack_vl.append((nome, cons_cap, restante, total))
-            
-            # Ordena por total desc (Top-N será aplicado no desenho)
-            stack_vl.sort(key=lambda t: t[3], reverse=True)
+                rest_c  = max(0.0, total - cons_cap)
+                stack_vl_consumo.append((nome, cons_cap, rest_c, total))
 
-            # 4) Monta lista empilhada para QUANTIDADE
+                emp   = float(emp_map.get(iid, 0.0))
+                emp_cap = max(0.0, min(emp, total))
+                rest_e  = max(0.0, total - emp_cap)
+                stack_vl_empenho.append((nome, emp_cap, rest_e, total))
+
+            stack_vl_consumo.sort(key=lambda t: t[3], reverse=True)
+            stack_vl_empenho.sort(key=lambda t: t[3], reverse=True)
+
+            # Empilhado (Quantidade): Total x Empenhada
             stack_qt = []
             for it in itens_saldo:
                 nome = it.get("nome_item", "") or ""
                 total = float(it.get("qtde_total") or 0.0)
                 empenhada = float(it.get("qtde_empenhada") or 0.0)
                 saldo = float(it.get("qtde_saldo") or 0.0)
-                
-                # Empilhado: empenhada + saldo = total
                 stack_qt.append((nome, empenhada, saldo, total))
-            
-            # Ordena por total desc
             stack_qt.sort(key=lambda t: t[3], reverse=True)
-            
+
             # Guarda no contexto
             self._context.update({
-                "stack_vl_total_consumido": stack_vl,
-                "stack_qt_total_empenhada": stack_qt  # NOVO
-            })
-            
-            # Guarda no contexto
-            self._context.update({
-                "stack_vl_total_consumido": stack_vl
+                "stack_vl_total_consumido": stack_vl_consumo,
+                "stack_vl_total_empenhado": stack_vl_empenho,
+                "stack_qt_total_empenhada": stack_qt,
+                "vl_total_ata": vl_total_ata
             })
 
-            # Valores (respeitando período no consumo)
+            # Valores agregados (Empenhado x Consumido no período)
             conn = banco.conectar(); cur = conn.cursor()
             cur.execute("""
                 SELECT 
@@ -414,8 +420,7 @@ class AnalisesWindow(tk.Toplevel):
             vl_saldo = vl_empenhado - vl_consumido
             conn.close()
 
-            # Top-10 saldos (valor e qtd)
-            # Valor (usa subselects sem período no empenhado; consumo pode ser com período se desejar)
+            # Tops
             conn = banco.conectar(); cur = conn.cursor()
             cur.execute("""
                 SELECT 
@@ -442,7 +447,7 @@ class AnalisesWindow(tk.Toplevel):
                 key=lambda t: t[1], reverse=True
             )[:10]
 
-            # Consumo mensal (valor e qtd) no período
+            # Séries mensais (valor e qtd) no período
             conn = banco.conectar(); cur = conn.cursor()
             cur.execute("""
                 SELECT strftime('%Y-%m', COALESCE(NULLIF(ni.data_uso, ''), ni.nota_id || '')) AS ano_mes,
@@ -472,7 +477,11 @@ class AnalisesWindow(tk.Toplevel):
                 "serie_qt": serie_qt,
                 "serie_vl": serie_valor,
                 "itens": itens,
-                "itens_saldo": itens_saldo
+                "itens_saldo": itens_saldo,
+                "stack_vl_total_consumido": self._context["stack_vl_total_consumido"],
+                "stack_vl_total_empenhado": self._context["stack_vl_total_empenhado"],
+                "stack_qt_total_empenhada": self._context["stack_qt_total_empenhada"],
+                "vl_total_ata": vl_total_ata
             }
 
             self._titulo(f"ATA {self.pregao} — Fornecedor {self.fornecedor_id}  "
@@ -588,54 +597,65 @@ class AnalisesWindow(tk.Toplevel):
         if self._context.get("tipo") != "ata":
             return
         m = self.metric.get()
-        # pega listas completas do contexto
-        top_qt = list(self._context["top_qt"])
-        top_vl = list(self._context["top_vl"])
-        # o método _barras_horiz já fatia pelo self.topn, mas não custa manter listas completas aqui
 
         if m == "valor":
             vl_empenhado, vl_consumido, vl_saldo = self._context["kpi_vl"]
+            vl_total_ata = float(self._context.get("vl_total_ata") or 0.0)
+
             self._kpis([
                 ("Empenhado (R$)", self._fmt_brl(vl_empenhado)),
                 ("Consumido (R$)", self._fmt_brl(vl_consumido)),
-                ("Saldo (R$)", self._fmt_brl(vl_saldo)),
+                ("Saldo (R$)",     self._fmt_brl(vl_saldo)),
             ])
-            # Pizza: Consumido x Saldo do empenhado
-            self._pizza(self.canvas1, [("Consumido", vl_consumido, "#D83B01"),
-                                       ("Saldo",     vl_saldo,     "#0078D4")])
-        
-            # Barras empilhadas: Total da ATA x Consumido, por item (Top-N)
-            stack_vl = self._context.get("stack_vl_total_consumido", [])
+
+            # Fallback quando não há consumo em R$: usar Empenhado x Saldo do Total
+            if vl_consumido > 0:
+                self._pizza(self.canvas1, [("Consumido", vl_consumido, "#D83B01"),
+                                           ("Saldo",     vl_saldo,     "#0078D4")])
+                stack = self._context.get("stack_vl_total_consumido", [])
+                titulo = "Total da ATA x Consumido (R$) — Top itens"
+                cor_emp = "#D83B01"
+            else:
+                saldo_total = max(0.0, vl_total_ata - vl_empenhado)
+                self._pizza(self.canvas1, [("Empenhado", vl_empenhado, "#D83B01"),
+                                           ("Saldo total", saldo_total, "#7FBAFF")])
+                stack = self._context.get("stack_vl_total_empenhado", [])
+                titulo = "Total da ATA x Empenhado (R$) — Top itens"
+                cor_emp = "#D83B01"
+
             self._barras_horiz_empilhada(
                 self.canvas2,
-                stack_vl,
-                titulo="Total da ATA x Consumido (R$) — Top itens",
-                cor_a="#D83B01",   # Consumido
-                cor_b="#7FBAFF"    # Restante do Total
+                stack,
+                titulo=titulo,
+                cor_empenhado=cor_emp,
+                cor_restante="#7FBAFF"
             )
-        
-            self._info(f"Empenhado: {self._fmt_brl(vl_empenhado)} • Consumido: {self._fmt_brl(vl_consumido)} • Saldo: {self._fmt_brl(vl_saldo)}")
+
+            self._info(
+                f"Total ATA: {self._fmt_brl(vl_total_ata)} • "
+                f"Empenhado: {self._fmt_brl(vl_empenhado)} • "
+                f"Consumido: {self._fmt_brl(vl_consumido)} • "
+                f"Saldo (Emp.): {self._fmt_brl(vl_saldo)}"
+            )
             return
-        else:  # quantidade
-            qt_total, qt_empenhada, qt_saldo = self._context["kpi_qt"]
-            self._kpis([
-                ("Qtde total", f"{qt_total:.0f}"),
-                ("Qtde empenhada", f"{qt_empenhada:.0f}"),
-                ("Qtde saldo", f"{qt_saldo:.0f}"),
-            ])
-            self._pizza(self.canvas1, [("Empenhada", qt_empenhada, "#107C10"), ("Saldo", qt_saldo, "#0078D4")])
-            
-            # USAR BARRAS EMPILHADAS PARA QUANTIDADE
-            stack_qt = self._context.get("stack_qt_total_empenhada", [])
-            self._barras_horiz_empilhada(
-                self.canvas2,
-                stack_qt,
-                titulo="Total da ATA x Empenhada (Qtde) — Top itens",
-                cor_a="#107C10",   # Empenhada (verde)
-                cor_b="#7FBAFF"    # Saldo (azul claro)
-            )
-            
-            self._info(f"Itens: {len(self._context['itens'])} • Total: {qt_total:.0f} • Empenhada: {qt_empenhada:.0f} • Saldo: {qt_saldo:.0f}")
+
+        # --- quantidade ---
+        qt_total, qt_empenhada, qt_saldo = self._context["kpi_qt"]
+        self._kpis([
+            ("Qtde total", f"{qt_total:.0f}"),
+            ("Qtde empenhada", f"{qt_empenhada:.0f}"),
+            ("Qtde saldo", f"{qt_saldo:.0f}"),
+        ])
+        self._pizza(self.canvas1, [("Empenhada", qt_empenhada, "#107C10"), ("Saldo", qt_saldo, "#0078D4")])
+        stack_qt = self._context.get("stack_qt_total_empenhada", [])
+        self._barras_horiz_empilhada(
+            self.canvas2,
+            stack_qt,
+            titulo="Total da ATA x Empenhada (Qtde) — Top itens",
+            cor_empenhado="#107C10",
+            cor_restante="#7FBAFF"
+        )
+        self._info(f"Itens: {len(self._context['itens'])} • Total: {qt_total:.0f} • Empenhada: {qt_empenhada:.0f} • Saldo: {qt_saldo:.0f}")
 
     # ----------------- Exportações / Salvar PNG -----------------
     def _exportar_csv(self):
@@ -777,8 +797,10 @@ class AnalisesWindow(tk.Toplevel):
 
     def _on_canvas_configure(self, _evt):
         if self._redraw_after:
-            try: self.after_cancel(self._redraw_after)
-            except Exception: pass
+            try:
+                self.after_cancel(self._redraw_after)
+            except Exception:
+                pass
         self._redraw_after = self.after(60, self._render_current)
 
     def _render_current(self):
@@ -800,7 +822,6 @@ class AnalisesWindow(tk.Toplevel):
         """Corta o texto para caber em max_px e coloca … no fim se necessário."""
         if font.measure(text) <= max_px:
             return text
-        # reserva espaço p/ '…'
         ell = "…"
         for i in range(len(text), 0, -1):
             t = text[:i].rstrip() + ell
@@ -814,7 +835,6 @@ class AnalisesWindow(tk.Toplevel):
         w = max(cv.winfo_width(),  400)
         h = max(cv.winfo_height(), 220)
         cx, cy = w // 2, h // 2
-        # raio ligeiramente menor pra evitar "grudar" nas bordas
         ratio = 0.33
         if getattr(self, "metric", None) and self.metric.get() == "valor":
             ratio = 0.30
@@ -835,231 +855,145 @@ class AnalisesWindow(tk.Toplevel):
             legend_y += 18
             ang = ang2
 
-
-    def _barras_horiz(self, cv: tk.Canvas, dados, titulo=""):
+    def _barras_horiz_empilhada(self, cv: tk.Canvas, dados, titulo="",
+                                cor_empenhado="#107C10", cor_restante="#7FBAFF"):
         """
-        Barras horizontais simples com controle de tamanho.
-        dados = [(label, valor)]
-        """
-        import tkinter.font as tkfont
-        
-        cv.delete("all")
-        cv.update_idletasks()
-        
-        # LIMITAR DIMENSÕES PARA EVITAR GRÁFICO ESTICADO
-        w = min(max(cv.winfo_width(), 600), 900)   # Máximo 900px de largura
-        h = max(cv.winfo_height(), 240)
-        
-        # Título
-        if titulo:
-            cv.create_text(w//2, 14, text=titulo, font=("Segoe UI", 10, "bold"), fill="#333")
-        
-        # Área útil
-        top_pad    = 28 if titulo else 8
-        bottom_pad = 16
-        right_pad  = 12
-        y0 = top_pad
-        y1 = h - bottom_pad
-        
-        if not dados:
-            cv.create_text(w//2, (y0+y1)//2, text="Sem dados", font=("Segoe UI", 10), fill="#666")
-            return
-        
-        # Mede rótulos para reservar largura dinâmica à esquerda
-        fnt = tkfont.Font(family="Segoe UI", size=9)
-        max_lbl_px = max([fnt.measure(str(l)[:60]) for (l, _v) in dados] + [120])
-        max_lbl_px = min(max_lbl_px + 10, 320)  # limite superior para não "comer" o gráfico
-        
-        x_label = 10
-        x0 = x_label + max_lbl_px + 10
-        x1 = w - right_pad
-        
-        # Escala
-        valores = [float(v) for (_l, v) in dados]
-        vmax = max(valores) or 1.0
-        
-        # Altura das barras - LIMITAR PARA EVITAR GRÁFICO MUITO COMPRIDO
-        n = len(dados)
-        barra_h = max(14, min(22, int((y1 - y0) / max(1, n)) - 4))  # Máximo 22px
-        y = y0
-        
-        for (lab, val) in dados:
-            # Limita o texto e aplica reticências se necessário
-            lab_txt = self._ellipsis(str(lab), fnt, max_lbl_px)
-            largura = (float(val) / vmax) * (x1 - x0)
-            
-            cv.create_text(x_label, y + barra_h/2, text=lab_txt, anchor="w", 
-                          font=("Segoe UI", 9), fill="#333")
-            cv.create_rectangle(x0, y, x0 + largura, y + barra_h, fill="#0078D4", outline="")
-            
-            # Formata valor conforme contexto
-            valor_txt = self._fmt_brl(val) if "R$" in (titulo or "") else f"{float(val):.0f}"
-            cv.create_text(x0 + largura + 4, y + barra_h/2,
-                          text=valor_txt, anchor="w", font=("Segoe UI", 9), fill="#444")
-            y += barra_h + 6
-
-    def _barras_horiz_empilhada(self, cv: tk.Canvas, dados, titulo="", 
-                            cor_empenhado="#107C10", cor_restante="#7FBAFF"):
-        """
-        Barras empilhadas horizontais: Total da ATA vs Empenhado.
-        
-        dados = [(label, empenhado, restante, total)]
-        - empenhado: valor já empenhado/consumido
-        - restante: saldo disponível da ATA
-        - total: soma dos dois (valor total da ATA para o item)
+        Barras empilhadas horizontais:
+        dados = [(label, parteA, parteB, total)]  (parteA=Empenhado/Consumido; parteB=Restante total)
         """
         import tkinter.font as tkfont
-        
+
         cv.delete("all")
         cv.update_idletasks()
-        
-        # LIMITAR DIMENSÕES
-        w = min(max(cv.winfo_width(), 600), 900)   # Máximo 900px
+
+        w = min(max(cv.winfo_width(), 600), 900)
         h = max(cv.winfo_height(), 260)
-        
-        # Top-N (configurável)
+
+        # Top-N (se existir)
         try:
             topn = int(getattr(self, "topn", 10))
         except Exception:
             topn = 10
         dados = list(dados)[:max(1, topn)]
-        
+
         if titulo:
             cv.create_text(w//2, 14, text=titulo, font=("Segoe UI", 10, "bold"), fill="#333")
-        
+
         top_pad    = 28 if titulo else 8
         bottom_pad = 16
         right_pad  = 12
         y0 = top_pad
         y1 = h - bottom_pad
-        
+
         if not dados:
             cv.create_text(w//2, (y0+y1)//2, text="Sem dados", font=("Segoe UI", 10), fill="#666")
             return
-        
-        # Mede rótulos
+
         fnt = tkfont.Font(family="Segoe UI", size=9)
         max_lbl_px = max([fnt.measure(str(l)[:60]) for (l, *_rest) in dados] + [120])
         max_lbl_px = min(max_lbl_px + 10, 320)
-        
+
         x_label = 10
         x0 = x_label + max_lbl_px + 10
         x1 = w - right_pad
-        
-        # Escala baseada no maior TOTAL
-        vmax = max(float(t) for (_l, _emp, _rest, t) in dados) or 1.0
-        
-        # Altura das barras - CONTROLADA
+
+        vmax = max(float(t) for (_l, _a, _b, t) in dados) or 1.0
+
         n = len(dados)
         barra_h = max(14, min(22, int((y1 - y0) / max(1, n)) - 4))
         y = y0
-        
-        # Legenda no canto superior direito
+
+        # Legenda
         leg_y = 10
         cv.create_rectangle(w - 140, leg_y, w - 12, leg_y + 12, fill=cor_empenhado, outline=cor_empenhado)
-        cv.create_text(w - 145, leg_y + 6, text="Empenhado", anchor="e", 
-                      font=("Segoe UI", 8), fill="#333")
+        cv.create_text(w - 145, leg_y + 6, text="Parte A", anchor="e", font=("Segoe UI", 8), fill="#333")
         cv.create_rectangle(w - 140, leg_y + 14, w - 12, leg_y + 26, fill=cor_restante, outline=cor_restante)
-        cv.create_text(w - 145, leg_y + 20, text="Restante da ATA", anchor="e", 
-                      font=("Segoe UI", 8), fill="#333")
-        
-        for (lab, empenhado, restante, total) in dados:
-            # Normaliza valores
+        cv.create_text(w - 145, leg_y + 20, text="Restante", anchor="e", font=("Segoe UI", 8), fill="#333")
+
+        for (lab, parte_a, parte_b, total) in dados:
             total = max(0.0, float(total))
-            emp = max(0.0, float(empenhado))
-            rest = max(0.0, float(restante))
-            
-            # Garante consistência: emp + rest = total
-            if emp + rest > total:
-                rest = max(0.0, total - emp)
-            
+            a = max(0.0, float(parte_a))
+            b = max(0.0, float(parte_b))
+            if a + b > total:
+                b = max(0.0, total - a)
+
             lab_txt = self._ellipsis(str(lab), fnt, max_lbl_px)
-            
-            # Calcula larguras proporcionais
+
             largura_total = (total / vmax) * max(1, (x1 - x0))
-            largura_emp   = (emp   / vmax) * max(1, (x1 - x0))
-            largura_rest  = (rest  / vmax) * max(1, (x1 - x0))
-            
-            # Rótulo do item (esquerda)
-            cv.create_text(x_label, y + barra_h/2, text=lab_txt, anchor="w",
-                          font=("Segoe UI", 9), fill="#333")
-            
-            # Parte 1: EMPENHADO (verde)
-            xe0 = x0
-            xe1 = x0 + largura_emp
-            if largura_emp > 1:
-                cv.create_rectangle(xe0, y, xe1, y + barra_h, fill=cor_empenhado, outline="")
-                val_emp = self._fmt_brl(emp) if "R$" in titulo else f"{emp:.0f}"
-                # Texto dentro da barra se couber
-                if xe1 - xe0 > fnt.measure(val_emp) + 8:
-                    cv.create_text((xe0 + xe1)/2, y + barra_h/2, text=val_emp,
-                                  font=("Segoe UI", 8, "bold"), fill="#FFFFFF")
+            largura_a     = (a     / vmax) * max(1, (x1 - x0))
+            largura_b     = (b     / vmax) * max(1, (x1 - x0))
+
+            cv.create_text(x_label, y + barra_h/2, text=lab_txt, anchor="w", font=("Segoe UI", 9), fill="#333")
+
+            xa0 = x0
+            xa1 = x0 + largura_a
+            if largura_a > 1:
+                cv.create_rectangle(xa0, y, xa1, y + barra_h, fill=cor_empenhado, outline="")
+                valA = self._fmt_brl(a) if "R$" in (titulo or "") else f"{a:.0f}"
+                if xa1 - xa0 > fnt.measure(valA) + 8:
+                    cv.create_text((xa0 + xa1)/2, y + barra_h/2, text=valA,
+                                   font=("Segoe UI", 8, "bold"), fill="#FFFFFF")
                 else:
-                    cv.create_text(xe1 + 4, y + barra_h/2, text=val_emp, anchor="w",
-                                  font=("Segoe UI", 8), fill="#444")
-            
-            # Parte 2: RESTANTE DA ATA (azul claro)
-            xr0 = xe1
-            xr1 = xe1 + largura_rest
-            if largura_rest > 1:
-                cv.create_rectangle(xr0, y, xr1, y + barra_h, fill=cor_restante, outline="")
-                val_rest = self._fmt_brl(rest) if "R$" in titulo else f"{rest:.0f}"
-                if xr1 - xr0 > fnt.measure(val_rest) + 8:
-                    cv.create_text((xr0 + xr1)/2, y + barra_h/2, text=val_rest,
-                                  font=("Segoe UI", 8, "bold"), fill="#0E3B5B")
-                elif xr1 + 4 + fnt.measure(val_rest) < x1:
-                    cv.create_text(xr1 + 4, y + barra_h/2, text=val_rest, anchor="w",
-                                  font=("Segoe UI", 8), fill="#444")
-            
-            # TOTAL da barra (à direita, em cinza)
-            tot_txt = self._fmt_brl(total) if "R$" in titulo else f"{total:.0f}"
+                    cv.create_text(xa1 + 4, y + barra_h/2, text=valA, anchor="w",
+                                   font=("Segoe UI", 8), fill="#444")
+
+            xb0 = xa1
+            xb1 = xa1 + largura_b
+            if largura_b > 1:
+                cv.create_rectangle(xb0, y, xb1, y + barra_h, fill=cor_restante, outline="")
+                valB = self._fmt_brl(b) if "R$" in (titulo or "") else f"{b:.0f}"
+                if xb1 - xb0 > fnt.measure(valB) + 8:
+                    cv.create_text((xb0 + xb1)/2, y + barra_h/2, text=valB,
+                                   font=("Segoe UI", 8, "bold"), fill="#0E3B5B")
+                elif xb1 + 4 + fnt.measure(valB) < x1:
+                    cv.create_text(xb1 + 4, y + barra_h/2, text=valB, anchor="w",
+                                   font=("Segoe UI", 8), fill="#444")
+
+            tot_txt = self._fmt_brl(total) if "R$" in (titulo or "") else f"{total:.0f}"
             cv.create_text(min(x0 + largura_total + 8, x1 - 2), y + barra_h/2,
-                          text=f"• {tot_txt}", anchor="w", font=("Segoe UI", 8), fill="#666")
-            
+                           text=f"• {tot_txt}", anchor="w", font=("Segoe UI", 8), fill="#666")
+
             y += barra_h + 5
 
     def _barras_vert(self, cv: tk.Canvas, serie, titulo=""):
-        # serie = [(mes_label, valor)]
         cv.delete("all")
         cv.update_idletasks()
         w = max(cv.winfo_width(),  600)
         h = max(cv.winfo_height(), 260)
-    
+
         margem_esq = 56
         margem_inf = 36
         margem_dir = 10
         margem_sup = 22
-    
+
         x0 = margem_esq
         y0 = margem_sup
         x1 = w - margem_dir
         y1 = h - margem_inf
-    
+
         if titulo:
             cv.create_text(w//2, 12, text=titulo, font=("Segoe UI", 10, "bold"), fill="#333")
-    
+
         if not serie:
             cv.create_text(w//2, (y0+y1)//2, text="Sem dados", font=("Segoe UI", 10), fill="#666")
             return
-    
+
         valores = [float(v) for (_m, v) in serie]
         vmax = max(valores) or 1.0
         escala = self._nice_ceil(vmax) or 1.0
-    
-        # grade
+
         linhas = 4
         for i in range(linhas + 1):
             y = y1 - (i / linhas) * (y1 - y0)
             cv.create_line(x0, y, x1, y, fill="#EEE")
             val = (escala * i / linhas)
             cv.create_text(x0 - 6, y, text=self._fmt_brl(val), font=("Segoe UI", 8), fill="#666", anchor="e")
-    
-        # barras
+
         n = len(serie)
         largura_total = (x1 - x0)
         gap = max(4, int(largura_total / max(12, n) * 0.25))
         largura_barra = max(8, int((largura_total - gap * (n + 1)) / n))
-    
+
         x = x0 + gap
         for (mes, valor) in serie:
             altura = (float(valor) / escala) * (y1 - y0)
@@ -1070,7 +1004,7 @@ class AnalisesWindow(tk.Toplevel):
                 cv.create_text(x + largura_barra / 2, y_top - 8, text=self._fmt_brl(valor),
                                font=("Segoe UI", 8), fill="#333")
             x += largura_barra + gap
-    
+
         cv.create_line(x0, y0, x0, y1, fill="#AAA")
         cv.create_line(x0, y1, x1, y1, fill="#AAA")
 
