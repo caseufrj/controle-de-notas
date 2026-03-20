@@ -256,7 +256,7 @@ def montar_tela_inicial(root: tk.Tk):
                 canvas.coords(root._login_win, cx, y_logo + 250)
                 canvas.tag_raise(root._login_win)   # sempre acima do desenho
             if getattr(root, "_reg_win", None):
-                canvas.coords(root._reg_win, cx, y_logo + 500)
+                canvas.coords(root._reg_win, cx, y_logo + 400)
                 canvas.tag_raise(root._reg_win)
 
             # Barra inferior
