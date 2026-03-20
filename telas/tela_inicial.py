@@ -100,10 +100,10 @@ def abrir_modal_registro(root: tk.Tk):
 from telas.sistema import SistemaWindow  # novo import
 
 def abrir_app_principal(root: tk.Tk, auth: Dict[str, Any]) -> None:
-    """
-    Após login bem-sucedido, abre a janela principal completa do sistema.
-    """
-    SistemaWindow(root, auth)  # abre como Toplevel, mantendo o Tk da Tela Inicial
+    SistemaWindow(root, auth)
+    # fecha a janela inicial para ficar só a principal
+    root.withdraw()  # oculta a Tela Inicial
+    # ou root.destroy()  # encerra o Tk (apenas se SistemaWindow for Tk independente → não é o caso aqui)
     
 def tela_inicial():
     try: criar_tabelas()
