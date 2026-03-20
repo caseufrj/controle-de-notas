@@ -56,7 +56,7 @@ class TelaFornecedores(tk.Frame):
         tk.Label(right, text="Cadastro de Fornecedores",
                  font=("Segoe UI", 12, "bold"), bg="white").pack(anchor="w", pady=(0,8))
 
-        self.e_nome = row("Nome*:")
+        self.e_nome = row("Razão Social*:")
         self.e_rua = row("Rua:")
         self.e_numero = row("Número:")
         self.e_compl = row("Complemento:")
