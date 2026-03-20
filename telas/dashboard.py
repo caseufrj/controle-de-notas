@@ -333,7 +333,7 @@ class AnalisesWindow(tk.Toplevel):
             itens_totais_vl = {it["id"]: float(it.get("vl_total") or 0.0) for it in itens}
             vl_total_ata = sum(itens_totais_vl.values())
 
-            # Consumo por item (LEFT: garante todos os itens)
+            # Consumo por item (LEFT: garante todos os itens)  >>> COM data_uso Fallback
             conn = banco.conectar(); cur = conn.cursor()
             cur.execute("""
                 SELECT 
@@ -341,9 +341,10 @@ class AnalisesWindow(tk.Toplevel):
                     IFNULL((
                         SELECT SUM(ni.vl_total)
                           FROM notas_itens ni
+                          JOIN notas n ON n.id = ni.nota_id
                          WHERE ni.ata_item_id = ai.id
-                           AND (? IS NULL OR date(ni.data_uso) >= date(?))
-                           AND (? IS NULL OR date(ni.data_uso) <= date(?))
+                           AND (? IS NULL OR date(COALESCE(NULLIF(ni.data_uso,''), n.data_expedicao)) >= date(?))
+                           AND (? IS NULL OR date(COALESCE(NULLIF(ni.data_uso,''), n.data_expedicao)) <= date(?))
                     ), 0) AS cons
                   FROM atas_itens ai
                  WHERE ai.ata_id = ?
@@ -406,13 +407,16 @@ class AnalisesWindow(tk.Toplevel):
             conn = banco.conectar(); cur = conn.cursor()
             cur.execute("""
                 SELECT 
-                    IFNULL((SELECT SUM(e.vl_total) FROM empenhos e 
-                             WHERE e.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id=?)), 0),
-                    IFNULL((SELECT SUM(ni.vl_total)  FROM notas_itens ni
+                    IFNULL((SELECT SUM(e.vl_total)
+                              FROM empenhos e
+                             WHERE e.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id=?)), 0) AS emp,
+                    IFNULL((SELECT SUM(ni.vl_total)
+                              FROM notas_itens ni
+                              JOIN notas n ON n.id = ni.nota_id
                              WHERE ni.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id=?)
-                               AND (? IS NULL OR date(ni.data_uso) >= date(?))
-                               AND (? IS NULL OR date(ni.data_uso) <= date(?))
-                            ), 0)
+                               AND (? IS NULL OR date(COALESCE(NULLIF(ni.data_uso,''), n.data_expedicao)) >= date(?))
+                               AND (? IS NULL OR date(COALESCE(NULLIF(ni.data_uso,''), n.data_expedicao)) <= date(?))
+                           ), 0) AS cons
             """, (ata_id, ata_id, self.data_ini, self.data_ini, self.data_fim, self.data_fim))
             vl_empenhado, vl_consumido = cur.fetchone()
             vl_empenhado = float(vl_empenhado or 0.0)
@@ -420,16 +424,17 @@ class AnalisesWindow(tk.Toplevel):
             vl_saldo = vl_empenhado - vl_consumido
             conn.close()
 
-            # Tops
+            # Tops (mantidos)
             conn = banco.conectar(); cur = conn.cursor()
             cur.execute("""
                 SELECT 
                     ai.id, ai.nome_item,
                     IFNULL((SELECT SUM(e.vl_total)  FROM empenhos e WHERE e.ata_item_id = ai.id),0) AS emp,
                     IFNULL((SELECT SUM(ni.vl_total) FROM notas_itens ni
+                             JOIN notas n ON n.id = ni.nota_id
                              WHERE ni.ata_item_id = ai.id
-                               AND (? IS NULL OR date(ni.data_uso) >= date(?))
-                               AND (? IS NULL OR date(ni.data_uso) <= date(?))
+                               AND (? IS NULL OR date(COALESCE(NULLIF(ni.data_uso,''), n.data_expedicao)) >= date(?))
+                               AND (? IS NULL OR date(COALESCE(NULLIF(ni.data_uso,''), n.data_expedicao)) <= date(?))
                     ),0) AS cons
                 FROM atas_itens ai
                 WHERE ai.ata_id=?
@@ -447,7 +452,7 @@ class AnalisesWindow(tk.Toplevel):
                 key=lambda t: t[1], reverse=True
             )[:10]
 
-            # Séries mensais (valor e qtd) no período
+            # Séries mensais (valor e qtd) no período (mantidas)
             conn = banco.conectar(); cur = conn.cursor()
             cur.execute("""
                 SELECT strftime('%Y-%m', COALESCE(NULLIF(ni.data_uso, ''), ni.nota_id || '')) AS ano_mes,
@@ -816,7 +821,7 @@ class AnalisesWindow(tk.Toplevel):
         saldo    = float(self._context.get("saldo") or 0.0)
         serie    = self._prep_serie(self._context.get("serie") or [])
         self._pizza(self.canvas1, [("Consumido", cons_val, "#D83B01"), ("Saldo", saldo, "#0078D4")])
-        self._barras_vert(self.canvas2, serie, "Consumo mensal (R$)")
+        self._barras_vert(self.canvas2, self._prep_serie(self._context["serie"]), "Consumo mensal (R$)")
 
     def _ellipsis(self, text: str, font, max_px: int) -> str:
         """Corta o texto para caber em max_px e coloca … no fim se necessário."""
@@ -876,11 +881,25 @@ class AnalisesWindow(tk.Toplevel):
             topn = 10
         dados = list(dados)[:max(1, topn)]
 
-        if titulo:
-            cv.create_text(w//2, 14, text=titulo, font=("Segoe UI", 10, "bold"), fill="#333")
+        # ---- Título e legenda (mais respiro) ----
+        title_h = 18 if titulo else 0
+        legend_h = 28  # 2 linhas
+        head_h = (title_h + 10) + legend_h
 
-        top_pad    = 28 if titulo else 8
-        bottom_pad = 16
+        if titulo:
+            cv.create_text(w//2, 12, text=titulo, font=("Segoe UI", 10, "bold"), fill="#333")
+
+        # Legenda (canto superior direito)
+        leg_x0 = w - 160
+        leg_y0 = (title_h + 10)
+        cv.create_rectangle(leg_x0, leg_y0, leg_x0 + 12, leg_y0 + 12, fill=cor_empenhado, outline=cor_empenhado)
+        cv.create_text(leg_x0 - 6, leg_y0 + 6, text="Parte A", anchor="e", font=("Segoe UI", 8), fill="#333")
+        cv.create_rectangle(leg_x0, leg_y0 + 16, leg_x0 + 12, leg_y0 + 28, fill=cor_restante, outline=cor_restante)
+        cv.create_text(leg_x0 - 6, leg_y0 + 22, text="Restante", anchor="e", font=("Segoe UI", 8), fill="#333")
+
+        # ---- Área útil com margem extra no topo ----
+        top_pad    = max(8, head_h)
+        bottom_pad = 20
         right_pad  = 12
         y0 = top_pad
         y1 = h - bottom_pad
@@ -902,13 +921,6 @@ class AnalisesWindow(tk.Toplevel):
         n = len(dados)
         barra_h = max(14, min(22, int((y1 - y0) / max(1, n)) - 4))
         y = y0
-
-        # Legenda
-        leg_y = 10
-        cv.create_rectangle(w - 140, leg_y, w - 12, leg_y + 12, fill=cor_empenhado, outline=cor_empenhado)
-        cv.create_text(w - 145, leg_y + 6, text="Parte A", anchor="e", font=("Segoe UI", 8), fill="#333")
-        cv.create_rectangle(w - 140, leg_y + 14, w - 12, leg_y + 26, fill=cor_restante, outline=cor_restante)
-        cv.create_text(w - 145, leg_y + 20, text="Restante", anchor="e", font=("Segoe UI", 8), fill="#333")
 
         for (lab, parte_a, parte_b, total) in dados:
             total = max(0.0, float(total))
