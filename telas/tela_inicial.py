@@ -1,23 +1,18 @@
 # telas/tela_inicial.py
-import os, socket, logging
+import os
+import logging
 import tkinter as tk
 from tkinter import ttk, messagebox
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any
 
 from auth import auth_init, usuario_login, usuario_registrar
 from banco import criar_tabelas
 
-# Imports das telas do sistema
-from telas.dashboard import Dashboard
-from telas.fornecedores import TelaFornecedores
-from telas.atas_empenhos import TelaAtasEmpenhos
-from telas.notas import TelaNotas
-from telas.orcamento import TelaOrcamento
-from telas.configuracoes import TelaConfiguracoes
+logger = logging.getLogger(__name__)
 
 APP_NAME = "SICONAE"
 TITULO = "Sistema de Controle de Atas e Empenhos"
-CAMINHO_LOGO = None
+CAMINHO_LOGO = None  # Ex.: "assets/logo.png"
 
 # Cores
 PRIMARY = "#0d3758"
@@ -28,127 +23,6 @@ BG_TOP = "#cfe9ff"
 BG_MID = "#e8f4ff"
 BG_BOTTOM = "#f6fbff"
 
-# Logging
-logging.basicConfig(filename='siconae.log', level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
-
-def estilizar(root: tk.Tk):
-    st = ttk.Style(root)
-    try: st.theme_use("clam")
-    except: pass
-    st.configure("Primary.TButton", font=("Segoe UI Semibold", 20),
-                 background=PRIMARY, foreground=PRIMARY_TEXT,
-                 padding=(32,12), borderwidth=0, relief="flat")
-    st.map("Primary.TButton", background=[("active", PRIMARY_HOVER)])
-    st.configure("Outline.TButton", font=("Segoe UI Semibold", 12),
-                 background="white", foreground=OUTLINE_TEXT,
-                 padding=(22,8), borderwidth=2, relief="solid")
-
-def desenhar_gradiente(canvas, w, h, top, mid, bottom):
-    def hex_to_rgb(hx): return tuple(int(hx[i:i+2], 16) for i in (1,3,5))
-    t, m, b = hex_to_rgb(top), hex_to_rgb(mid), hex_to_rgb(bottom)
-    for y in range(h):
-        ratio = y/(h-1) if h>1 else 0
-        if ratio <= 0.5:
-            r2 = ratio/0.5
-            rgb = tuple(int(t[i] + (m[i]-t[i])*r2) for i in range(3))
-        else:
-            r2 = (ratio-0.5)/0.5
-            rgb = tuple(int(m[i] + (b[i]-m[i])*r2) for i in range(3))
-        canvas.create_line(0, y, w, y, fill="#%02x%02x%02x" % rgb)
-
-class AppPrincipal:
-    """Classe que gerencia o sistema principal DENTRO da mesma janela root."""
-    
-    def __init__(self, root: tk.Tk, auth: dict, build_tag: str = "build 2026-03-18"):
-        self.root = root
-        self.auth = auth
-        self.build_tag = build_tag
-        self.usuario = auth.get('usuario', {})
-        
-        self._configurar_janela()
-        self._criar_menu_lateral()
-        self._criar_area_trabalho()
-        self._abrir_dashboard()
-        
-        logging.info(f"Sistema iniciado para usuário: {self.usuario.get('email')}")
-
-    def _configurar_janela(self):
-        self.root.title(f"{APP_NAME} - {self.usuario.get('nome', 'Usuário')}")
-        self.root.geometry("1100x650")
-        self.root.minsize(1000, 600)
-        self.root.protocol("WM_DELETE_WINDOW", self.sair)
-        
-        # Fonte global
-        import tkinter.font as tkfont
-        default_font = tkfont.nametofont("TkDefaultFont")
-        default_font.configure(family="Segoe UI", size=10)
-        self.root.option_add("*Font", default_font)
-
-    def _criar_menu_lateral(self):
-        menu = tk.Frame(self.root, width=200, bg="#2c3e50")
-        menu.pack(side="left", fill="y")
-        menu.pack_propagate(False)  # Mantém largura fixa
-
-        def btn(text, cmd, bg="#34495e"):
-            b = tk.Button(menu, text=text, command=cmd, bg=bg, fg="white",
-                         bd=0, padx=12, pady=10, anchor="w",
-                         activebackground="#3d566e", activeforeground="white",
-                         font=("Segoe UI", 10))
-            b.pack(fill="x", padx=2, pady=1)
-            return b
-
-        btn("📊 Dashboard", lambda: self._trocar_tela(Dashboard, "Dashboard"))
-        btn("🏢 Fornecedores", lambda: self._trocar_tela(TelaFornecedores, "Fornecedores"))
-        btn("📋 Ata / Empenho", lambda: self._trocar_tela(TelaAtasEmpenhos, "Ata/Empenho"))
-        btn("🧾 Notas Fiscais", lambda: self._trocar_tela(TelaNotas, "Notas"))
-        btn("💰 Orçamento", lambda: self._trocar_tela(TelaOrcamento, "Orçamento"))
-        btn("⚙️ Configurações", lambda: self._trocar_tela(TelaConfiguracoes, "Configurações"))
-        
-        tk.Frame(menu, height=2, bg="#22313f").pack(fill="x", pady=8)
-        btn("🚪 Sair", self.sair, bg="#8e2b2b")
-
-    def _criar_area_trabalho(self):
-        self.container = tk.Frame(self.root, bg="#ecf0f1")
-        self.container.pack(side="right", expand=True, fill="both")
-
-    def _trocar_tela(self, classe_tela, nome: str):
-        """Limpa o container e carrega nova tela."""
-        for widget in self.container.winfo_children():
-            widget.destroy()
-        try:
-            tela = classe_tela(self.container)
-            tela.pack(fill="both", expand=True)
-            logging.debug(f"Tela carregada: {nome}")
-        except Exception as e:
-            logging.exception(f"Erro ao carregar {nome}")
-            messagebox.showerror("Erro", f"Falha ao abrir {nome}:\n{e}")
-
-    def _abrir_dashboard(self):
-        self._trocar_tela(Dashboard, "Dashboard")
-
-    def sair(self):
-        """Logout e volta para tela inicial."""
-        if not messagebox.askyesno("Sair", "Encerrar sessão e voltar ao login?"):
-            return
-        
-        try:
-            from auth import usuario_logout
-            token = self.auth.get("token")
-            if token:
-                usuario_logout(token)
-        except Exception as e:
-            logging.warning(f"Erro no logout: {e}")
-        
-        logging.info("Sessão encerrada. Voltando ao login.")
-        self._limpar_janela()
-        TelaInicial(self.root).render()
-
-    def _limpar_janela(self):
-        """Remove todos os widgets da janela para retornar ao estado inicial."""
-        for widget in self.root.winfo_children():
-            widget.destroy()
-
 
 class TelaInicial:
     """Tela de login/registro - renderizada no root."""
@@ -156,12 +30,14 @@ class TelaInicial:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.canvas = None
+        self._referencias = {}  # Mantém referências de imagens
 
     def render(self):
         """Desenha a tela inicial."""
         self.root.title(APP_NAME)
         self.root.geometry("920x540")
-        estilizar(self.root)
+        self.root.minsize(760, 460)
+        self._estilizar()
         
         self.canvas = tk.Canvas(self.root, highlightthickness=0, bd=0)
         self.canvas.pack(fill="both", expand=True)
@@ -169,39 +45,98 @@ class TelaInicial:
         self.root.bind("<Configure>", self._redesenhar)
         self.root.after(30, lambda: self._redesenhar(None))
         
-        logging.info("Tela inicial renderizada")
+        logger.info("Tela inicial renderizada")
+
+    def _estilizar(self):
+        """Configura estilos de botões."""
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except:
+            pass
+        
+        style.configure("Primary.TButton", 
+                       font=("Segoe UI Semibold", 20),
+                       background=PRIMARY, 
+                       foreground=PRIMARY_TEXT,
+                       padding=(32, 12), 
+                       borderwidth=0, 
+                       relief="flat")
+        style.map("Primary.TButton", 
+                 background=[("active", PRIMARY_HOVER)])
+        
+        style.configure("Outline.TButton", 
+                       font=("Segoe UI Semibold", 12),
+                       background="white", 
+                       foreground=OUTLINE_TEXT,
+                       padding=(22, 8), 
+                       borderwidth=2, 
+                       relief="solid")
+        style.map("Outline.TButton", 
+                 background=[("active", "#f2f7ff")])
 
     def _redesenhar(self, _evt):
-        if not self.canvas: return
+        """Redesenha o canvas quando a janela é redimensionada."""
+        if not self.canvas:
+            return
+        
         self.canvas.delete("all")
         w, h = self.root.winfo_width(), self.root.winfo_height()
         cx = w // 2
         
-        desenhar_gradiente(self.canvas, w, h, BG_TOP, BG_MID, BG_BOTTOM)
+        self._desenhar_gradiente(w, h)
         
         # Título
-        self.canvas.create_text(cx, 70, text=TITULO, font=("Segoe UI Semibold", 20), fill="#113a5e")
-        self.canvas.create_text(cx, 108, text=APP_NAME, font=("Segoe UI", 12), fill="#1f4c77")
+        self.canvas.create_text(cx, 70, text=TITULO, 
+                               font=("Segoe UI Semibold", 20), 
+                               fill="#113a5e")
+        self.canvas.create_text(cx, 108, text=APP_NAME, 
+                               font=("Segoe UI", 12), 
+                               fill="#1f4c77")
         
         # Logo placeholder
         y_logo = 150
-        self.canvas.create_oval(cx-34, y_logo-34, cx+34, y_logo+34, outline="#0d3758", width=3)
+        self.canvas.create_oval(cx-34, y_logo-34, cx+34, y_logo+34, 
+                               outline="#0d3758", width=3)
         
-        # Botões
-        btn_login = ttk.Button(self.root, text="LOGIN", style="Primary.TButton",
+        # Botão LOGIN
+        btn_login = ttk.Button(self.root, text="LOGIN", 
+                              style="Primary.TButton",
                               command=self._abrir_modal_login)
         self.canvas.create_window(cx, y_logo+96, window=btn_login, anchor="center")
         
-        btn_reg = ttk.Button(self.root, text="REGISTRO / CADASTRO", style="Outline.TButton",
+        # Botão REGISTRO
+        btn_reg = ttk.Button(self.root, text="REGISTRO / CADASTRO", 
+                            style="Outline.TButton",
                             command=self._abrir_modal_registro)
         self.canvas.create_window(cx, y_logo+150, window=btn_reg, anchor="center")
         
         # Rodapé
         self.canvas.create_rectangle(0, h-40, w, h, fill="#0b2f4a", width=0)
 
+    def _desenhar_gradiente(self, w: int, h: int):
+        """Desenha gradiente de fundo no canvas."""
+        def hex_to_rgb(hx):
+            return tuple(int(hx[i:i+2], 16) for i in (1, 3, 5))
+        
+        t = hex_to_rgb(BG_TOP)
+        m = hex_to_rgb(BG_MID)
+        b = hex_to_rgb(BG_BOTTOM)
+        
+        for y in range(h):
+            ratio = y / (h - 1) if h > 1 else 0
+            if ratio <= 0.5:
+                r2 = ratio / 0.5
+                rgb = tuple(int(t[i] + (m[i] - t[i]) * r2) for i in range(3))
+            else:
+                r2 = (ratio - 0.5) / 0.5
+                rgb = tuple(int(m[i] + (b[i] - m[i]) * r2) for i in range(3))
+            self.canvas.create_line(0, y, w, y, fill="#%02x%02x%02x" % rgb)
+
     def _abrir_modal_login(self):
+        """Abre modal de login."""
         modal = tk.Toplevel(self.root)
-        modal.title("Login")
+        modal.title("Login - SICONAE")
         modal.transient(self.root)
         modal.grab_set()
         modal.resizable(False, False)
@@ -210,35 +145,49 @@ class TelaInicial:
         frm = ttk.Frame(modal, padding=20)
         frm.pack(fill="both", expand=True)
         
-        ttk.Label(frm, text="E-mail EBSERH").pack(anchor="w")
+        ttk.Label(frm, text="E-mail EBSERH", font=("Segoe UI", 10)).pack(anchor="w")
         ent_email = ttk.Entry(frm, width=40)
-        ent_email.pack(pady=(0,8), fill="x")
+        ent_email.pack(pady=(0, 8), fill="x")
         
-        ttk.Label(frm, text="Senha").pack(anchor="w")
+        ttk.Label(frm, text="Senha", font=("Segoe UI", 10)).pack(anchor="w")
         ent_senha = ttk.Entry(frm, width=40, show="•")
-        ent_senha.pack(pady=(0,12), fill="x")
+        ent_senha.pack(pady=(0, 12), fill="x")
         
         def do_login():
-            email, senha = ent_email.get().strip(), ent_senha.get()
+            email = ent_email.get().strip()
+            senha = ent_senha.get()
+            
             if not email or not senha:
-                messagebox.showwarning("Atenção", "Preencha todos os campos.")
+                messagebox.showwarning("Atenção", "Preencha e-mail e senha.")
                 return
+            
             try:
-                auth = usuario_login(email, senha)  # 👈 Ajuste conforme sua API
+                auth = usuario_login(email, senha)
                 modal.grab_release()
                 modal.destroy()
                 self._entrar_no_sistema(auth)
             except Exception as e:
-                messagebox.showerror("Erro", str(e))
+                messagebox.showerror("Erro no login", str(e))
                 ent_senha.delete(0, tk.END)
+                ent_senha.focus_set()
         
-        ttk.Button(frm, text="Entrar", style="Primary.TButton", command=do_login).pack(fill="x")
-        modal.protocol("WM_DELETE_WINDOW", lambda: [modal.grab_release(), modal.destroy()])
+        ttk.Button(frm, text="Entrar", style="Primary.TButton", 
+                  command=do_login).pack(fill="x")
+        
+        def on_close():
+            try:
+                modal.grab_release()
+            except:
+                pass
+            modal.destroy()
+        
+        modal.protocol("WM_DELETE_WINDOW", on_close)
         modal.after(100, lambda: ent_email.focus_set())
 
     def _abrir_modal_registro(self):
+        """Abre modal de registro."""
         modal = tk.Toplevel(self.root)
-        modal.title("Registro")
+        modal.title("Registro / Cadastro - SICONAE")
         modal.transient(self.root)
         modal.grab_set()
         modal.resizable(False, False)
@@ -248,52 +197,69 @@ class TelaInicial:
         frm.pack(fill="both", expand=True)
         
         campos = [
-            ("Nome", "ent_nome"), ("E-mail EBSERH", "ent_email"),
-            ("Senha (mín. 10)", "ent_senha"), ("Confirmar Senha", "ent_conf")
+            ("Nome", "ent_nome", False),
+            ("E-mail EBSERH (@ebserh.gov.br)", "ent_email", False),
+            ("Senha (mín. 10 caracteres)", "ent_senha", True),
+            ("Confirmar Senha", "ent_conf", True)
         ]
+        
         entries = {}
-        for label, name in campos:
-            ttk.Label(frm, text=label).pack(anchor="w")
-            show = "•" if "senha" in name.lower() else ""
-            ent = ttk.Entry(frm, width=40, show=show)
-            ent.pack(pady=(0,8), fill="x")
+        for label, name, is_password in campos:
+            ttk.Label(frm, text=label, font=("Segoe UI", 10)).pack(anchor="w")
+            ent = ttk.Entry(frm, width=40, show="•" if is_password else "")
+            ent.pack(pady=(0, 8), fill="x")
             entries[name] = ent
         
-        def do_registro():
+        def do_registrar():
             nome = entries["ent_nome"].get().strip()
             email = entries["ent_email"].get().strip()
-            s1, s2 = entries["ent_senha"].get(), entries["ent_conf"].get()
+            s1 = entries["ent_senha"].get()
+            s2 = entries["ent_conf"].get()
             
             if s1 != s2:
-                messagebox.showerror("Erro", "Senhas não coincidem.")
+                messagebox.showerror("Erro", "As senhas não coincidem.")
                 return
+            
             if len(s1) < 10:
                 messagebox.showwarning("Senha fraca", "Use pelo menos 10 caracteres.")
                 return
-                
+            
             try:
-                from auth import usuario_registrar
                 usuario_registrar(email, s1, nome or None)
-                messagebox.showinfo("Sucesso", "Cadastro realizado! Faça login.")
+                messagebox.showinfo("Sucesso", "Usuário criado. Faça login.")
                 modal.grab_release()
                 modal.destroy()
             except Exception as e:
-                messagebox.showerror("Erro", str(e))
+                messagebox.showerror("Erro no registro", str(e))
         
-        ttk.Button(frm, text="Registrar", style="Primary.TButton", command=do_registro).pack(fill="x", pady=(10,0))
-        modal.protocol("WM_DELETE_WINDOW", lambda: [modal.grab_release(), modal.destroy()])
+        ttk.Button(frm, text="Registrar", style="Primary.TButton", 
+                  command=do_registrar).pack(fill="x", pady=(10, 0))
+        
+        def on_close():
+            try:
+                modal.grab_release()
+            except:
+                pass
+            modal.destroy()
+        
+        modal.protocol("WM_DELETE_WINDOW", on_close)
         modal.after(100, lambda: entries["ent_nome"].focus_set())
 
     def _entrar_no_sistema(self, auth: Dict[str, Any]):
-        """Limpa a tela inicial e carrega o sistema principal NO MESMO root."""
-        logging.info("Login bem-sucedido. Carregando sistema principal...")
+        """Limpa a tela inicial e carrega o sistema principal."""
+        logger.info("Login bem-sucedido. Carregando sistema principal...")
         
-        # Remove tudo da janela root
+        # Remove todos os widgets da janela root
         for widget in self.root.winfo_children():
             widget.destroy()
         
+        # Limpa referências do canvas
+        self.canvas = None
+        self._referencias.clear()
+        
         # Instancia o sistema principal diretamente no root
-        AppPrincipal(self.root, auth)
+        from telas.sistema import SistemaApp
+        SistemaApp(self.root, auth)
 
 
 def tela_inicial():
@@ -301,7 +267,7 @@ def tela_inicial():
     try:
         criar_tabelas()
     except Exception as e:
-        logging.warning(f"Aviso ao criar tabelas: {e}")
+        logger.warning(f"Aviso ao criar tabelas: {e}")
     
     auth_init()
     
@@ -314,4 +280,9 @@ def tela_inicial():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        filename='siconae.log',
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
     tela_inicial()
