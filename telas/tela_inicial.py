@@ -96,35 +96,15 @@ def abrir_modal_registro(root: tk.Tk):
     ttk.Button(frm, text="Registrar", style="Primary.TButton", command=do_registrar).grid(row=8, column=0, sticky="ew")
     ent_nome.focus_set()
 
-def abrir_app_principal(root: tk.Tk, auth: Dict[str, Any]):
-    """
-    Abre a tela principal real do sistema.
-    Tenta importar o dashboard oficial; se não conseguir, mostra um fallback simples.
-    """
-    try:
-        from telas.dashboard import abrir_dashboard
-        # Passe o 'auth' para que o dashboard saiba quem está logado.
-        abrir_dashboard(root, auth)
-    except Exception as e:
-        # Fallback: janela simples para não quebrar o fluxo
-        import traceback
-        traceback.print_exc()
+# dentro de telas/tela_inicial.py
+from telas.sistema import SistemaWindow  # novo import
 
-        win = tk.Toplevel(root)
-        win.title("SICONAE - Principal (fallback)")
-        win.geometry("800x500")
-        ttk.Label(
-            win,
-            text=f"Usuário: {auth['usuario'].get('nome') or auth['usuario']['email']}",
-            font=("Segoe UI", 11)
-        ).pack(pady=8)
-        ttk.Label(
-            win,
-            text="Não foi possível carregar 'telas.dashboard.abrir_dashboard()'. "
-                 "Verifique o módulo. Erro:\n" + str(e),
-            wraplength=760,
-            justify="left"
-        ).pack(padx=12, pady=12)
+def abrir_app_principal(root: tk.Tk, auth: Dict[str, Any]) -> None:
+    """
+    Após login bem-sucedido, abre a janela principal completa do sistema.
+    """
+    SistemaWindow(root, auth)  # abre como Toplevel, mantendo o Tk da Tela Inicial
+    
 def tela_inicial():
     try: criar_tabelas()
     except Exception: pass
