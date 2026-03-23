@@ -347,6 +347,17 @@ def criar_tabelas() -> None:
     FROM empenhos e;
     """)
 
+    # -------- Estado do ETL (importações) --------
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS etl_estado (
+        id INTEGER PRIMARY KEY CHECK (id=1),
+        fonte TEXT NOT NULL DEFAULT 'atas_xlsx',
+        ultimo_hash TEXT,
+        ultimo_import_ok TEXT  -- datetime local
+    );
+    """)
+    cur.execute("INSERT OR IGNORE INTO etl_estado (id, fonte) VALUES (1, 'atas_xlsx');")
+
     conn.commit()
     conn.close()
 
@@ -1048,6 +1059,23 @@ def itens_rascunho_limpar_por_fornecedor(fornecedor_id: Optional[int]) -> None:
         cur.execute("DELETE FROM itens_rascunho WHERE fornecedor_id IS NULL")
     else:
         cur.execute("DELETE FROM itens_rascunho WHERE fornecedor_id = ?", (fornecedor_id,))
+    conn.commit(); conn.close()
+
+def etl_estado_obter() -> Dict[str, Any]:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("SELECT id, fonte, ultimo_hash, ultimo_import_ok FROM etl_estado WHERE id=1")
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else {}
+
+def etl_estado_atualizar(ultimo_hash: Optional[str], quando_local: Optional[str] = None) -> None:
+    from datetime import datetime
+    if not quando_local:
+        quando_local = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        UPDATE etl_estado SET ultimo_hash=?, ultimo_import_ok=? WHERE id=1
+    """, (ultimo_hash, quando_local))
     conn.commit(); conn.close()
 
 # ===============================================================
