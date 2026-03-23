@@ -84,23 +84,22 @@ class SistemaApp:
         for w in self.container.winfo_children():
             w.destroy()
 
+    # telas/sistema.py (no método _abrir_tela)
+
     def _abrir_tela(self, classe_tela, nome_log="tela"):
+        # Antes de limpar o container atual, chame hook de close da tela antiga
+        for w in list(self.container.winfo_children()):
+            try:
+                if hasattr(w, "_on_close"):
+                    w._on_close()
+            except Exception:
+                pass
+    
         self.limpar_container()
         try:
             tela = classe_tela(self.container)
             tela.pack(fill="both", expand=True)
         except Exception as e:
-            log_path = os.path.join(os.path.expanduser("~"), "controle_notas_erro.log")
-            with open(log_path, "a", encoding="utf-8") as f:
-                f.write("\n" + "="*80 + "\n")
-                f.write(f"Erro ao abrir {nome_log}:\n")
-                f.write(traceback.format_exc())
-            messagebox.showerror(
-                "Erro",
-                f"Ocorreu um erro ao abrir a tela '{nome_log}'.\n\n"
-                f"{e}\n\n"
-                f"Um log foi salvo em:\n{log_path}"
-            )
 
     # -------- telas --------
     def abrir_dashboard(self):
