@@ -31,6 +31,18 @@ class TelaOrcamento(tk.Frame):
             ),
         )
 
+        
+        self._after_ids = []  # armazena ids de after()
+        
+        # Se esta tela também abrir um Toplevel, conecte o protocolo assim:
+        # self._janela = tk.Toplevel(self)  # se existir
+        # self._janela.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # Caso esteja embutida no container principal, o fechamento será disparado
+        # pela troca de cena (SistemaApp.limpar_container), que chamará _on_close() manualmente
+        # se você assim desejar — veja observação no final.
+
+
         # ---------- Formulário de lançamento ----------
         form = ttk.LabelFrame(self, text="Lançar itens para Orçamento")
         form.pack(fill="x", padx=12, pady=8)
@@ -755,13 +767,64 @@ class TelaOrcamento(tk.Frame):
             pass
         self._autosave_rascunho()
 
-    def _on_close(self):
-        """Intercepta fechar janela para gravar rascunho antes de sair."""
+    
+    def _after(self, ms, func, *a, **kw):
+        """Wrapper para registrar after() e permitir cancelar tudo no close."""
+        aid = self.after(ms, func, *a, **kw)
+        self._after_ids.append(aid)
+        return aid
+
+    def _cancel_all_afters(self):
+        for aid in getattr(self, "_after_ids", []) or []:
+            try:
+                self.after_cancel(aid)
+            except Exception:
+                pass
+        self._after_ids = []
+
+    def _on_close(self, event=None):
+        """Fechamento idempotente e à prova de race (não estoura se já fechou)."""
+        # Evita reentrância
+        if getattr(self, "_is_closing", False):
+            return
+        self._is_closing = True
+
+        # 1) Cancelar timers pendentes desta tela
+        self._cancel_all_afters()
+
+        # 2) Se você criou bindings (ex.: <Configure>, teclas), remova-os aqui
+        # try:
+        #     self.unbind("<AlgumaCoisa>")
+        # except Exception:
+        #     pass
+
+        # 3) Destruir Toplevel (se esta tela possuir um Toplevel próprio)
         try:
-            self._autosave_now()
+            toplevel = self.winfo_toplevel()
+        except Exception:
+            toplevel = None
+
+        # Se a tela está DENTRO do root principal (Frame), destruí-la aqui é suficiente;
+        # NÃO destrua o toplevel principal do app (root) — quem cuida disso é o SistemaApp.
+        # Então, destrua apenas o que você mesmo criou (Toplevels próprios).
+        try:
+            # Exemplo: se você tiver um Toplevel self._janela:
+            if hasattr(self, "_janela") and isinstance(self._janela, (tk.Toplevel, tk.Tk)):
+                if self._janela.winfo_exists():
+                    self._janela.destroy()
         except Exception:
             pass
-        self.winfo_toplevel().destroy()
+
+        # 4) Destruir a própria tela (frame) se ainda existir
+        try:
+            if self.winfo_exists():
+                self.destroy()
+        except Exception:
+            pass
+
+        # 5) Limpar flag
+        self._is_closing = False
+
 
     def _autosave_rascunho(self):
         conteudo = self.txt_msg.get("1.0", "end").strip()
@@ -1072,4 +1135,5 @@ class TelaOrcamento(tk.Frame):
                 ))
         except Exception as e:
             print("Falha ao carregar itens em rascunho:", e)
+            
 
