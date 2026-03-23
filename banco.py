@@ -522,6 +522,23 @@ def ata_itens_listar_por_ata(ata_id: int) -> List[Dict[str,Any]]:
     rows = [dict(r) for r in cur.fetchall()]
     conn.close(); return rows
 
+def ata_itens_listar_do_fornecedor_com_ata(fornecedor_id: int) -> List[Dict[str, Any]]:
+    """
+    Retorna SOMENTE itens de atas_itens que estão vinculados a alguma ATA (ata_id NOT NULL)
+    do fornecedor informado. Útil para combos/listas que não devem mostrar itens “soltos”.
+    """
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        SELECT ai.id, ai.cod_aghu, ai.nome_item, ai.qtde_total, ai.vl_unit, ai.vl_total, ai.observacao, ai.ata_id
+          FROM atas_itens ai
+          JOIN atas a ON a.id = ai.ata_id
+         WHERE a.fornecedor_id = ? AND ai.ata_id IS NOT NULL
+         ORDER BY a.numero, ai.nome_item
+    """, (fornecedor_id,))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
 def ata_itens_listar_por_ata_com_saldo(ata_id: int) -> List[Dict[str, Any]]:
     """
     Retorna TODOS os itens da Ata, calculando o saldo já empenhado.
