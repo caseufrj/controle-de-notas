@@ -5,10 +5,12 @@ from tkinter import ttk, messagebox, filedialog
 
 import utils
 # Importadores de ATAs
-from importadores.atas_xlsx import (
-    importar_atas_xlsx_auto,
-    importar_atas_xlsx_incremental,
-)
+from importadores.atas_xlsx import importar_atas_xlsx_incremental
+try:
+    # tenta pegar a função AUTO do módulo
+    from importadores.atas_xlsx import importar_atas_xlsx_auto
+except Exception:
+    importar_atas_xlsx_auto = None
 
 
 class TelaConfiguracoes(tk.Frame):
@@ -171,15 +173,40 @@ class TelaConfiguracoes(tk.Frame):
 
     # ----------------- Importadores / ATAs -----------------
     def _imp_atas_auto(self):
+        from tkinter import filedialog, messagebox
+        import banco
+    
         arq = filedialog.asksopenfilename(
             title="Selecione a planilha cache de ATAs (.xlsx)",
             filetypes=[("Excel", "*.xlsx")],
         )
         if not arq:
             return
+    
         try:
-            res = importar_atas_xlsx_auto(arq)
+            if callable(importar_atas_xlsx_auto):
+                # usa a função oficial (se existir no módulo)
+                res = importar_atas_xlsx_auto(arq)
+            else:
+                # fallback: decide sozinho aqui (FULL na 1ª, depois HOJE)
+                conn = banco.conectar(); cur = conn.cursor()
+                cur.execute("SELECT EXISTS(SELECT 1 FROM atas LIMIT 1)")
+                tem_ata = int(cur.fetchone()[0]) == 1
+                conn.close()
+    
+                if not tem_ata:
+                    # PRIMEIRA VEZ → FULL
+                    res = importar_atas_xlsx_incremental(
+                        arq, somente_hoje=False, atualizar_itens_existentes=True
+                    )
+                else:
+                    # DEMAIS VEZES → HOJE (leve)
+                    res = importar_atas_xlsx_incremental(
+                        arq, somente_hoje=True, atualizar_itens_existentes=False
+                    )
+    
             self._mostrar_resultado_import(res)
+    
         except Exception as e:
             messagebox.showerror("Importar ATAs", f"Falha: {e}")
 
