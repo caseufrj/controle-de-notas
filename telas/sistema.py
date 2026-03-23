@@ -1,11 +1,13 @@
 # telas/sistema.py
 import os
+import sys
 import tkinter as tk
 from tkinter import ttk, messagebox
 import tkinter.font as tkfont
 import traceback
 
 from auth import usuario_logout
+
 
 class SistemaApp:
     """
@@ -67,12 +69,10 @@ class SistemaApp:
 
         # Fechar no X = encerrar COMPLETAMENTE o app
         self.root.protocol("WM_DELETE_WINDOW", self._encerrar_app_total)
+        # Alt+F4 (Windows) também deve fechar completamente
+        self.root.bind_all("<Alt-F4>", lambda e: self._encerrar_app_total())
 
     # -------- util --------
-    def _fechar_janela(self):
-        # Equivalente a sair (logout e desmonta)
-        self.sair()
-
     def desmontar(self):
         """Remove todos os widgets do sistema da janela."""
         try:
@@ -82,24 +82,47 @@ class SistemaApp:
 
     def limpar_container(self):
         for w in self.container.winfo_children():
-            w.destroy()
+            try:
+                w.destroy()
+            except Exception:
+                pass
 
-    # telas/sistema.py (no método _abrir_tela)
-
-    def _abrir_tela(self, classe_tela, nome_log="tela"):
-        # Antes de limpar o container atual, chame hook de close da tela antiga
+    def _abrir_tela(self, classe_tela, nome_log: str = "tela"):
+        """
+        Troca a tela atual pela classe informada.
+        Antes de limpar, se a tela antiga tiver _on_close(), chamamos para ela
+        cancelar timers/binds/Toplevels próprios.
+        """
+        # Hook de fechamento da tela antiga
         for w in list(self.container.winfo_children()):
             try:
                 if hasattr(w, "_on_close"):
                     w._on_close()
             except Exception:
+                # não deixe a troca de tela quebrar por erro no hook
                 pass
-    
+
+        # Limpa e cria a nova
         self.limpar_container()
         try:
             tela = classe_tela(self.container)
             tela.pack(fill="both", expand=True)
         except Exception as e:
+            # Log amigável + MessageBox
+            log_path = os.path.join(os.path.expanduser("~"), "controle_notas_erro.log")
+            try:
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write("\n" + "=" * 80 + "\n")
+                    f.write(f"Erro ao abrir {nome_log}:\n")
+                    f.write(traceback.format_exc())
+            except Exception:
+                pass
+            messagebox.showerror(
+                "Erro",
+                f"Ocorreu um erro ao abrir a tela '{nome_log}'.\n\n"
+                f"{e}\n\n"
+                f"Um log foi salvo em:\n{log_path}"
+            )
 
     # -------- telas --------
     def abrir_dashboard(self):
@@ -124,15 +147,14 @@ class SistemaApp:
 
     def abrir_configuracoes(self):
         from telas.configuracoes import TelaConfiguracoes
-        self.limpar_container()
-        TelaConfiguracoes(self.container).pack(fill="both", expand=True)
+        self._abrir_tela(TelaConfiguracoes, "Configurações")
 
     # -------- sair / logout --------
     def sair(self):
         if not messagebox.askyesno("Sair", "Deseja realmente sair e encerrar a sessão?"):
             return
         try:
-            token = self.auth.get("token")
+            token = (self.auth or {}).get("token")
             if token:
                 usuario_logout(token)
         except Exception:
@@ -145,7 +167,7 @@ class SistemaApp:
                 self.root._sistema = None
         except Exception:
             pass
-        # volta para tela inicial
+
         if callable(self.on_sair):
             self.on_sair(self.root)
 
@@ -154,15 +176,30 @@ class SistemaApp:
         try:
             # tente encerrar sessão se existir token (não bloqueia se falhar)
             try:
-                from auth import usuario_logout
                 token = (self.auth or {}).get("token")
                 if token:
                     usuario_logout(token)
             except Exception:
                 pass
         finally:
+            # sequência robusta de shutdown
             try:
-                self.root.quit()
+                self.root.quit()  # encerra mainloop (se ativo)
             except Exception:
                 pass
-            self.root.destroy()
+            try:
+                self.root.update_idletasks()
+            except Exception:
+                pass
+            try:
+                self.root.destroy()  # destrói a janela raiz
+            except Exception:
+                pass
+            # fallback: garante fim do processo
+            try:
+                sys.exit(0)
+            except Exception:
+                try:
+                    os._exit(0)
+                except Exception:
+                    pass
