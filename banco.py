@@ -148,7 +148,7 @@ def criar_tabelas() -> None:
         cur.execute("ALTER TABLE atas_itens ADD COLUMN ata_id INTEGER REFERENCES atas(id) ON DELETE CASCADE;")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_atas_itens_ata ON atas_itens(ata_id);")
 
-    # Saldo agregado por ATA (valor total dos itens - consumo em notas)
+    # Saldo agregado por ATA (valor total dos itens - consumo/empenho)
     if _view_existe(cur, "vw_saldo_ata_total"):
         cur.execute("DROP VIEW vw_saldo_ata_total;")
     cur.execute("""
@@ -161,29 +161,29 @@ def criar_tabelas() -> None:
         a.vigencia_fim,
         a.status,
         IFNULL(SUM(ai.vl_total),0) AS valor_total_ata,
-    
-        /* Consumo real (notas) - mantemos para referência */
+
+        /* Consumo real (notas) - referência */
         IFNULL((
             SELECT SUM(ni.vl_total)
               FROM notas_itens ni
-              WHERE ni.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = a.id)
+             WHERE ni.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = a.id)
         ), 0) AS valor_consumido,
-    
-        /* Empenhado (valor) - NOVO */
+
+        /* Empenhado (valor) */
         IFNULL((
             SELECT SUM(e.vl_total)
               FROM empenhos e
              WHERE e.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = a.id)
         ), 0) AS valor_empenhado,
-    
-        /* Saldo considerando empenhos (o que você quer enxergar no cabeçalho) */
+
+        /* Saldo considerando empenhos */
         (IFNULL(SUM(ai.vl_total),0)
-          - IFNULL((
+         - IFNULL((
               SELECT SUM(e.vl_total)
                 FROM empenhos e
                WHERE e.ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id = a.id)
-          ), 0)) AS valor_saldo,
-    
+           ), 0)) AS valor_saldo,
+
         /* quantidade de itens cadastrados na ata */
         (SELECT COUNT(1) FROM atas_itens x WHERE x.ata_id = a.id) AS itens_qtd
     FROM atas a
@@ -454,6 +454,7 @@ def atas_hdr_listar(fornecedor_id: Optional[int]=None, busca_numero: str="") -> 
 def ata_hdr_obter(ata_id: int) -> Optional[Dict[str, Any]]:
     conn = conectar(); cur = conn.cursor()
     cur.execute("SELECT * FROM atas WHERE id = ?", (ata_id,))
+
     row = cur.fetchone(); conn.close()
     return dict(row) if row else None
 
@@ -1035,9 +1036,6 @@ def itens_rascunho_limpar_por_fornecedor(fornecedor_id: Optional[int]) -> None:
 # ===============================================================
 # Indicadores / Agregações por período
 # ===============================================================
-
-from typing import List, Dict, Any, Optional
-
 def consumo_por_ata(fornecedor_id: int,
                     data_ini: Optional[str] = None,
                     data_fim: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -1100,7 +1098,6 @@ def consumo_por_ata(fornecedor_id: int,
         })
     conn.close()
     return rows
-
 
 def ranking_fornecedores_consumo(data_ini: Optional[str] = None,
                                  data_fim: Optional[str] = None,
