@@ -19,17 +19,19 @@ BG_BOTTOM = "#f6fbff"
 #   setx SICONAE_NO_GRADIENT 1
 NO_GRADIENT = os.environ.get("SICONAE_NO_GRADIENT") == "1"
 
+
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
 def _center_window(win: tk.Toplevel):
     """Centraliza a janela 'win' no centro do monitor principal."""
-    win.update_idletasks()  # garante tamanho calculado
+    win.update_idletasks()
     w = win.winfo_reqwidth()
     h = win.winfo_reqheight()
     sw = win.winfo_screenwidth()
     sh = win.winfo_screenheight()
     x = (sw // 2) - (w // 2)
-    y = (sh // 2) - (h // 2)
-    # pequena margem para monitores com barra de tarefas grande
-    y = max(20, y)
+    y = max(20, (sh // 2) - (h // 2))
     win.geometry(f"+{x}+{y}")
 
 
@@ -59,7 +61,7 @@ def _hex_to_rgb(hx: str):
 
 
 def desenhar_gradiente(canvas: tk.Canvas, w: int, h: int,
-                       top: str, mid: str, bottom: str, steps: int = 120) -> None:
+                       top: str, mid: str, bottom: str, steps: int = 80) -> None:
     """
     Gradiente vertical leve (até 'steps' faixas), com tag 'grad'.
     Não desenha 1 linha por pixel para não estourar GDI/Tk.
@@ -82,9 +84,9 @@ def desenhar_gradiente(canvas: tk.Canvas, w: int, h: int,
     for i in range(half):
         r = i / max(1, half - 1)
         rgb = interp(t, m, r)
+        color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
         canvas.create_rectangle(0, y, w, min(h, y + band_h),
-                                outline="", fill="#%02x%02x%02x" % rgb,
-                                tags=("grad",))
+                                outline="", fill=color, tags=("grad",))
         y += band_h
 
     # mid -> bottom
@@ -92,9 +94,9 @@ def desenhar_gradiente(canvas: tk.Canvas, w: int, h: int,
     for j in range(remain):
         r = j / max(1, remain - 1)
         rgb = interp(m, b, r)
+        color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
         canvas.create_rectangle(0, y, w, min(h, y + band_h),
-                                outline="", fill="#%02x%02x%02x" % rgb,
-                                tags=("grad",))
+                                outline="", fill=color, tags=("grad",))
         y += band_h
 
 
@@ -139,6 +141,16 @@ def desmontar_tela_inicial(root: tk.Tk):
     for attr in ("_login_win", "_reg_win"):
         if hasattr(root, attr):
             setattr(root, attr, None)
+
+    # remove o bind do <Configure> (evita chamadas tardias ao render)
+    try:
+        if getattr(root, "_cfg_bind_id", None) is not None:
+            root.unbind("<Configure>", root._cfg_bind_id)
+            root._cfg_bind_id = None
+        else:
+            root.unbind("<Configure>")
+    except Exception:
+        pass
 
 
 def montar_tela_inicial(root: tk.Tk):
@@ -192,6 +204,20 @@ def montar_tela_inicial(root: tk.Tk):
     root._login_win = None     # id da janela no canvas
     root._reg_win = None
 
+    # === Cache da logo (carregar uma vez) ===
+    root._logo_img = None
+    if CAMINHO_LOGO and os.path.exists(CAMINHO_LOGO):
+        try:
+            tmp = tk.PhotoImage(file=CAMINHO_LOGO)
+            max_w = 250  # <-- seu tamanho desejado da logo (largura máx.)
+            iw = tmp.width()
+            if iw > max_w:
+                fator = max(1, iw // max_w)
+                tmp = tmp.subsample(fator, fator)
+            root._logo_img = tmp
+        except Exception:
+            root._logo_img = None
+
     # ===== Botões criados UMA VEZ =====
     def on_click_login():
         print("[DEBUG] click LOGIN")
@@ -209,19 +235,31 @@ def montar_tela_inicial(root: tk.Tk):
 
     # criamos as janelas do canvas (uma vez); posic. real é ajustada no render()
     root._login_win = canvas.create_window(0, 0, window=btn_login, anchor="center")
-    root._reg_win = canvas.create_window(0, 0, window=btn_reg, anchor="center")
+    root._reg_win   = canvas.create_window(0, 0, window=btn_reg,   anchor="center")
 
     def render():
+        # Se o canvas já foi destruído (ex.: após login), apenas saia
+        try:
+            if not canvas.winfo_exists():
+                root._render_after = None
+                return
+        except Exception:
+            root._render_after = None
+            return
+
         try:
             w, h = root.winfo_width(), root.winfo_height()
 
             # ⚠️ Limpa SOMENTE os desenhos (gradiente e UI), NÃO as janelas (botões)
-            canvas.delete("grad")
-            canvas.delete("ui")
+            try:
+                canvas.delete("grad")
+                canvas.delete("ui")
+            except tk.TclError:
+                return  # canvas pode ter sido destruído no meio
 
             # Fundo
             if not NO_GRADIENT:
-                desenhar_gradiente(canvas, w, h, BG_TOP, BG_MID, BG_BOTTOM, steps=120)
+                desenhar_gradiente(canvas, w, h, BG_TOP, BG_MID, BG_BOTTOM, steps=80)
             else:
                 canvas.create_rectangle(0, 0, w, h, fill=BG_MID, outline="", tags=("ui",))
 
@@ -232,31 +270,20 @@ def montar_tela_inicial(root: tk.Tk):
             canvas.create_text(cx, 108, text=APP_NAME,
                                font=("Segoe UI", 12), fill="#1f4c77", tags=("ui",))
 
-            # Logo (com redimensionamento leve por subsample)
-            y_logo = 320
-            if CAMINHO_LOGO and os.path.exists(CAMINHO_LOGO):
-                try:
-                    img = tk.PhotoImage(file=CAMINHO_LOGO)
-                    max_w = 250
-                    iw = img.width()
-                    if iw > max_w:
-                        fator = max(1, iw // max_w)
-                        img = img.subsample(fator, fator)
-                    canvas.image = img  # mantém referência
-                    canvas.create_image(cx, y_logo, image=img, tags=("ui",))
-                except Exception:
-                    canvas.create_oval(cx - 34, y_logo - 34, cx + 34, y_logo + 34,
-                                       outline="#0d3758", width=3, tags=("ui",))
+            # ======= LOGO =======
+            y_logo = 320  # sua posição vertical
+            if getattr(root, "_logo_img", None):
+                canvas.create_image(cx, y_logo, image=root._logo_img, tags=("ui",))
             else:
                 canvas.create_oval(cx - 34, y_logo - 34, cx + 34, y_logo + 34,
                                    outline="#0d3758", width=3, tags=("ui",))
 
-            # ✅ Reposiciona as JANELAS dos botões (sem recriar os botões)
+            # ======= Botões (reposicionamento) =======
             if getattr(root, "_login_win", None):
-                canvas.coords(root._login_win, cx, y_logo + 240)
-                canvas.tag_raise(root._login_win)   # sempre acima do desenho
+                canvas.coords(root._login_win, cx, y_logo + 240)  # sua distância para LOGIN
+                canvas.tag_raise(root._login_win)
             if getattr(root, "_reg_win", None):
-                canvas.coords(root._reg_win, cx, y_logo + 300)
+                canvas.coords(root._reg_win, cx, y_logo + 300)    # sua distância para REGISTRO
                 canvas.tag_raise(root._reg_win)
 
             # Barra inferior
@@ -266,17 +293,17 @@ def montar_tela_inicial(root: tk.Tk):
             root._render_after = None
 
     def schedule_render(_evt=None):
-        # Debounce: renderiza no máx. a cada 60ms
+        # Debounce: renderiza no máx. a cada 90ms (mais leve)
         if root._render_after:
             try:
                 root.after_cancel(root._render_after)
             except Exception:
                 pass
-        root._render_after = root.after(60, render)
+        root._render_after = root.after(90, render)
 
-    # Primeira renderização + bind com debounce
+    # Primeira renderização + bind com debounce (guardamos o id)
     schedule_render()
-    root.bind("<Configure>", schedule_render)
+    root._cfg_bind_id = root.bind("<Configure>", schedule_render)
 
 
 # -----------------------------------------------------------------------------
