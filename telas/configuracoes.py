@@ -173,62 +173,51 @@ class TelaConfiguracoes(tk.Frame):
 
     # ----------------- Importadores / ATAs -----------------
     def _imp_atas_auto(self):
-        from tkinter import filedialog, messagebox
-        import banco
-    
-        arq = filedialog.asksopenfilename(
+        arq = filedialog.askopenfilename(
             title="Selecione a planilha cache de ATAs (.xlsx)",
             filetypes=[("Excel", "*.xlsx")],
         )
         if not arq:
             return
-    
         try:
-            if callable(importar_atas_xlsx_auto):
-                # usa a função oficial (se existir no módulo)
-                res = importar_atas_xlsx_auto(arq)
+            # se a função AUTO existir no módulo, usa; senão, usa fallback local
+            from importadores.atas_xlsx import importar_atas_xlsx_auto as _auto
+            res = _auto(arq)
+        except Exception:
+            # fallback automático: 1ª FULL; depois HOJE
+            import banco
+            conn = banco.conectar(); cur = conn.cursor()
+            cur.execute("SELECT EXISTS(SELECT 1 FROM atas LIMIT 1)")
+            tem_ata = int(cur.fetchone()[0]) == 1
+            conn.close()
+            from importadores.atas_xlsx import importar_atas_xlsx_incremental as _inc
+            if not tem_ata:
+                res = _inc(arq, somente_hoje=False, atualizar_itens_existentes=True)
             else:
-                # fallback: decide sozinho aqui (FULL na 1ª, depois HOJE)
-                conn = banco.conectar(); cur = conn.cursor()
-                cur.execute("SELECT EXISTS(SELECT 1 FROM atas LIMIT 1)")
-                tem_ata = int(cur.fetchone()[0]) == 1
-                conn.close()
-    
-                if not tem_ata:
-                    # PRIMEIRA VEZ → FULL
-                    res = importar_atas_xlsx_incremental(
-                        arq, somente_hoje=False, atualizar_itens_existentes=True
-                    )
-                else:
-                    # DEMAIS VEZES → HOJE (leve)
-                    res = importar_atas_xlsx_incremental(
-                        arq, somente_hoje=True, atualizar_itens_existentes=False
-                    )
-    
-            self._mostrar_resultado_import(res)
-    
-        except Exception as e:
-            messagebox.showerror("Importar ATAs", f"Falha: {e}")
+                res = _inc(arq, somente_hoje=True, atualizar_itens_existentes=False)
+        self._mostrar_resultado_import(res)
 
     def _imp_atas_hoje(self):
-        arq = filedialog.asksopenfilename(
+        arq = filedialog.askopenfilename(
             title="Selecione a planilha cache de ATAs (.xlsx)",
             filetypes=[("Excel", "*.xlsx")],
         )
         if not arq:
             return
+        from importadores.atas_xlsx import importar_atas_xlsx_incremental
         res = importar_atas_xlsx_incremental(
             arq, somente_hoje=True, atualizar_itens_existentes=False
         )
         self._mostrar_resultado_import(res)
 
     def _imp_atas_full(self):
-        arq = filedialog.asksopenfilename(
+        arq = filedialog.askopenfilename(
             title="Selecione a planilha cache de ATAs (.xlsx)",
             filetypes=[("Excel", "*.xlsx")],
         )
         if not arq:
             return
+        from importadores.atas_xlsx import importar_atas_xlsx_incremental
         res = importar_atas_xlsx_incremental(
             arq, somente_hoje=False, atualizar_itens_existentes=True
         )
