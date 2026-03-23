@@ -209,6 +209,40 @@ def importar_atas_xlsx_incremental(
     conn.execute("PRAGMA foreign_keys = ON;")
     cur = conn.cursor()
 
+    # --- AUTO: 1ª execução = FULL; demais = HOJE ---
+    def importar_atas_xlsx_auto(
+        caminho_xlsx: str,
+        atualizar_itens_existentes_no_full: bool = True,
+        atualizar_itens_existentes_no_hoje: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Executa FULL se for a primeira importação (sem ATAs no banco),
+        depois executa apenas as linhas do dia (incremental).
+        """
+        # Detecta "primeira importação" verificando se há dados em 'atas'
+        try:
+            conn = banco.conectar(); cur = conn.cursor()
+            cur.execute("SELECT EXISTS(SELECT 1 FROM atas LIMIT 1)")
+            tem_ata = int(cur.fetchone()[0]) == 1
+        finally:
+            try: conn.close()
+            except Exception: pass
+    
+        if not tem_ata:
+            # PRIMEIRA VEZ → FULL
+            return importar_atas_xlsx_incremental(
+                caminho_xlsx=caminho_xlsx,
+                somente_hoje=False,                         # FULL
+                atualizar_itens_existentes=atualizar_itens_existentes_no_full
+            )
+        else:
+            # DEMAIS VEZES → HOJE
+            return importar_atas_xlsx_incremental(
+                caminho_xlsx=caminho_xlsx,
+                somente_hoje=True,                          # apenas as linhas de hoje (se houver coluna de data)
+                atualizar_itens_existentes=atualizar_itens_existentes_no_hoje
+            )
+
     def _forn_id(nome: str, cnpj: str) -> int:
         key = f"{_cnpj_digits(cnpj)}|{_norm(nome)}"
         if key in cache_forn: return cache_forn[key]
