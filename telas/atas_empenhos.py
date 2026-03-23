@@ -784,14 +784,13 @@ class TelaAtasEmpenhos(tk.Frame):
             messagebox.showwarning("Empenho", "Preencha cód, descrição, qtde e Vlr Unit."); return
 
         # Se não estiver vinculado à ATA, avisa (opcional continuar)
+        # NÃO permitir salvar sem vínculo com item de ATA
         if not self._emp_ata_item_id_sel:
-            if not messagebox.askyesno(
-                "Empenho sem vínculo",
-                "Este empenho não está vinculado a um item da ATA.\n"
-                "Sem vínculo, os saldos da ATA não serão afetados.\n\n"
-                "Deseja salvar mesmo assim?"
-            ):
-                return
+            messagebox.showwarning(
+                "Vincule à ATA",
+                "Para lançar empenho, selecione primeiro uma ATA e um item da ATA."
+            )
+            return
 
         d = {
             "fornecedor_id": fid, "cod_aghu": cod, "nome_item": nome,
@@ -950,14 +949,15 @@ class TelaAtasEmpenhos(tk.Frame):
         """
         Preenche a combo 'Vincular à ATA' com as ATAs do fornecedor selecionado,
         populando self._map_emp_ata = {texto_da_combo: ata_id}.
-        Depois de popular, se houver uma ATA selecionável, carrega seus itens na grade de baixo.
+        Depois de popular, se houver uma ATA selecionável, carrega seus itens.
         """
+        # 1) Limpa combo/grade e zera vínculo selecionado
+        self._emp_clear_ata_combo_grid()
+    
         fid = self._fid()
         if not fid:
-            self._map_emp_ata = {}
-            self.cb_emp_ata["values"] = []
             return
-
+    
         rows = banco.atas_hdr_listar(fornecedor_id=fid)
         vals = []
         for r in rows:
@@ -966,11 +966,13 @@ class TelaAtasEmpenhos(tk.Frame):
             fim = self._fmt_data(r.get("vigencia_fim"))
             texto = f"{num} ({ini} → {fim})"
             vals.append((texto, r["ata_id"]))
-
+    
+        # 2) Repovoar a combo somente com ATAs do fornecedor
         self._map_emp_ata = dict(vals)
         self.cb_emp_ata["values"] = [k for k, _ in vals]
-
-        if vals and not self.cb_emp_ata.get():
+    
+        # 3) Se houver ao menos 1, seleciona a primeira e carrega itens da ATA
+        if vals:
             self.cb_emp_ata.current(0)
             self._emp_carregar_itens_da_ata()
 
@@ -1062,3 +1064,22 @@ class TelaAtasEmpenhos(tk.Frame):
             return datetime.strptime(iso, "%Y-%m-%d").strftime("%d/%m/%Y")
         except Exception:
             return iso
+
+    def _emp_clear_ata_combo_grid(self):
+        """Limpa combo 'Vincular à ATA' e a grade de itens da ATA na aba Empenhos."""
+        try:
+            self._map_emp_ata = {}
+            if hasattr(self, "cb_emp_ata"):
+                self.cb_emp_ata.set("")
+                self.cb_emp_ata["values"] = []
+        except Exception:
+            pass
+    
+        try:
+            if hasattr(self, "tv_emp_ata"):
+                for iid in self.tv_emp_ata.get_children():
+                    self.tv_emp_ata.delete(iid)
+        except Exception:
+            pass
+    
+        self._emp_ata_item_id_sel = None
