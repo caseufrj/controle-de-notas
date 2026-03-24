@@ -84,7 +84,7 @@ def _registrar_auditoria(evento: str, usuario_id: Optional[int], email_norm: Opt
                 (usuario_id, email_norm, evento, ip, user_agent))
     conn.commit(); conn.close()
 
-def _login_bloqueado(email_norm: str, limite=5, janela_min=15) -> Tuple[bool, int]:
+def _login_bloqueado(email_norm: str, limite=5, janela_min=10) -> Tuple[bool, int]:
     conn = conectar(); cur = conn.cursor()
     cur.execute(f"""
         SELECT COUNT(*)
