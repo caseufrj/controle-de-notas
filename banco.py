@@ -76,7 +76,7 @@ def _view_existe(cur: sqlite3.Cursor, nome_view: str) -> bool:
 # -------------------------
 #  Criação/Migração schema
 # -------------------------
-def criar_tabelas() -> None:
+'''def criar_tabelas() -> None:
     conn = conectar()
     cur = conn.cursor()
 
@@ -360,7 +360,7 @@ def criar_tabelas() -> None:
     cur.execute("INSERT OR IGNORE INTO etl_estado (id, fonte) VALUES (1, 'atas_xlsx');")
 
     conn.commit()
-    conn.close()
+    conn.close()'''
 
 # =========================
 #   CRUDs / Consultas
