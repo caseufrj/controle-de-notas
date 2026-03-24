@@ -12,7 +12,7 @@ class TelaFornecedores(tk.Frame):
         super().__init__(master, bg="white")
 
         try:
-            banco.criar_tabelas()
+            #banco.criar_tabelas()
         except Exception as e:
             messagebox.showerror("Banco de dados", f"Não foi possível preparar o banco:\n{e}")
 
