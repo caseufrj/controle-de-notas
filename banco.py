@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional, Tuple
 # =========================
 #  Caminho do banco (UNC)
 # =========================
-CAMINHO_BANCO = r"\\hc-arquivos.hc.ufpr.br\HC-GERAL\GERAD\DILIH\SESUP\Todos-SESUP\OPME\BD_Notas\notas.db"
+CAMINHO_BANCO = r"\\hc-arquivos.hc.ufpr.br\HC-GERAL\GERAD\DILIH\SESUP\Todos-SESUP\OPME\BD_Notas\notas_novo.db"
 
 # -------------------------
 #  Conexão única (FK ON)
