@@ -11,11 +11,6 @@ class TelaFornecedores(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="white")
 
-        try:
-            #banco.criar_tabelas()
-        except Exception as e:
-            messagebox.showerror("Banco de dados", f"Não foi possível preparar o banco:\n{e}")
-
         # ----------------- Estado interno (paginação e endereço) -----------------
         self.page_size = 20
         self.page = 1
