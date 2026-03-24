@@ -379,7 +379,7 @@ class TelaNotas(tk.Frame):
         except Exception:
             pass
 
-        banco.criar_tabelas()
+        #banco.criar_tabelas()
 
         # ---------- Topo / Cabeçalho da Nota ----------
         topo = tk.Frame(self, bg="white")
