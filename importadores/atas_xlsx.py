@@ -26,11 +26,10 @@ MAPEAMENTO_COLUNAS = {
     # Status
     "status": ["status", "status vigencia", "status vigência", "situacao"],
 
-    # >>> CORREÇÃO CONFIRMADA POR VOCÊ <<<
     # cod_aghu = Item
     "cod_aghu": ["item"],
 
-    # nome_item → usa Item OU Nome Genérico
+    # nome_item → usa Item ou Nome Genérico
     "nome_item": ["item", "nome genérico", "descricao", "descricao_item"],
 
     # Quantidade
@@ -39,11 +38,11 @@ MAPEAMENTO_COLUNAS = {
     # Valor unitário
     "vl_unit": ["valor unitário", "valor_unit", "vl_unitario"],
 
-    # Observacao
+    # Observação
     "observacao": ["obs envio", "obs", "observacoes", "observação"],
 }
 
-# Colunas que podem conter data para modo incremental HOJE
+# Colunas usadas para filtrar HOJE se existirem
 COLUNAS_DATA_LINHA = [
     "data_atualizacao","dt_atualizacao","atualizado_em",
     "data_cadastro","dt_cadastro","criado_em","data"
@@ -53,7 +52,7 @@ STATUS_DEFAULT = "Em vigência"
 
 
 # ======================================================================
-#  UTILITÁRIOS
+#  FUNÇÕES UTILITÁRIAS
 # ======================================================================
 def _sha1_arquivo(path: str, chunk=1024*1024) -> str:
     h = hashlib.sha1()
@@ -80,13 +79,13 @@ def _parse_data(s: Any) -> Optional[str]:
     txt = str(s).strip()
     if not txt:
         return None
-    # tenta formatos comuns brasileiros
-    for fmt in ("%d/%m/%Y","%Y-%m-%d","%d-%m-%Y","%d/%m/%y"):
+
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
         try:
             return datetime.strptime(txt, fmt).strftime("%Y-%m-%d")
         except Exception:
             pass
-    # tenta converter data excel/ISO
+
     d = pd.to_datetime(s, errors="coerce")
     if pd.isna(d):
         return None
@@ -101,6 +100,7 @@ def _parse_float_br(x: Any) -> float:
             return float(x)
         except Exception:
             return 0.0
+
     t = str(x).strip().replace(".", "").replace(",", ".")
     try:
         return float(Decimal(t))
@@ -109,13 +109,12 @@ def _parse_float_br(x: Any) -> float:
 
 
 # ======================================================================
-#  RESOLVER DE COLUNAS (AGORA LIMPINHO E SEM ESTRANHOS)
+#  RESOLVER DE MAPEAMENTO DE CABEÇALHOS
 # ======================================================================
 def _resolver_mapeamento(df: pd.DataFrame) -> Dict[str, str]:
     cols_lower = {c.lower().strip(): c for c in df.columns}
     out: Dict[str, str] = {}
 
-    # mapeia cada coluna canônica
     for canon, cand_list in MAPEAMENTO_COLUNAS.items():
         if canon in cols_lower:
             out[canon] = cols_lower[canon]
@@ -130,14 +129,12 @@ def _resolver_mapeamento(df: pd.DataFrame) -> Dict[str, str]:
         if found:
             out[canon] = found
 
-    # Colunas obrigatórias (vigência_ini NÃO é obrigatória)
     obrig = ["fornecedor_nome", "ata_numero", "cod_aghu", "nome_item", "qtde_total", "vl_unit"]
     falt = [c for c in obrig if c not in out]
 
     if falt:
         raise ValueError(
-            f"Colunas obrigatórias ausentes: {falt}\n"
-            f"Encontradas: {list(df.columns)}"
+            f"Colunas obrigatórias ausentes: {falt}\nEncontradas: {list(df.columns)}"
         )
 
     return out
@@ -152,51 +149,42 @@ def _descobrir_coluna_data(df: pd.DataFrame) -> Optional[str]:
 
 
 # ======================================================================
-#  UPSERTS – Fornecedor, ATA e Itens
+#  UPSERT – FORNECEDOR
 # ======================================================================
 def _fornecedor_upsert(cur: sqlite3.Cursor, nome: str, cnpj: str) -> int:
     nome = _norm(nome)
     cnpj = _cnpj_digits(cnpj)
 
-    # tenta por CNPJ
     if cnpj:
         cur.execute("SELECT id FROM fornecedores WHERE cnpj=? LIMIT 1", (cnpj,))
         r = cur.fetchone()
         if r:
             cur.execute(
-                "UPDATE fornecedores SET nome=COALESCE(NULLIF(?,''),nome) WHERE id=?",
+                "UPDATE fornecedores SET nome=COALESCE(NULLIF(?, ''), nome) WHERE id=?",
                 (nome, r["id"])
             )
             return int(r["id"])
 
-    # tenta por nome
     cur.execute("SELECT id FROM fornecedores WHERE nome=? LIMIT 1", (nome,))
     r = cur.fetchone()
     if r:
         if cnpj:
             cur.execute(
-                "UPDATE fornecedores SET cnpj=COALESCE(NULLIF(?,''),cnpj) WHERE id=?",
+                "UPDATE fornecedores SET cnpj=COALESCE(NULLIF(?, ''), cnpj) WHERE id=?",
                 (cnpj, r["id"])
             )
         return int(r["id"])
 
-    # cria
-    cur.execute(
-        "INSERT INTO fornecedores (nome, cnpj) VALUES (?,?)",
-        (nome, cnpj or None)
-    )
+    cur.execute("INSERT INTO fornecedores (nome, cnpj) VALUES (?,?)", (nome, cnpj or None))
     return int(cur.lastrowid)
 
 
-def _ata_upsert(
-    cur: sqlite3.Cursor,
-    fornecedor_id: int,
-    numero: str,
-    vig_ini: Optional[str],
-    vig_fim: Optional[str],
-    status: Optional[str],
-    obs: Optional[str],
-) -> int:
+# ======================================================================
+#  UPSERT – ATA
+# ======================================================================
+def _ata_upsert(cur: sqlite3.Cursor, fornecedor_id: int, numero: str,
+                vig_ini: Optional[str], vig_fim: Optional[str],
+                status: Optional[str], obs: Optional[str]) -> int:
 
     numero = _norm(numero)
     st = _norm(status) or STATUS_DEFAULT
@@ -213,8 +201,8 @@ def _ata_upsert(
             UPDATE atas SET
                 vigencia_ini = COALESCE(?, vigencia_ini),
                 vigencia_fim = COALESCE(?, vigencia_fim),
-                status       = COALESCE(NULLIF(?,''), status),
-                observacao   = COALESCE(NULLIF(?,''), observacao),
+                status       = COALESCE(NULLIF(?, ''), status),
+                observacao   = COALESCE(NULLIF(?, ''), observacao),
                 atualizado_em = datetime('now','localtime')
             WHERE id=?
             """,
@@ -222,7 +210,6 @@ def _ata_upsert(
         )
         return int(r["id"])
 
-    # cria
     cur.execute(
         """
         INSERT INTO atas (fornecedor_id, numero, vigencia_ini, vigencia_fim, status, observacao)
@@ -233,6 +220,9 @@ def _ata_upsert(
     return int(cur.lastrowid)
 
 
+# ======================================================================
+#  UPSERT – ITEM
+# ======================================================================
 def _item_upsert(
     cur: sqlite3.Cursor,
     ata_id: int,
@@ -246,6 +236,7 @@ def _item_upsert(
 ) -> Tuple[int, bool]:
 
     cod = _norm(cod)
+
     cur.execute(
         "SELECT id FROM atas_itens WHERE ata_id=? AND cod_aghu=? LIMIT 1",
         (ata_id, cod)
@@ -257,29 +248,31 @@ def _item_upsert(
             cur.execute(
                 """
                 UPDATE atas_itens SET
-                    nome_item = COALESCE(NULLIF(?,''), nome_item),
-                    qtde_total=?, vl_unit=?, vl_total=?, observacao=COALESCE(NULLIF(?,''), observacao),
+                    nome_item = COALESCE(NULLIF(?, ''), nome_item),
+                    qtde_total=?, vl_unit=?, vl_total=?, 
+                    observacao=COALESCE(NULLIF(?, ''), observacao),
                     atualizado_em = datetime('now','localtime')
                 WHERE id=?
                 """,
-                (_norm(nome), float(qt), float(vu), float(vt), _norm(obs), r["id"])
+                (_norm(nome), float(q), float(vu), float(vt), _norm(obs), r["id"])
             )
         return int(r["id"]), False
 
-    # cria
     cur.execute("SELECT fornecedor_id, numero FROM atas WHERE id=?", (ata_id,))
     hdr = cur.fetchone()
-    forn_id = hdr["fornecedor_id"]
-    pregao = _norm(hdr["numero"])
 
     cur.execute(
         """
         INSERT INTO atas_itens
-            (fornecedor_id, pregao, cod_aghu, nome_item, qtde_total, vl_unit, vl_total, observacao, ata_id)
+        (fornecedor_id, pregao, cod_aghu, nome_item,
+         qtde_total, vl_unit, vl_total, observacao, ata_id)
         VALUES (?,?,?,?,?,?,?,?,?)
         """,
-        (forn_id, pregao, cod, _norm(nome), float(qt), float(vu), float(vt),
-         _norm(obs) or None, ata_id)
+        (
+            hdr["fornecedor_id"], _norm(hdr["numero"]), cod, _norm(nome),
+            float(qt), float(vu), float(vt),
+            _norm(obs) or None, ata_id
+        )
     )
     return int(cur.lastrowid), True
 
@@ -296,14 +289,12 @@ def importar_atas_xlsx_incremental(
     if not os.path.exists(caminho_xlsx):
         return {"ok": False, "msg": f"Arquivo não encontrado: {caminho_xlsx}"}
 
-    # hash
     hash_atual = _sha1_arquivo(caminho_xlsx)
     estado = banco.etl_estado_obter()
 
     if not somente_hoje and estado.get("ultimo_hash") == hash_atual:
         return {"ok": True, "msg": "Planilha sem mudanças desde último import.", "stats": {}, "erros": []}
 
-    # lê planilha
     df = pd.read_excel(caminho_xlsx, engine="openpyxl")
     if df.empty:
         return {"ok": True, "msg": "Planilha vazia.", "stats": {}, "erros": []}
@@ -311,7 +302,6 @@ def importar_atas_xlsx_incremental(
     cols = _resolver_mapeamento(df)
     col_data = _descobrir_coluna_data(df)
 
-    # filtra HOJE
     if somente_hoje and col_data:
         serie = pd.to_datetime(df[col_data], errors="coerce")
         hoje = pd.Timestamp(date.today())
@@ -326,7 +316,7 @@ def importar_atas_xlsx_incremental(
     cur = conn.cursor()
 
     cache_forn = {}
-    cache_ataid = {}
+    cache_ata = {}
 
     def _forn_id(nome: str, cnpj: str) -> int:
         k = f"{_cnpj_digits(cnpj)}|{_norm(nome)}"
@@ -336,12 +326,12 @@ def importar_atas_xlsx_incremental(
         cache_forn[k] = fid
         return fid
 
-    def _ata_id(fid: int, numero: str, vi: Optional[str], vf: Optional[str], st: str, obs: str) -> int:
-        k = (fid, _norm(numero))
-        if k in cache_ataid:
-            return cache_ataid[k]
+    def _ata_id(fid: int, numero: str, vi, vf, st, obs) -> int:
+        k = (fid, numero)
+        if k in cache_ata:
+            return cache_ata[k]
         aid = _ata_upsert(cur, fid, numero, vi, vf, st, obs)
-        cache_ataid[k] = aid
+        cache_ata[k] = aid
         return aid
 
     stats = {
@@ -352,23 +342,36 @@ def importar_atas_xlsx_incremental(
         "itens_criados": 0,
         "itens_atualizados": 0,
     }
+
     erros = []
 
-    # ----------------------------
-    #  LOOP DAS LINHAS
-    # ----------------------------
     try:
         for idx, row in df.iterrows():
             try:
                 forn_nome = _norm(row[cols["fornecedor_nome"]])
                 forn_cnpj = _cnpj_digits(row.get(cols.get("fornecedor_cnpj",""), ""))
-                ata_num   = _norm(row[cols["ata_numero"]])
 
-                # >>> VIGÊNCIA FINAL SOMENTE <<<
+                ata_num = _norm(row[cols["ata_numero"]])
+
                 vi = None
                 vf = _parse_data(row.get(cols.get("vigencia_fim",""), None))
 
-                st = _norm(row.get(cols.get("status",""), "")) or STATUS_DEFAULT
+                # --- NORMALIZAÇÃO DO STATUS ---
+                raw_st = _norm(row.get(cols.get("status",""), "")).lower()
+
+                MAP_STATUS = {
+                    "vigente": "Em vigência",
+                    "em vigencia": "Em vigência",
+                    "em vigência": "Em vigência",
+                    "ativo": "Em vigência",
+                    "encerrado": "Encerrada",
+                    "encerrada": "Encerrada",
+                    "finalizada": "Encerrada",
+                    "renovado": "Renovada",
+                    "renovada": "Renovada",
+                }
+
+                st = MAP_STATUS.get(raw_st, STATUS_DEFAULT)
 
                 cod = _norm(row[cols["cod_aghu"]])
                 nom = _norm(row[cols["nome_item"]])
@@ -385,6 +388,7 @@ def importar_atas_xlsx_incremental(
 
                 atualizar = bool(col_data) and atualizar_itens_existentes
                 _, created = _item_upsert(cur, aid, cod, nom, qt, vu, vt, obs, atualizar)
+
                 if created:
                     stats["itens_criados"] += 1
                 else:
@@ -397,7 +401,12 @@ def importar_atas_xlsx_incremental(
         conn.commit()
         banco.etl_estado_atualizar(hash_atual)
 
-        return {"ok": True, "msg": "Importação incremental concluída.", "stats": stats, "erros": erros}
+        return {
+            "ok": True,
+            "msg": "Importação incremental concluída.",
+            "stats": stats,
+            "erros": erros
+        }
 
     except Exception as e:
         conn.rollback()
@@ -408,7 +417,7 @@ def importar_atas_xlsx_incremental(
 
 
 # ======================================================================
-#  MODO AUTOMÁTICO (1ª VEZ = FULL, depois HOJE)
+#  MODO AUTO – PRIMEIRA VEZ = FULL, DEMAIS = HOJE
 # ======================================================================
 def importar_atas_xlsx_auto(
     caminho_xlsx: str,
@@ -423,16 +432,14 @@ def importar_atas_xlsx_auto(
     conn.close()
 
     if not tem_ata:
-        # primeira importação -> FULL
         return importar_atas_xlsx_incremental(
             caminho_xlsx,
             somente_hoje=False,
-            atualizar_itens_existentes=atualizar_itens_existentes_no_full
+            atualizar_itens_existentes=atualizar_itens_existentes_no_full,
         )
     else:
-        # demais -> HOJE
         return importar_atas_xlsx_incremental(
             caminho_xlsx,
             somente_hoje=True,
-            atualizar_itens_existentes=atualizar_itens_existentes_no_hoje
+            atualizar_itens_existentes=atualizar_itens_existentes_no_hoje,
         )
