@@ -19,7 +19,7 @@ except Exception:
 class Dashboard(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="white")
-        banco.criar_tabelas()
+        #banco.criar_tabelas()
 
         # ------- Topo: seleção de fornecedor + período + ações -------
         topo = tk.Frame(self, bg="white")
