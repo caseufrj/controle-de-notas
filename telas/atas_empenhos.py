@@ -19,7 +19,7 @@ class TelaAtasEmpenhos(tk.Frame):
         except Exception:
             pass
 
-        banco.criar_tabelas()
+        #banco.criar_tabelas()
 
         # ---------- Fornecedor (comum às abas) ----------
         topo = tk.Frame(self, bg="white")
