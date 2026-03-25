@@ -906,7 +906,7 @@ def orcamentos_filtrar_paginado(
     params.extend([limit, offset])
 
     cur.execute(sql, tuple(params))
-    rows = [dict(r) for r in cur.fetchall()]
+    rows = [dict(r) for r in cur.fetchall()]  # ← CONVERSÃO CERTA!!!
     conn.close()
     return rows
 
