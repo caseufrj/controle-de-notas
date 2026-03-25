@@ -1,7 +1,11 @@
+# ============================================================
+#  banco.py LIMPO — PARTE 1 / 4
+#  Estrutura limpa, sem criar_tabelas(), sem migrações
+# ============================================================
+
 import os
 import sqlite3
 from typing import List, Dict, Any, Optional, Tuple
-
 
 # =========================
 #  Caminho do banco (UNC)
@@ -13,43 +17,47 @@ CAMINHO_BANCO = r"\\hc-arquivos.hc.ufpr.br\HC-GERAL\GERAD\DILIH\SESUP\Todos-SESU
 #  Conexão única (FK ON)
 # -------------------------
 def conectar() -> sqlite3.Connection:
-    """Abre conexão SQLite com FK ON e ajustes mínimos apropriados."""
-    # Garante que diretório existe (exceto UNC)
+    """
+    Abre conexão SQLite com FK ON.
+    Não cria diretórios em UNC.
+    """
     try:
         base_dir = os.path.dirname(CAMINHO_BANCO)
-        if base_dir and not os.path.exists(base_dir) and not base_dir.startswith("\\\\"):
+        if base_dir and not base_dir.startswith("\\\\") and not os.path.exists(base_dir):
             os.makedirs(base_dir, exist_ok=True)
     except Exception:
         pass
 
     conn = sqlite3.connect(CAMINHO_BANCO)
     conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
 
     try:
-        cur.execute("PRAGMA foreign_keys = ON;")
+        conn.execute("PRAGMA foreign_keys = ON;")
     except Exception:
         pass
 
     return conn
 
 
-# -------------------------
-#  Criar tabelas — DESATIVADO
-# -------------------------
+# ---------------------------------------------------
+#  DESATIVAÇÃO TOTAL DA FUNÇÃO criar_tabelas()
+# ---------------------------------------------------
 def criar_tabelas() -> None:
     """
-    DESATIVADO — o schema agora é mantido externamente (DBeaver).
-    Esta função não faz nada.
+    ESTA FUNÇÃO FOI DESATIVADA.
+    O schema agora é mantido 100% externamente (DBeaver).
     """
     return
 
 
 # ===========================================================
-#   CRUDs / Consultas — APENAS OPERAÇÃO DE DADOS
+#   CRUDs / CONSULTAS — APENAS OPERAÇÃO DE DADOS
 # ===========================================================
 
-# ------ Fornecedores ------
+# ===========================================================
+#  FORNECEDORES
+# ===========================================================
+
 def fornecedores_listar(busca: str = "") -> List[Dict[str, Any]]:
     conn = conectar(); cur = conn.cursor()
     if busca:
@@ -70,8 +78,11 @@ def fornecedor_obter(id_: int) -> Optional[Dict[str, Any]]:
 
 
 def fornecedor_inserir(d: Dict[str, Any]) -> int:
-    campos = ("nome","cnpj","contato_vendedor","telefone","email","rua","numero",
-              "complemento","bairro","municipio","estado","cep","observacao")
+    campos = (
+        "nome","cnpj","contato_vendedor","telefone","email",
+        "rua","numero","complemento","bairro","municipio",
+        "estado","cep","observacao"
+    )
     vals = tuple(d.get(k) for k in campos)
 
     conn = conectar(); cur = conn.cursor()
@@ -86,8 +97,11 @@ def fornecedor_inserir(d: Dict[str, Any]) -> int:
 
 
 def fornecedor_atualizar(id_: int, d: Dict[str, Any]) -> None:
-    campos = ("nome","cnpj","contato_vendedor","telefone","email","rua","numero",
-              "complemento","bairro","municipio","estado","cep","observacao")
+    campos = (
+        "nome","cnpj","contato_vendedor","telefone","email",
+        "rua","numero","complemento","bairro","municipio",
+        "estado","cep","observacao"
+    )
     sets = ", ".join([f"{k}=?" for k in campos])
     vals = tuple(d.get(k) for k in campos) + (id_,)
 
@@ -108,8 +122,9 @@ def fornecedor_excluir(id_: int) -> None:
 
 
 # ===========================================================
-#  ATAS — Cabeçalho
+#  ATAS — CABEÇALHO
 # ===========================================================
+
 def ata_hdr_inserir(d: Dict[str,Any]) -> int:
     campos = ("fornecedor_id","numero","vigencia_ini","vigencia_fim","status","observacao")
     vals = tuple(d.get(k) for k in campos)
@@ -147,7 +162,7 @@ def ata_hdr_atualizar(ata_id: int, d: Dict[str,Any]) -> None:
 def ata_hdr_excluir(ata_id: int) -> None:
     conn = conectar(); cur = conn.cursor()
 
-    # Exclui empenhos ligados a itens
+    # Exclui empenhos ligados aos itens desta ata
     cur.execute("""
         DELETE FROM empenhos
          WHERE ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id=?)
@@ -156,30 +171,10 @@ def ata_hdr_excluir(ata_id: int) -> None:
     # Exclui itens
     cur.execute("DELETE FROM atas_itens WHERE ata_id=?", (ata_id,))
 
-    # Exclui a ATA
+    # Exclui cabeçalho
     cur.execute("DELETE FROM atas WHERE id=?", (ata_id,))
     conn.commit()
     conn.close()
-
-
-def atas_hdr_listar(fornecedor_id: Optional[int]=None, busca_numero: str="") -> List[Dict[str,Any]]:
-    conn = conectar(); cur = conn.cursor()
-    sql = "SELECT * FROM vw_saldo_ata_total WHERE 1=1"
-    params: List[Any] = []
-
-    if fornecedor_id:
-        sql += " AND fornecedor_id=?"
-        params.append(fornecedor_id)
-
-    if busca_numero:
-        sql += " AND numero LIKE ?"
-        params.append(f"%{busca_numero}%")
-
-    sql += " ORDER BY numero DESC, ata_id DESC"
-    cur.execute(sql, tuple(params))
-    rows = [dict(r) for r in cur.fetchall()]
-    conn.close()
-    return rows
 
 
 def ata_hdr_obter(ata_id: int) -> Optional[Dict[str, Any]]:
@@ -189,66 +184,16 @@ def ata_hdr_obter(ata_id: int) -> Optional[Dict[str, Any]]:
     conn.close()
     return dict(row) if row else None
 
-
 # ===========================================================
-#  ATAS — Itens
+#  ATAS — ITENS
 # ===========================================================
-def ata_item_inserir(d: Dict[str, Any]) -> int:
-    campos = ("fornecedor_id","pregao","cod_aghu","nome_item","qtde_total","vl_unit","vl_total","observacao")
-    vals = tuple(d.get(k) for k in campos)
 
-    conn = conectar(); cur = conn.cursor()
-    cur.execute(
-        f"INSERT INTO atas_itens ({','.join(campos)}) VALUES ({','.join(['?']*len(campos))})",
-        vals
-    )
-    conn.commit()
-    novo_id = cur.lastrowid
-    conn.close()
-    return novo_id
-
-
-def ata_item_inserir_v2(d: Dict[str,Any]) -> int:
-    ata_id = d.get("ata_id")
-    if not ata_id:
-        raise ValueError("ata_id é obrigatório.")
-
-    hdr = ata_hdr_obter(int(ata_id))
-    if not hdr:
-        raise ValueError(f"Ata {ata_id} não encontrada.")
-
-    fornecedor_id = hdr["fornecedor_id"]
-    pregao = hdr["numero"]
-
-    campos = (
-        "fornecedor_id","pregao","cod_aghu","nome_item","qtde_total","vl_unit",
-        "vl_total","observacao","ata_id"
-    )
-    vals = (
-        fornecedor_id, pregao,
-        d.get("cod_aghu"), d.get("nome_item"),
-        float(d.get("qtde_total") or 0),
-        float(d.get("vl_unit") or 0),
-        float(d.get("vl_total") or 0),
-        d.get("observacao"),
-        ata_id
-    )
-
-    conn = conectar(); cur = conn.cursor()
-    cur.execute(
-        f"INSERT INTO atas_itens ({','.join(campos)}) VALUES ({','.join(['?']*len(campos))})",
-        vals
-    )
-    conn.commit()
-    iid = cur.lastrowid
-    conn.close()
-    return iid
-
-
-def ata_itens_listar(fornecedor_id: Optional[int]=None, busca_cod: str="", busca_pregao: str="") -> List[Dict[str, Any]]:
+def ata_itens_listar(fornecedor_id: Optional[int] = None,
+                     busca_cod: str = "",
+                     busca_pregao: str = "") -> List[Dict[str, Any]]:
     conn = conectar(); cur = conn.cursor()
     sql = "SELECT * FROM atas_itens WHERE 1=1"
-    params = []
+    params: List[Any] = []
 
     if fornecedor_id:
         sql += " AND fornecedor_id=?"
@@ -263,13 +208,13 @@ def ata_itens_listar(fornecedor_id: Optional[int]=None, busca_cod: str="", busca
         params.append(f"%{busca_pregao}%")
 
     sql += " ORDER BY pregao, cod_aghu"
-    cur.execute(sql, params)
+    cur.execute(sql, tuple(params))
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
 
 
-def ata_itens_listar_por_ata(ata_id: int) -> List[Dict[str,Any]]:
+def ata_itens_listar_por_ata(ata_id: int) -> List[Dict[str, Any]]:
     conn = conectar(); cur = conn.cursor()
     cur.execute("""
         SELECT id, cod_aghu, nome_item, qtde_total, vl_unit, vl_total, observacao
@@ -293,15 +238,69 @@ def ata_itens_listar_por_ata_com_saldo(ata_id: int) -> List[Dict[str, Any]]:
             ai.vl_unit,
             ai.vl_total,
             ai.observacao,
-            IFNULL((SELECT SUM(e.qtde) FROM empenhos e WHERE e.ata_item_id = ai.id), 0) AS qtde_empenhada,
-            (ai.qtde_total - IFNULL((SELECT SUM(e.qtde) FROM empenhos e WHERE e.ata_item_id = ai.id), 0)) AS qtde_saldo
+            IFNULL((SELECT SUM(e.qtde) FROM empenhos e WHERE e.ata_item_id=ai.id), 0) AS qtde_empenhada,
+            (ai.qtde_total -
+             IFNULL((SELECT SUM(e.qtde) FROM empenhos e WHERE e.ata_item_id=ai.id), 0)) AS qtde_saldo
         FROM atas_itens ai
-        WHERE ai.ata_id = ?
+        WHERE ai.ata_id=?
         ORDER BY ai.nome_item ASC
     """, (ata_id,))
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
+
+
+def ata_item_inserir(d: Dict[str, Any]) -> int:
+    campos = (
+        "fornecedor_id","pregao","cod_aghu","nome_item",
+        "qtde_total","vl_unit","vl_total","observacao"
+    )
+    vals = tuple(d.get(k) for k in campos)
+
+    conn = conectar(); cur = conn.cursor()
+    cur.execute(
+        f"INSERT INTO atas_itens ({','.join(campos)}) VALUES ({','.join(['?']*len(campos))})",
+        vals
+    )
+    conn.commit()
+    iid = cur.lastrowid
+    conn.close()
+    return iid
+
+
+def ata_item_inserir_v2(d: Dict[str, Any]) -> int:
+    ata_id = d.get("ata_id")
+    if not ata_id:
+        raise ValueError("ata_id é obrigatório.")
+
+    hdr = ata_hdr_obter(int(ata_id))
+    if not hdr:
+        raise ValueError(f"Ata cabeçalho id={ata_id} não encontrado.")
+
+    fornecedor_id = hdr["fornecedor_id"]
+    pregao = hdr["numero"]
+
+    campos = (
+        "fornecedor_id","pregao","cod_aghu","nome_item",
+        "qtde_total","vl_unit","vl_total","observacao","ata_id"
+    )
+    vals = (
+        fornecedor_id, pregao, d.get("cod_aghu"), d.get("nome_item"),
+        float(d.get("qtde_total") or 0),
+        float(d.get("vl_unit") or 0),
+        float(d.get("vl_total") or 0),
+        d.get("observacao"), ata_id
+    )
+
+    conn = conectar(); cur = conn.cursor()
+    cur.execute(
+        f"INSERT INTO atas_itens ({','.join(campos)}) VALUES ({','.join(['?']*len(campos))})",
+        vals
+    )
+    conn.commit()
+    iid = cur.lastrowid
+    conn.close()
+    return iid
 
 
 def ata_item_atualizar(item_id: int, d: Dict[str,Any]) -> None:
@@ -331,14 +330,15 @@ def ata_item_excluir(item_id: int) -> None:
 
 
 # ===========================================================
-#   Empenhos
+#  EMPENHOS
 # ===========================================================
-def validar_saldo_antes_empenho(ata_item_id: int, qtde_solicitada: float) -> Tuple[bool,str,float]:
+
+def validar_saldo_antes_empenho(ata_item_id: int, qtde_solicitada: float) -> Tuple[bool, str, float]:
     conn = conectar(); cur = conn.cursor()
     cur.execute("""
         SELECT 
             qtde_total,
-            IFNULL((SELECT SUM(qtde) FROM empenhos WHERE ata_item_id = ?), 0) AS empenhado
+            IFNULL((SELECT SUM(qtde) FROM empenhos WHERE ata_item_id=?), 0) AS empenhado
         FROM atas_itens
         WHERE id=?
     """, (ata_item_id, ata_item_id))
@@ -360,10 +360,20 @@ def validar_saldo_antes_empenho(ata_item_id: int, qtde_solicitada: float) -> Tup
 
 
 def empenho_inserir(d: Dict[str, Any]) -> int:
-    campos = ("fornecedor_id","cod_aghu","nome_item","qtde","vl_unit","vl_total","numero_empenho","observacao","ata_item_id")
-    vals = (d.get("fornecedor_id"), d.get("cod_aghu"), d.get("nome_item"),
-            float(d.get("qtde") or 0), float(d.get("vl_unit") or 0), float(d.get("vl_total") or 0),
-            d.get("numero_empenho"), d.get("observacao"), d.get("ata_item_id"))
+    campos = (
+        "fornecedor_id","cod_aghu","nome_item","qtde",
+        "vl_unit","vl_total","numero_empenho","observacao",
+        "ata_item_id"
+    )
+    vals = (
+        d.get("fornecedor_id"), d.get("cod_aghu"), d.get("nome_item"),
+        float(d.get("qtde") or 0),
+        float(d.get("vl_unit") or 0),
+        float(d.get("vl_total") or 0),
+        d.get("numero_empenho"),
+        d.get("observacao"),
+        d.get("ata_item_id")
+    )
 
     conn = conectar(); cur = conn.cursor()
     cur.execute(
@@ -376,7 +386,10 @@ def empenho_inserir(d: Dict[str, Any]) -> int:
     return novo_id
 
 
-def empenhos_listar(fornecedor_id: Optional[int]=None, busca_cod: str="", numero_empenho: str="") -> List[Dict[str,Any]]:
+def empenhos_listar(fornecedor_id: Optional[int] = None,
+                    busca_cod: str = "",
+                    numero_empenho: str = "") -> List[Dict[str,Any]]:
+
     conn = conectar(); cur = conn.cursor()
     sql = "SELECT * FROM empenhos WHERE 1=1"
     params: List[Any] = []
@@ -395,6 +408,7 @@ def empenhos_listar(fornecedor_id: Optional[int]=None, busca_cod: str="", numero
 
     sql += " ORDER BY criado_em DESC"
     cur.execute(sql, params)
+
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
@@ -405,9 +419,11 @@ def empenho_itens_listar(numero_empenho: str, fornecedor_id: int) -> List[Dict[s
     cur.execute("""
         SELECT id, cod_aghu, nome_item, qtde, vl_unit, vl_total, observacao, ata_item_id
           FROM empenhos
-         WHERE fornecedor_id=? AND IFNULL(numero_empenho,'-') = IFNULL(?, '-')
+         WHERE fornecedor_id=? 
+           AND IFNULL(numero_empenho,'-') = IFNULL(?, '-')
          ORDER BY id ASC
     """, (fornecedor_id, numero_empenho))
+
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
@@ -422,9 +438,12 @@ def empenho_item_atualizar(item_id: int, d: Dict[str,Any]) -> None:
         WHERE id=?
     """, (
         d.get("cod_aghu"), d.get("nome_item"),
-        float(d.get("qtde") or 0), float(d.get("vl_unit") or 0),
-        float(d.get("vl_total") or 0), d.get("observacao"),
-        d.get("ata_item_id"), item_id
+        float(d.get("qtde") or 0),
+        float(d.get("vl_unit") or 0),
+        float(d.get("vl_total") or 0),
+        d.get("observacao"),
+        d.get("ata_item_id"),
+        item_id
     ))
     conn.commit()
     conn.close()
@@ -434,8 +453,10 @@ def empenho_excluir_por_numero(fornecedor_id: int, numero_empenho: str) -> int:
     conn = conectar(); cur = conn.cursor()
     cur.execute("""
         DELETE FROM empenhos
-         WHERE fornecedor_id=? AND IFNULL(numero_empenho,'-')=IFNULL(?, '-')
+         WHERE fornecedor_id=?
+           AND IFNULL(numero_empenho,'-')=IFNULL(?, '-')
     """, (fornecedor_id, numero_empenho))
+
     afetados = cur.rowcount
     conn.commit()
     conn.close()
@@ -450,10 +471,14 @@ def empenho_item_excluir(item_id: int) -> None:
 
 
 # ===========================================================
-#  Notas (cabeçalho + itens)
+#  NOTAS — CABEÇALHO + ITENS
 # ===========================================================
+
 def nota_inserir(d: Dict[str, Any]) -> int:
-    campos = ("fornecedor_id","numero","data_expedicao","vl_total","codigo_sei","data_envio_processo","observacao")
+    campos = (
+        "fornecedor_id","numero","data_expedicao",
+        "vl_total","codigo_sei","data_envio_processo","observacao"
+    )
     vals = tuple(d.get(k) for k in campos)
 
     conn = conectar(); cur = conn.cursor()
@@ -474,7 +499,8 @@ def nota_atualizar(nota_id: int, d: Dict[str, Any]) -> None:
             numero=?, data_expedicao=?, vl_total=?, codigo_sei=?, data_envio_processo=?, observacao=?,
             atualizado_em = datetime('now','localtime')
         WHERE id=?
-    """, (
+    """,
+    (
         d.get("numero"),
         d.get("data_expedicao"),
         float(d.get("vl_total") or 0),
@@ -503,11 +529,19 @@ def nota_obter(nota_id: int) -> Optional[Dict[str, Any]]:
 
 
 def nota_itens_inserir(nota_id: int, itens: List[Dict[str, Any]]) -> None:
+    """
+    itens = [
+      {'cod_aghu','data_uso','vl_unit','qtde','vl_total',
+       'qtde_consumida','ata_item_id','empenho_id'}
+    ]
+    """
     conn = conectar(); cur = conn.cursor()
+
     for it in itens:
         cur.execute("""
             INSERT INTO notas_itens
-                (nota_id, cod_aghu, data_uso, vl_unit, qtde, vl_total, qtde_consumida, ata_item_id, empenho_id)
+                (nota_id, cod_aghu, data_uso, vl_unit, qtde, vl_total, 
+                 qtde_consumida, ata_item_id, empenho_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             nota_id,
@@ -520,6 +554,7 @@ def nota_itens_inserir(nota_id: int, itens: List[Dict[str, Any]]) -> None:
             it.get("ata_item_id"),
             it.get("empenho_id"),
         ))
+
     conn.commit()
     conn.close()
 
@@ -527,13 +562,17 @@ def nota_itens_inserir(nota_id: int, itens: List[Dict[str, Any]]) -> None:
 def nota_itens_listar(nota_id: int) -> List[Dict[str, Any]]:
     conn = conectar(); cur = conn.cursor()
     cur.execute("""
-        SELECT ni.*, a.pregao, a.nome_item AS ata_nome_item, e.numero_empenho
+        SELECT ni.*,
+               a.pregao,
+               a.nome_item AS ata_nome_item,
+               e.numero_empenho
           FROM notas_itens ni
           LEFT JOIN atas_itens a ON a.id = ni.ata_item_id
           LEFT JOIN empenhos e   ON e.id = ni.empenho_id
          WHERE ni.nota_id = ?
          ORDER BY ni.id
     """, (nota_id,))
+
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
@@ -548,17 +587,24 @@ def nota_itens_excluir_por_nota(nota_id: int) -> None:
 
 def nota_total_recalcular(nota_id: int) -> float:
     conn = conectar(); cur = conn.cursor()
+
     cur.execute("SELECT IFNULL(SUM(vl_total),0) FROM notas_itens WHERE nota_id=?", (nota_id,))
     total = float(cur.fetchone()[0] or 0.0)
 
-    cur.execute("UPDATE notas SET vl_total=?, atualizado_em=datetime('now','localtime') WHERE id=?",
-                (total, nota_id))
+    cur.execute("""
+        UPDATE notas
+           SET vl_total=?, atualizado_em=datetime('now','localtime')
+         WHERE id=?
+    """, (total, nota_id))
+
     conn.commit()
     conn.close()
     return total
 
 
-def nota_listar(fornecedor_id: Optional[int]=None, numero: str="") -> List[Dict[str, Any]]:
+def nota_listar(fornecedor_id: Optional[int] = None,
+                numero: str = "") -> List[Dict[str, Any]]:
+
     conn = conectar(); cur = conn.cursor()
     sql = "SELECT * FROM notas WHERE 1=1"
     params: List[Any] = []
@@ -573,21 +619,26 @@ def nota_listar(fornecedor_id: Optional[int]=None, numero: str="") -> List[Dict[
 
     sql += " ORDER BY data_expedicao DESC, id DESC"
     cur.execute(sql, params)
+
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
 
 
 # ===========================================================
-#  Saldos
+#  SALDOS (vw_saldo_ata / vw_saldo_empenho)
 # ===========================================================
+
 def saldo_ata_por_fornecedor(fornecedor_id: int) -> List[Dict[str, Any]]:
     conn = conectar(); cur = conn.cursor()
+
     cur.execute("""
-        SELECT * FROM vw_saldo_ata
-        WHERE fornecedor_id=?
-        ORDER BY pregao, cod_aghu
+        SELECT * 
+          FROM vw_saldo_ata
+         WHERE fornecedor_id=?
+         ORDER BY pregao, cod_aghu
     """, (fornecedor_id,))
+
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
@@ -595,24 +646,32 @@ def saldo_ata_por_fornecedor(fornecedor_id: int) -> List[Dict[str, Any]]:
 
 def saldo_empenho_por_fornecedor(fornecedor_id: int) -> List[Dict[str, Any]]:
     conn = conectar(); cur = conn.cursor()
+
     cur.execute("""
-        SELECT * FROM vw_saldo_empenho
-        WHERE fornecedor_id=?
-        ORDER BY valor_saldo ASC, empenho_id DESC
+        SELECT *
+          FROM vw_saldo_empenho
+         WHERE fornecedor_id=?
+         ORDER BY valor_saldo ASC, empenho_id DESC
     """, (fornecedor_id,))
+
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
 
 
 # ===========================================================
-#  Orçamentos
+#  ORÇAMENTOS
 # ===========================================================
+
 def orcamento_inserir(d: Dict[str, Any]) -> int:
-    campos = ("fornecedor_id","cod_aghu","nome_item","qtde","vl_unit","numero_empenho","observacao","mensagem_email")
+    campos = (
+        "fornecedor_id","cod_aghu","nome_item","qtde",
+        "vl_unit","numero_empenho","observacao","mensagem_email"
+    )
     vals = tuple(d.get(k) for k in campos)
 
     conn = conectar(); cur = conn.cursor()
+
     cur.execute(
         f"INSERT INTO orcamentos ({','.join(campos)}) VALUES ({','.join(['?']*len(campos))})",
         vals
@@ -623,7 +682,10 @@ def orcamento_inserir(d: Dict[str, Any]) -> int:
     return novo_id
 
 
-def orcamentos_listar(fornecedor_id: Optional[int]=None, cod_aghu: str="", numero_empenho: str="") -> List[Dict[str, Any]]:
+def orcamentos_listar(fornecedor_id: Optional[int] = None,
+                      cod_aghu: str = "",
+                      numero_empenho: str = "") -> List[Dict[str, Any]]:
+
     conn = conectar(); cur = conn.cursor()
     sql = "SELECT * FROM orcamentos WHERE 1=1"
     params: List[Any] = []
@@ -641,26 +703,30 @@ def orcamentos_listar(fornecedor_id: Optional[int]=None, cod_aghu: str="", numer
         params.append(f"%{numero_empenho}%")
 
     sql += " ORDER BY id DESC"
+
     cur.execute(sql, tuple(params))
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
 
 
-def orcamentos_filtrar(fornecedor_id: Optional[int]=None,
-                       data_ini: Optional[str]=None,
-                       data_fim: Optional[str]=None,
-                       termo: str="",
-                       numero_empenho: str="") -> List[Dict[str, Any]]:
+def orcamentos_filtrar(fornecedor_id: Optional[int] = None,
+                       data_ini: Optional[str] = None,
+                       data_fim: Optional[str] = None,
+                       termo: str = "",
+                       numero_empenho: str = "") -> List[Dict[str, Any]]:
+
     conn = conectar(); cur = conn.cursor()
+
     sql = """
         SELECT o.id, o.fornecedor_id, f.nome AS fornecedor_nome,
                o.cod_aghu, o.nome_item, o.qtde, o.vl_unit,
                o.numero_empenho, o.observacao, o.criado_em
           FROM orcamentos o
-          LEFT JOIN fornecedores f ON f.id = o.fornecedor_id
+     LEFT JOIN fornecedores f ON f.id = o.fornecedor_id
          WHERE 1=1
     """
+
     params: List[Any] = []
 
     if fornecedor_id:
@@ -693,24 +759,36 @@ def orcamentos_filtrar(fornecedor_id: Optional[int]=None,
 
 
 # ===========================================================
-#  Funções auxiliares do ETL
+#  ETL (Importações)
 # ===========================================================
+
 def etl_estado_obter() -> Dict[str, Any]:
     conn = conectar(); cur = conn.cursor()
-    cur.execute("SELECT id, fonte, ultimo_hash, ultimo_import_ok FROM etl_estado WHERE id=1")
+    cur.execute("""
+        SELECT id, fonte, ultimo_hash, ultimo_import_ok
+          FROM etl_estado
+         WHERE id=1
+    """)
     row = cur.fetchone()
     conn.close()
     return dict(row) if row else {}
 
 
-def etl_estado_atualizar(ultimo_hash: Optional[str], quando_local: Optional[str]=None) -> None:
+def etl_estado_atualizar(ultimo_hash: Optional[str],
+                         quando_local: Optional[str] = None) -> None:
+
     from datetime import datetime
+
     if not quando_local:
         quando_local = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     conn = conectar(); cur = conn.cursor()
+
     cur.execute("""
-        UPDATE etl_estado SET ultimo_hash=?, ultimo_import_ok=? WHERE id=1
+        UPDATE etl_estado
+           SET ultimo_hash=?, ultimo_import_ok=?
+         WHERE id=1
     """, (ultimo_hash, quando_local))
+
     conn.commit()
     conn.close()
