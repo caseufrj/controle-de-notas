@@ -850,6 +850,66 @@ def orcamentos_filtrar(fornecedor_id: Optional[int] = None,
     conn.close()
     return rows
 
+def orcamentos_filtrar_paginado(
+        fornecedor_id: Optional[int] = None,
+        data_ini: Optional[str] = None,
+        data_fim: Optional[str] = None,
+        termo: str = "",
+        numero_empenho: str = "",
+        limit: int = 50,
+        offset: int = 0
+    ) -> List[Dict[str, Any]]:
+
+    conn = conectar(); cur = conn.cursor()
+
+    sql = """
+        SELECT 
+            o.id, 
+            o.fornecedor_id, 
+            f.nome AS fornecedor_nome,
+            o.cod_aghu, 
+            o.nome_item, 
+            o.qtde, 
+            o.vl_unit,
+            o.numero_empenho, 
+            o.observacao, 
+            o.criado_em
+        FROM orcamentos o
+        LEFT JOIN fornecedores f ON f.id = o.fornecedor_id
+        WHERE 1 = 1
+    """
+
+    params: List[Any] = []
+
+    if fornecedor_id:
+        sql += " AND o.fornecedor_id = ?"
+        params.append(fornecedor_id)
+
+    if data_ini:
+        sql += " AND date(o.criado_em) >= date(?)"
+        params.append(data_ini)
+
+    if data_fim:
+        sql += " AND date(o.criado_em) <= date(?)"
+        params.append(data_fim)
+
+    if termo:
+        like = f"%{termo}%"
+        sql += " AND (o.cod_aghu LIKE ? OR o.nome_item LIKE ? OR o.observacao LIKE ?)"
+        params.extend([like, like, like])
+
+    if numero_empenho:
+        sql += " AND IFNULL(o.numero_empenho,'') LIKE ?"
+        params.append(f"%{numero_empenho}%")
+
+    sql += " ORDER BY o.id DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+
+    cur.execute(sql, tuple(params))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
 
 # ===========================================================
 #  MENSAGENS / RASCUNHOS (TELAS DO SISTEMA DEPENDEM DISSO)
