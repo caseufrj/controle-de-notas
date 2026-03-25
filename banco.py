@@ -532,6 +532,37 @@ def empenho_item_excluir(item_id: int) -> None:
     conn.commit()
     conn.close()
 
+def empenho_cabecalhos_listar(fornecedor_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """
+    Lista os cabeçalhos de empenho, agrupando itens pelo número do empenho.
+    Retorna: numero_empenho, itens_qtd, valor_total (somado).
+    """
+    conn = conectar(); cur = conn.cursor()
+
+    sql = """
+        SELECT 
+            e.numero_empenho,
+            COUNT(e.id) AS itens_qtd,
+            IFNULL(SUM(e.vl_total), 0) AS valor_total
+        FROM empenhos e
+        WHERE 1=1
+    """
+    params: List[Any] = []
+
+    if fornecedor_id:
+        sql += " AND e.fornecedor_id = ?"
+        params.append(fornecedor_id)
+
+    sql += """
+        GROUP BY e.numero_empenho
+        ORDER BY e.numero_empenho DESC
+    """
+
+    cur.execute(sql, tuple(params))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
 # ===========================================================
 #  NOTAS — CABEÇALHO + ITENS
 # ===========================================================
