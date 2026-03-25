@@ -858,7 +858,7 @@ def orcamentos_filtrar_paginado(
         numero_empenho: str = "",
         limit: int = 50,
         offset: int = 0
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
 
     conn = conectar(); cur = conn.cursor()
 
@@ -879,7 +879,7 @@ def orcamentos_filtrar_paginado(
         WHERE 1 = 1
     """
 
-    params: List[Any] = []
+    params = []
 
     if fornecedor_id:
         sql += " AND o.fornecedor_id = ?"
@@ -905,10 +905,67 @@ def orcamentos_filtrar_paginado(
     sql += " ORDER BY o.id DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
 
+    # consulta paginada
     cur.execute(sql, tuple(params))
-    rows = [dict(r) for r in cur.fetchall()]  # ← CONVERSÃO CERTA!!!
+    rows = [dict(r) for r in cur.fetchall()]
+
+    # total para paginação
+    total = orcamentos_total(
+        fornecedor_id=fornecedor_id,
+        data_ini=data_ini,
+        data_fim=data_fim,
+        termo=termo,
+        numero_empenho=numero_empenho
+    )
+
     conn.close()
-    return rows
+    return {
+        "rows": rows,
+        "total": total
+    }
+
+def orcamentos_total(
+        fornecedor_id: Optional[int] = None,
+        data_ini: Optional[str] = None,
+        data_fim: Optional[str] = None,
+        termo: str = "",
+        numero_empenho: str = ""
+    ) -> int:
+
+    conn = conectar(); cur = conn.cursor()
+
+    sql = """
+        SELECT COUNT(*)
+        FROM orcamentos o
+        WHERE 1 = 1
+    """
+    params = []
+
+    if fornecedor_id:
+        sql += " AND o.fornecedor_id = ?"
+        params.append(fornecedor_id)
+
+    if data_ini:
+        sql += " AND date(o.criado_em) >= date(?)"
+        params.append(data_ini)
+
+    if data_fim:
+        sql += " AND date(o.criado_em) <= date(?)"
+        params.append(data_fim)
+
+    if termo:
+        like = f"%{termo}%"
+        sql += " AND (o.cod_aghu LIKE ? OR o.nome_item LIKE ? OR o.observacao LIKE ?)"
+        params.extend([like, like, like])
+
+    if numero_empenho:
+        sql += " AND IFNULL(o.numero_empenho,'') LIKE ?"
+        params.append(f"%{numero_empenho}%")
+
+    cur.execute(sql, tuple(params))
+    total = int(cur.fetchone()[0])
+    conn.close()
+    return total
 
 
 # ===========================================================
