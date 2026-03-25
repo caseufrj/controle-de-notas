@@ -178,6 +178,75 @@ def ata_hdr_obter(ata_id: int) -> Optional[Dict[str, Any]]:
     conn.close()
     return dict(row) if row else None
 
+def atas_hdr_listar(fornecedor_id: Optional[int] = None,
+                    busca_numero: str = "") -> List[Dict[str, Any]]:
+    conn = conectar(); cur = conn.cursor()
+
+    sql = """
+        SELECT 
+            a.id AS ata_id,
+            a.fornecedor_id,
+            a.numero,
+            a.vigencia_ini,
+            a.vigencia_fim,
+            a.status,
+            
+            -- Quantidade total de itens
+            (SELECT COUNT(*) 
+               FROM atas_itens ai 
+              WHERE ai.ata_id = a.id) AS itens_qtd,
+            
+            -- Valor total da ATA
+            IFNULL((SELECT SUM(vl_total)
+                      FROM atas_itens ai
+                     WHERE ai.ata_id = a.id), 0) AS valor_total_ata,
+
+            -- Valor empenhado
+            IFNULL((SELECT SUM(e.vl_total)
+                      FROM empenhos e
+                     WHERE e.ata_item_id IN 
+                         (SELECT id FROM atas_itens WHERE ata_id = a.id)), 0)
+                 AS valor_empenhado,
+
+            -- Valor consumido
+            IFNULL((SELECT SUM(ni.vl_total)
+                      FROM notas_itens ni
+                     WHERE ni.ata_item_id IN 
+                         (SELECT id FROM atas_itens WHERE ata_id = a.id)), 0)
+                 AS valor_consumido,
+
+            -- Saldo
+            (
+                IFNULL((SELECT SUM(vl_total)
+                          FROM atas_itens ai
+                         WHERE ai.ata_id = a.id),0)
+                -
+                IFNULL((SELECT SUM(e.vl_total)
+                          FROM empenhos e
+                         WHERE e.ata_item_id IN 
+                             (SELECT id FROM atas_itens WHERE ata_id = a.id)),0)
+            ) AS valor_saldo
+        FROM atas a
+        WHERE 1=1
+    """
+
+    params: List[Any] = []
+
+    if fornecedor_id:
+        sql += " AND a.fornecedor_id = ?"
+        params.append(fornecedor_id)
+
+    if busca_numero:
+        sql += " AND a.numero LIKE ?"
+        params.append(f"%{busca_numero}%")
+
+    sql += " ORDER BY a.numero DESC, a.id DESC"
+
+    cur.execute(sql, tuple(params))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
 # ===========================================================
 #  ATAS — ITENS
 # ===========================================================
