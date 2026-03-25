@@ -1,6 +1,6 @@
 # ============================================================
-#  banco.py LIMPO — PARTE 1 / 4
-#  Estrutura limpa, sem criar_tabelas(), sem migrações
+#  banco.py LIMPO — COMPLETO (PARTE 1 / 4)
+#  Livre de criar_tabelas() e migrações. Apenas CRUD.
 # ============================================================
 
 import os
@@ -8,19 +8,14 @@ import sqlite3
 from typing import List, Dict, Any, Optional, Tuple
 
 # =========================
-#  Caminho do banco (UNC)
+#  Caminho do banco
 # =========================
 CAMINHO_BANCO = r"\\hc-arquivos.hc.ufpr.br\HC-GERAL\GERAD\DILIH\SESUP\Todos-SESUP\OPME\BD_Notas\notas_novo.db"
 
-
-# -------------------------
-#  Conexão única (FK ON)
-# -------------------------
+# -------------------------------------------------------
+#  Conexão SQLite (sempre com FK ON)
+# -------------------------------------------------------
 def conectar() -> sqlite3.Connection:
-    """
-    Abre conexão SQLite com FK ON.
-    Não cria diretórios em UNC.
-    """
     try:
         base_dir = os.path.dirname(CAMINHO_BANCO)
         if base_dir and not base_dir.startswith("\\\\") and not os.path.exists(base_dir):
@@ -39,29 +34,29 @@ def conectar() -> sqlite3.Connection:
     return conn
 
 
-# ---------------------------------------------------
-#  DESATIVAÇÃO TOTAL DA FUNÇÃO criar_tabelas()
-# ---------------------------------------------------
+# -------------------------------------------------------
+#  criar_tabelas() — DESATIVADO
+# -------------------------------------------------------
 def criar_tabelas() -> None:
     """
-    ESTA FUNÇÃO FOI DESATIVADA.
-    O schema agora é mantido 100% externamente (DBeaver).
+    DESATIVADO — O banco é mantido externamente (DBeaver).
+    Não remover esta função; várias telas importam ela.
     """
     return
 
 
 # ===========================================================
-#   CRUDs / CONSULTAS — APENAS OPERAÇÃO DE DADOS
+#  CRUD / CONSULTAS — APENAS OPERAÇÃO DE DADOS
 # ===========================================================
 
 # ===========================================================
 #  FORNECEDORES
 # ===========================================================
-
 def fornecedores_listar(busca: str = "") -> List[Dict[str, Any]]:
     conn = conectar(); cur = conn.cursor()
     if busca:
-        cur.execute("SELECT * FROM fornecedores WHERE nome LIKE ? ORDER BY nome", (f"%{busca}%",))
+        cur.execute("SELECT * FROM fornecedores WHERE nome LIKE ? ORDER BY nome",
+                    (f"%{busca}%",))
     else:
         cur.execute("SELECT * FROM fornecedores ORDER BY nome")
     rows = [dict(r) for r in cur.fetchall()]
@@ -79,15 +74,16 @@ def fornecedor_obter(id_: int) -> Optional[Dict[str, Any]]:
 
 def fornecedor_inserir(d: Dict[str, Any]) -> int:
     campos = (
-        "nome","cnpj","contato_vendedor","telefone","email",
-        "rua","numero","complemento","bairro","municipio",
-        "estado","cep","observacao"
+        "nome", "cnpj", "contato_vendedor", "telefone", "email",
+        "rua", "numero", "complemento", "bairro", "municipio",
+        "estado", "cep", "observacao"
     )
     vals = tuple(d.get(k) for k in campos)
 
     conn = conectar(); cur = conn.cursor()
     cur.execute(
-        f"INSERT INTO fornecedores ({','.join(campos)}) VALUES ({','.join(['?']*len(campos))})",
+        f"INSERT INTO fornecedores ({','.join(campos)}) "
+        f"VALUES ({','.join(['?']*len(campos))})",
         vals
     )
     conn.commit()
@@ -107,7 +103,8 @@ def fornecedor_atualizar(id_: int, d: Dict[str, Any]) -> None:
 
     conn = conectar(); cur = conn.cursor()
     cur.execute(
-        f"UPDATE fornecedores SET {sets}, atualizado_em=datetime('now','localtime') WHERE id=?",
+        f"UPDATE fornecedores SET {sets}, atualizado_em=datetime('now','localtime') "
+        f"WHERE id=?",
         vals
     )
     conn.commit()
@@ -124,9 +121,9 @@ def fornecedor_excluir(id_: int) -> None:
 # ===========================================================
 #  ATAS — CABEÇALHO
 # ===========================================================
-
 def ata_hdr_inserir(d: Dict[str,Any]) -> int:
-    campos = ("fornecedor_id","numero","vigencia_ini","vigencia_fim","status","observacao")
+    campos = ("fornecedor_id","numero","vigencia_ini",
+              "vigencia_fim","status","observacao")
     vals = tuple(d.get(k) for k in campos)
 
     conn = conectar(); cur = conn.cursor()
@@ -145,7 +142,7 @@ def ata_hdr_atualizar(ata_id: int, d: Dict[str,Any]) -> None:
     cur.execute("""
         UPDATE atas SET
             numero=?, vigencia_ini=?, vigencia_fim=?, status=?, observacao=?,
-            atualizado_em = datetime('now','localtime')
+            atualizado_em=datetime('now','localtime')
         WHERE id=?
     """, (
         d.get("numero"),
@@ -162,17 +159,14 @@ def ata_hdr_atualizar(ata_id: int, d: Dict[str,Any]) -> None:
 def ata_hdr_excluir(ata_id: int) -> None:
     conn = conectar(); cur = conn.cursor()
 
-    # Exclui empenhos ligados aos itens desta ata
     cur.execute("""
         DELETE FROM empenhos
          WHERE ata_item_id IN (SELECT id FROM atas_itens WHERE ata_id=?)
     """, (ata_id,))
 
-    # Exclui itens
     cur.execute("DELETE FROM atas_itens WHERE ata_id=?", (ata_id,))
-
-    # Exclui cabeçalho
     cur.execute("DELETE FROM atas WHERE id=?", (ata_id,))
+
     conn.commit()
     conn.close()
 
@@ -469,7 +463,6 @@ def empenho_item_excluir(item_id: int) -> None:
     conn.commit()
     conn.close()
 
-
 # ===========================================================
 #  NOTAS — CABEÇALHO + ITENS
 # ===========================================================
@@ -531,8 +524,8 @@ def nota_obter(nota_id: int) -> Optional[Dict[str, Any]]:
 def nota_itens_inserir(nota_id: int, itens: List[Dict[str, Any]]) -> None:
     """
     itens = [
-      {'cod_aghu','data_uso','vl_unit','qtde','vl_total',
-       'qtde_consumida','ata_item_id','empenho_id'}
+       {'cod_aghu','data_uso','vl_unit','qtde','vl_total',
+        'qtde_consumida','ata_item_id','empenho_id'}
     ]
     """
     conn = conectar(); cur = conn.cursor()
@@ -759,7 +752,143 @@ def orcamentos_filtrar(fornecedor_id: Optional[int] = None,
 
 
 # ===========================================================
-#  ETL (Importações)
+#  MENSAGENS / RASCUNHOS (TELAS DO SISTEMA DEPENDEM DISSO)
+# ===========================================================
+
+# ------ Inserir mensagens modelo / rascunho ------
+def mensagem_inserir(d: Dict[str, Any]) -> int:
+    campos = ("fornecedor_id","titulo","conteudo","tipo")
+    vals = (d.get("fornecedor_id"), d["titulo"], d["conteudo"], d.get("tipo","modelo"))
+
+    conn = conectar(); cur = conn.cursor()
+    cur.execute(
+        f"INSERT INTO mensagens_padrao ({','.join(campos)}) VALUES (?,?,?,?)",
+        vals
+    )
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return new_id
+
+
+# ------ Listar mensagens modelo / rascunho ------
+def mensagens_listar(tipo: Optional[str] = None,
+                     fornecedor_id: Optional[int] = None,
+                     busca: str = "") -> List[Dict[str, Any]]:
+
+    conn = conectar(); cur = conn.cursor()
+    sql = "SELECT * FROM mensagens_padrao WHERE 1=1"
+    params: List[Any] = []
+
+    if tipo:
+        sql += " AND tipo=?"
+        params.append(tipo)
+
+    if fornecedor_id is not None:
+        sql += " AND (fornecedor_id IS NULL OR fornecedor_id=?)"
+        params.append(fornecedor_id)
+
+    if busca:
+        like = f"%{busca}%"
+        sql += " AND (titulo LIKE ? OR conteudo LIKE ?)"
+        params.extend([like, like])
+
+    sql += " ORDER BY id DESC"
+
+    cur.execute(sql, tuple(params))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def mensagens_obter(id_: int) -> Optional[Dict[str, Any]]:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("SELECT * FROM mensagens_padrao WHERE id=?", (id_,))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def mensagem_excluir(id_: int) -> None:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("DELETE FROM mensagens_padrao WHERE id=?", (id_,))
+    conn.commit()
+    conn.close()
+
+
+def mensagem_atualizar(id_: int, novo_titulo: str, novo_conteudo: str) -> None:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        UPDATE mensagens_padrao
+           SET titulo=?, conteudo=?
+         WHERE id=?
+    """, (novo_titulo, novo_conteudo, id_))
+    conn.commit()
+    conn.close()
+
+
+# ===========================================================
+#  RASCUNHOS (GRADE EM ORÇAMENTOS)
+# ===========================================================
+
+def itens_rascunho_inserir(d: Dict[str, Any]) -> int:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO itens_rascunho
+            (fornecedor_id, cod_aghu, nome_item, qtde, vl_unit,
+             numero_empenho, observacao)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (
+        d.get("fornecedor_id"), d["cod_aghu"], d["nome_item"],
+        d["qtde"], d["vl_unit"], d.get("numero_empenho"),
+        d.get("observacao")
+    ))
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return new_id
+
+
+def itens_rascunho_listar(fornecedor_id: Optional[int]) -> List[Dict[str, Any]]:
+    where = "fornecedor_id IS NULL" if fornecedor_id is None else "fornecedor_id = ?"
+    params = tuple() if fornecedor_id is None else (fornecedor_id,)
+
+    sql = f"""
+        SELECT id, fornecedor_id, cod_aghu, nome_item, qtde,
+               vl_unit, numero_empenho, observacao, criado_em
+          FROM itens_rascunho
+         WHERE {where}
+         ORDER BY criado_em ASC, id ASC
+    """
+
+    conn = conectar(); cur = conn.cursor()
+    cur.execute(sql, params)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def itens_rascunho_excluir(item_id: int) -> None:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("DELETE FROM itens_rascunho WHERE id=?", (item_id,))
+    conn.commit()
+    conn.close()
+
+
+def itens_rascunho_limpar_por_fornecedor(fornecedor_id: Optional[int]) -> None:
+    conn = conectar(); cur = conn.cursor()
+
+    if fornecedor_id is None:
+        cur.execute("DELETE FROM itens_rascunho WHERE fornecedor_id IS NULL")
+    else:
+        cur.execute("DELETE FROM itens_rascunho WHERE fornecedor_id=?", (fornecedor_id,))
+
+    conn.commit()
+    conn.close()
+
+
+# ===========================================================
+#  ETL (Importações de ATAS)
 # ===========================================================
 
 def etl_estado_obter() -> Dict[str, Any]:
