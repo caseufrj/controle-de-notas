@@ -5,13 +5,8 @@ from tkinter import ttk, messagebox, filedialog
 
 import utils
 # Importadores de ATAs
-from importadores.atas_xlsx import importar_atas_xlsx_incremental
-try:
-    # tenta pegar a função AUTO do módulo
-    from importadores.atas_xlsx import importar_atas_xlsx_auto
-except Exception:
-    importar_atas_xlsx_auto = None
-
+# Importador novo (FULL + incremental real)
+from importadores.atas_xlsx import importar_atas_xlsx
 
 class TelaConfiguracoes(tk.Frame):
     def __init__(self, master):
