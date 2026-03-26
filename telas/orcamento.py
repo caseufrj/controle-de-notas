@@ -222,9 +222,18 @@ class TelaOrcamento(tk.Frame):
         pag.pack(fill="x", padx=6, pady=(0, 6))
         tk.Label(pag, text="Itens/página:").pack(side="left")
         self.cb_page_size = ttk.Combobox(pag, state="readonly", width=5, values=[20, 50, 100, 200])
-        self.cb_page_size.set(50)
+
+        # 🔥 Carrega do config.json o último valor usado
+        try:
+            cfg = utils.carregar_config()
+            ultimo = int(cfg.get("paginacao_orcamento", 50))
+        except Exception:
+            ultimo = 50
+        
+        # ⚠️ DEFERIR a aplicação do valor para evitar conflito com criação da GUI
+        self.after(10, lambda: self.cb_page_size.set(ultimo))
         self.cb_page_size.pack(side="left", padx=4)
-        self.cb_page_size.bind("<<ComboboxSelected>>", lambda e: self._resetar_paginacao())
+        self.cb_page_size.bind("<<ComboboxSelected>>", self._on_page_size_changed)
 
         ttk.Button(pag, text="<<", command=lambda: self._ir_pagina("first")).pack(side="left", padx=2)
         ttk.Button(pag, text="<", command=lambda: self._ir_pagina("prev")).pack(side="left", padx=2)
@@ -373,6 +382,16 @@ class TelaOrcamento(tk.Frame):
         # 3) Limpa campos
         for e in (self.e_cod, self.e_nome, self.e_qt, self.e_vu, self.e_emp, self.e_obs):
             e.delete(0, "end")
+
+    def _salvar_page_size(self):
+        try:
+            tam = int(self.cb_page_size.get())
+        except Exception:
+            tam = 50
+    
+        cfg = utils.carregar_config()
+        cfg["paginacao_orcamento"] = tam
+        utils.salvar_config(cfg)
 
     # ---------- Persistência de itens ----------
     def _salvar_orcamento_linhas(self, values_rows) -> int:
