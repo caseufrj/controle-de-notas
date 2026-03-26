@@ -669,24 +669,36 @@ class TelaOrcamento(tk.Frame):
         if not sel:
             messagebox.showwarning("Atenção", "Selecione uma mensagem.")
             return
+    
         vals = tv.item(sel[0], "values")
         try:
             mid = int(vals[0])
         except Exception:
+            messagebox.showwarning("Erro", "Não foi possível identificar o ID da mensagem.")
             return
+    
+        # Carrega do banco
         msg = banco.mensagem_obter(mid)
         if not msg:
-            messagebox.showwarning("Aviso", "Mensagem não encontrada.")
+            messagebox.showwarning("Aviso", "Mensagem não encontrada no banco.")
             return
-
+    
+        # Marca como mensagem em edição
         self._msg_editando_id = mid
-        # se for rascunho, autosave atualiza este; se for modelo, autosave criará novo rascunho
         self._autosave_msg_id = mid if msg.get("tipo") == "rascunho" else None
-
+    
+        # Preenche o formulário corretamente
         self.e_titulo_msg.delete(0, "end")
         self.e_titulo_msg.insert(0, msg.get("titulo", ""))
+    
         self.txt_msg.delete("1.0", "end")
         self.txt_msg.insert("1.0", msg.get("conteudo", ""))
+    
+        # Foco no editor
+        try:
+            self.txt_msg.focus_set()
+        except Exception:
+            pass
 
     def _editar_msg(self):
         sel = self.tv_modelos.selection() or self.tv_rasc.selection()
