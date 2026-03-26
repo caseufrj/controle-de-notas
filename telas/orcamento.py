@@ -310,6 +310,25 @@ class TelaOrcamento(tk.Frame):
 
         self._carregar_salvos()
 
+    def _carregar_modelo_rapido(self):
+        titulo = self.cb_modelo.get()
+        if not titulo:
+            return
+    
+        for m in self._modelos_cache:
+            if m["titulo"] == titulo:
+                msg = banco.mensagem_obter(m["id"])
+                if msg:
+                    self.txt_msg.delete("1.0", "end")
+                    self.txt_msg.insert("1.0", msg.get("conteudo", ""))
+    
+                    self.e_titulo_msg.delete(0, "end")
+                    self.e_titulo_msg.insert(0, msg.get("titulo", ""))
+    
+                    # não sobrescreve automaticamente o modelo
+                    self._autosave_msg_id = None
+                break
+
     # ---------------- Histórico -----------------
 
     def _limpar_filtros(self):
