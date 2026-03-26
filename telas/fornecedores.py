@@ -5,6 +5,7 @@ import json
 import urllib.request
 import urllib.error
 import banco
+import utils
 
 
 class TelaFornecedores(tk.Frame):
@@ -12,7 +13,12 @@ class TelaFornecedores(tk.Frame):
         super().__init__(master, bg="white")
 
         # ----------------- Estado interno (paginação e endereço) -----------------
-        self.page_size = 20
+        # Carrega último valor salvo, senão usa 20
+        try:
+            cfg = utils.carregar_config()
+            self.page_size = int(cfg.get("paginacao_fornecedores", 20))
+        except Exception:
+            self.page_size = 20
         self.page = 1
         self._dados_filtrados = []
         self._endereco_editavel = False  # controla se rua/bairro/município/estado podem ser editados
@@ -50,7 +56,10 @@ class TelaFornecedores(tk.Frame):
 
         tk.Label(pag, text="Itens por página:", bg="white").pack(side="right", padx=(8, 2))
         self.cb_page_size = ttk.Combobox(pag, values=[10, 20, 50], width=4, state="readonly")
-        self.cb_page_size.set(self.page_size)
+
+        # Define valor salvo depois que GUI carregar
+        self.after(10, lambda: self.cb_page_size.set(self.page_size))
+        
         self.cb_page_size.pack(side="right")
         self.cb_page_size.bind("<<ComboboxSelected>>", self._on_change_page_size)
 
@@ -137,6 +146,16 @@ class TelaFornecedores(tk.Frame):
             ent.delete(0, "end")
             ent.insert(0, cur)
             ent.config(state=state, takefocus=takefocus)
+
+    def _salvar_page_size(self):
+        try:
+            tam = int(self.cb_page_size.get())
+        except Exception:
+            tam = 20
+    
+        cfg = utils.carregar_config()
+        cfg["paginacao_fornecedores"] = tam
+        utils.salvar_config(cfg)
 
     # ----------------- ViaCEP (CEP -> endereço) -----------------
     def _buscar_cep(self, cep: str):
@@ -244,11 +263,16 @@ class TelaFornecedores(tk.Frame):
     def _filtrar(self):
         self._carregar_lista(self.ent_busca.get().strip())
 
-    def _on_change_page_size(self, _evt):
+    def _on_change_page_size(self, _evt=None):
         try:
             self.page_size = int(self.cb_page_size.get())
         except Exception:
             self.page_size = 20
+    
+        # Salva persistente
+        self._salvar_page_size()
+    
+        # Reinicia na página 1 e atualiza lista
         self.page = 1
         self._mostrar_pagina_atual()
 
