@@ -7,6 +7,10 @@ import utils
 # Importadores de ATAs
 # Importador novo (FULL + incremental real)
 from importadores.atas_xlsx import importar_atas_xlsx
+import banco
+import tkinter.messagebox as mb
+
+mb.showinfo("DEBUG", f"Banco usado:\n{banco.CAMINHO_BANCO}")
 
 class TelaConfiguracoes(tk.Frame):
     def __init__(self, master):
