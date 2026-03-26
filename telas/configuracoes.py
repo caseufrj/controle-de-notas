@@ -168,55 +168,77 @@ class TelaConfiguracoes(tk.Frame):
 
     # ----------------- Importadores / ATAs -----------------
     def _imp_atas_auto(self):
-        arq = filedialog.askopenfilename(
-            title="Selecione a planilha cache de ATAs (.xlsx)",
+        import tkinter.messagebox as mb
+        from tkinter.filedialog import askopenfilename
+    
+        caminho = askopenfilename(
+            title="Selecione a planilha de ATAs",
             filetypes=[("Excel", "*.xlsx")],
         )
-        if not arq:
+    
+        if not caminho:
             return
+    
         try:
-            # se a função AUTO existir no módulo, usa; senão, usa fallback local
-            from importadores.atas_xlsx import importar_atas_xlsx_auto as _auto
-            res = _auto(arq)
-        except Exception:
-            # fallback automático: 1ª FULL; depois HOJE
-            import banco
-            conn = banco.conectar(); cur = conn.cursor()
-            cur.execute("SELECT EXISTS(SELECT 1 FROM atas LIMIT 1)")
-            tem_ata = int(cur.fetchone()[0]) == 1
-            conn.close()
-            from importadores.atas_xlsx import importar_atas_xlsx_incremental as _inc
-            if not tem_ata:
-                res = _inc(arq, somente_hoje=False, atualizar_itens_existentes=True)
-            else:
-                res = _inc(arq, somente_hoje=True, atualizar_itens_existentes=False)
-        self._mostrar_resultado_import(res)
+            # nova função, sempre FULL (e incremental real internamente)
+            from importadores.atas_xlsx import importar_atas_xlsx
+            r = importar_atas_xlsx(caminho)
+    
+            msg = (
+                f"Importação concluída.\n\n"
+                f"Fornecedores: {r['stats'].get('fornecedores', '?')}\n"
+                f"ATAs: {r['stats'].get('atas', '?')}\n"
+                f"Itens criados: {r['stats'].get('itens_criados', '?')}\n"
+                f"Itens atualizados: {r['stats'].get('itens_atualizados', '?')}\n"
+            )
+    
+            if r.get("erros"):
+                msg += f"\nForam encontrados {len(r['erros'])} erros.\n"
+            
+            mb.showinfo("Importar ATAs", msg)
+    
+        except Exception as e:
+            mb.showerror("Erro ao importar ATAs", str(e))
 
     def _imp_atas_hoje(self):
+        import tkinter.messagebox as mb
+        from tkinter import filedialog
+    
         arq = filedialog.askopenfilename(
-            title="Selecione a planilha cache de ATAs (.xlsx)",
+            title="Selecione a planilha de ATAs (.xlsx)",
             filetypes=[("Excel", "*.xlsx")],
         )
+    
         if not arq:
             return
-        from importadores.atas_xlsx import importar_atas_xlsx_incremental
-        res = importar_atas_xlsx_incremental(
-            arq, somente_hoje=True, atualizar_itens_existentes=False
-        )
-        self._mostrar_resultado_import(res)
+    
+        try:
+            from importadores.atas_xlsx import importar_atas_xlsx
+            res = importar_atas_xlsx(arq)
+            self._mostrar_resultado_import(res)
+    
+        except Exception as e:
+            mb.showerror("Erro", f"Falha ao importar ATAs:\n{e}")
 
     def _imp_atas_full(self):
+        import tkinter.messagebox as mb
+        from tkinter import filedialog
+    
         arq = filedialog.askopenfilename(
-            title="Selecione a planilha cache de ATAs (.xlsx)",
+            title="Selecione a planilha de ATAs (.xlsx)",
             filetypes=[("Excel", "*.xlsx")],
         )
+    
         if not arq:
             return
-        from importadores.atas_xlsx import importar_atas_xlsx_incremental
-        res = importar_atas_xlsx_incremental(
-            arq, somente_hoje=False, atualizar_itens_existentes=True
-        )
-        self._mostrar_resultado_import(res)
+    
+        try:
+            from importadores.atas_xlsx import importar_atas_xlsx
+            res = importar_atas_xlsx(arq)
+            self._mostrar_resultado_import(res)
+    
+        except Exception as e:
+            mb.showerror("Erro", f"Falha ao importar ATAs:\n{e}")
 
     def _mostrar_resultado_import(self, res: dict):
         if not res.get("ok"):
