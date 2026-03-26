@@ -453,6 +453,53 @@ class TelaOrcamento(tk.Frame):
         utils.exportar_excel({"Histórico": df}, arq)
         messagebox.showinfo("Exportar", f"Arquivo salvo em:\n{arq}")
 
+    def _exportar_excel(self):
+        values_rows = [self.tv.item(iid, "values") for iid in self.tv.get_children()]
+        if not values_rows:
+            messagebox.showinfo("Exportação", "Não há itens no rascunho para exportar.")
+            return
+    
+        # 1) Salva no banco antes de exportar
+        try:
+            self._salvar_orcamento_linhas(values_rows)
+        except Exception as e:
+            messagebox.showwarning(
+                "Salvar orçamento",
+                f"Não foi possível salvar no banco antes de exportar:\n{e}"
+            )
+    
+        # 2) Monta a estrutura
+        linhas = []
+        for v in values_rows:
+            linhas.append({
+                "Cód AGHU": v[0],
+                "Nome": v[1],
+                "Qtde": float(str(v[2]).replace(",", ".")),
+                "Valor Unitário": float(str(v[3]).replace(",", ".")),
+                "Nº Empenho": v[4],
+                "Observação": v[5],
+                "Valor Total": float(str(v[6]).replace(",", "."))
+            })
+    
+        arq = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel", "*.xlsx")],
+            title="Salvar orçamento"
+        )
+        if not arq:
+            return
+    
+        # Exporta de fato
+        try:
+            df = utils.tabela_para_dataframe(
+                linhas,
+                ["Cód AGHU", "Nome", "Qtde", "Valor Unitário", "Valor Total", "Nº Empenho", "Observação"]
+            )
+            utils.exportar_excel({"Orcamento": df}, arq)
+            messagebox.showinfo("Exportação", f"Planilha salva em:\n{arq}")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao exportar para Excel:\n{e}")
+
     # ---------------- Enviar Orçamento por Email -----------------
 
     def _enviar_email(self):
