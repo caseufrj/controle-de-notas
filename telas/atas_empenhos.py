@@ -401,6 +401,7 @@ class TelaAtasEmpenhos(tk.Frame):
         self._limpar_form_cabecalho()
         self.lbl_ctx.config(text="Sem cabeçalho salvo")
         self._recarregar_tudo()
+        self._atas_expandir_tudo()
 
     def _calc_total(self, e_qt: ttk.Entry, e_vu: MoedaEntry, e_vt: ttk.Entry):
         try:
@@ -590,31 +591,43 @@ class TelaAtasEmpenhos(tk.Frame):
         fid = self._fid()
         for i in self.tv_atas.get_children():
             self.tv_atas.delete(i)
-        if not fid: return
-
+        if not fid:
+            return
+    
         rows = banco.atas_hdr_listar(fornecedor_id=fid)
         forn_nome = self.cb_fornec.get()
-
+    
         # Reabrir o que estava expandido
         reabrir = set()
         if refresh_items_of:
             reabrir.add(int(refresh_items_of))
         reabrir.update(getattr(self, "_atas_expandidas", set()))
-
+    
         for r in rows:
             vig_i = self._fmt_data(r.get("vigencia_ini"))
             vig_f = self._fmt_data(r.get("vigencia_fim"))
             saldo = formatar_moeda_br(r.get("valor_saldo", 0))
             ata_id = int(r["ata_id"])
+    
+            # INSERE O CABEÇALHO
             iid = self.tv_atas.insert(
-                "", "end", text="",
-                values=(forn_nome, r.get("numero", ""), vig_i, vig_f,
-                        r.get("status", ""), str(r.get("itens_qtd", 0)), saldo,
-                        ata_id, "", ""),
+                "",
+                "end",
+                text="",
+                values=(
+                    forn_nome, r.get("numero", ""), vig_i, vig_f,
+                    r.get("status", ""), str(r.get("itens_qtd", 0)), saldo,
+                    ata_id, "", ""
+                ),
                 tags=("cab", f"ata_{ata_id}")
             )
+    
+            # 🔥 **AQUI ESTÁ A CORREÇÃO FUNDAMENTAL**
+            # Adiciona um CHILD temporário para forçar exibir a setinha ▶
+            self.tv_atas.insert(iid, "end", text="", values=("", "", "", "", "", "", ""), tags=("placeholder",))
+    
+            # Se essa ATA precisa estar expandida, remove placeholder e popula itens
             if ata_id in reabrir:
-                # limpa filhos e repopula
                 for ch in self.tv_atas.get_children(iid):
                     self.tv_atas.delete(ch)
                 self._popular_itens_ata(iid, ata_id)
