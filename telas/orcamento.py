@@ -1,4 +1,4 @@
-# telas/orcamento.py (COMPLETO E CORRIGIDO)
+# telas/orcamento.py - LAYOUT OTIMIZADO
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from datetime import datetime
@@ -13,44 +13,42 @@ class TelaOrcamento(tk.Frame):
 
         # ========== TOPO: FORNECEDOR ==========
         topo = tk.Frame(self, bg="white")
-        topo.pack(fill="x", padx=12, pady=10)
+        topo.pack(fill="x", padx=12, pady=5)
 
         tk.Label(topo, text="Fornecedor:", bg="white").pack(side="left")
         self.cb_fornec = ttk.Combobox(topo, state="readonly", width=50)
         self.cb_fornec.pack(side="left", padx=6)
-        self.cb_fornec.bind(
-            "<<ComboboxSelected>>",
-            lambda e: (
-                self._reset_autosave_context(),
-                self._carregar_itens_rascunho(),
-                self._carregar_salvos(),
-                self._carregar_msgs(),
-                self._carregar_msgs_enviadas(),
-            ),
-        )
+        self.cb_fornec.bind("<<ComboboxSelected>>", lambda e: (
+            self._reset_autosave_context(),
+            self._carregar_itens_rascunho(),
+            self._carregar_salvos(),
+            self._carregar_msgs(),
+            self._carregar_msgs_enviadas(),
+        ))
 
         self._after_ids = []
         self._anexos_extra = []
 
-        # ========== BLOCO 1: FORMULÁRIO PRINCIPAL ==========
+        # ========== BLOCO 1: FORMULÁRIO PRINCIPAL (COMPACTO) ==========
         form = ttk.LabelFrame(self, text="Lançar itens para Orçamento")
-        form.pack(fill="x", padx=12, pady=8)
+        form.pack(fill="x", padx=12, pady=5)
 
-        def campo(lbl, col, row, width=28):
-            tk.Label(form, text=lbl).grid(column=col, row=row, sticky="w", padx=6, pady=3)
+        # Grid compacto - 2 linhas
+        def campo(lbl, col, row, width=25):
+            tk.Label(form, text=lbl).grid(column=col, row=row, sticky="w", padx=6, pady=2)
             e = ttk.Entry(form, width=width)
-            e.grid(column=col + 1, row=row, sticky="ew", padx=6, pady=3)
+            e.grid(column=col + 1, row=row, sticky="ew", padx=6, pady=2)
             return e
 
+        # Linha 0
         self.e_cod = campo("Cód AGHU*:", 0, 0)
-        self.e_nome = campo("Nome item*:", 0, 1, 40)
-        self.e_qt = campo("Qtde*:", 2, 0, 12)
-        self.e_vu = campo("Vlr Unit*:", 2, 1, 12)
-        self.e_emp = campo("Nº Empenho:", 4, 0)
+        self.e_qt = campo("Qtde*:", 2, 0, 10)
+        self.e_emp = campo("Nº Empenho:", 4, 0, 12)
 
-        tk.Label(form, text="Observação:").grid(column=4, row=1, sticky="w", padx=6, pady=3)
-        self.e_obs = ttk.Entry(form, width=40)
-        self.e_obs.grid(column=5, row=1, sticky="ew", padx=6, pady=3)
+        # Linha 1
+        self.e_nome = campo("Nome item*:", 0, 1, 35)
+        self.e_vu = campo("Vlr Unit*:", 2, 1, 10)
+        self.e_obs = campo("Observação:", 4, 1, 25)
 
         form.columnconfigure(1, weight=1)
         form.columnconfigure(5, weight=1)
@@ -60,19 +58,19 @@ class TelaOrcamento(tk.Frame):
         btn_frame.grid(column=6, row=0, rowspan=2, sticky="n", padx=10)
         ttk.Button(btn_frame, text="Add", command=self._adicionar, width=10).pack(pady=2)
 
-        # Modelo rápido
+        # Modelo rápido - linha compacta
         modelo_frame = tk.Frame(form, bg="white")
-        modelo_frame.grid(column=0, row=2, columnspan=6, sticky="ew", padx=6, pady=(6, 2))
+        modelo_frame.grid(column=0, row=2, columnspan=6, sticky="ew", padx=6, pady=(4, 2))
         tk.Label(modelo_frame, text="Modelo:", bg="white").pack(side="left", padx=6)
         self.cb_modelo = ttk.Combobox(modelo_frame, state="readonly", width=40)
         self.cb_modelo.pack(side="left", padx=6, fill="x", expand=True)
         ttk.Button(modelo_frame, text="Carregar", command=self._carregar_modelo_rapido).pack(side="left", padx=6)
 
-        # Mensagem p/ email
+        # Mensagem p/ email - altura reduzida
         msg_frame = tk.Frame(form, bg="white")
         msg_frame.grid(column=0, row=3, columnspan=6, sticky="ew", padx=6, pady=2)
         tk.Label(msg_frame, text="Mensagem p/ e-mail:", bg="white").pack(anchor="w", padx=6, pady=(0, 2))
-        self.txt_msg = tk.Text(msg_frame, width=80, height=3)
+        self.txt_msg = tk.Text(msg_frame, width=80, height=2)  # Reduzido de 3-4 para 2
         self.txt_msg.pack(fill="both", expand=True, padx=6, pady=2)
 
         # Autosave
@@ -82,136 +80,135 @@ class TelaOrcamento(tk.Frame):
         self.txt_msg.bind("<KeyRelease>", lambda e: self._agendar_autosave())
         self.txt_msg.bind("<FocusOut>", lambda e: self._autosave_now())
         self._lbl_autosave = tk.Label(msg_frame, text="", fg="#2c7", bg="white")
-        self._lbl_autosave.pack(anchor="w", padx=6, pady=(0, 4))
+        self._lbl_autosave.pack(anchor="w", padx=6, pady=(0, 2))
 
-        # ========== CAIXA LATERAL ==========
+        # ========== CAIXA LATERAL (COMPACTA) ==========
         side_box = ttk.LabelFrame(form, text="Mensagem: Modelo / Rascunho")
         side_box.grid(column=6, row=0, rowspan=4, sticky="nsew", padx=(10, 6), pady=6)
 
-        tk.Label(side_box, text="Título:").pack(anchor="w", padx=6, pady=(6, 0))
-        self.e_titulo_msg = ttk.Entry(side_box, width=25)
-        self.e_titulo_msg.pack(anchor="w", padx=6, pady=(0, 6))
+        tk.Label(side_box, text="Título:").pack(anchor="w", padx=6, pady=(4, 0))
+        self.e_titulo_msg = ttk.Entry(side_box, width=22)  # Reduzido
+        self.e_titulo_msg.pack(anchor="w", padx=6, pady=(0, 4))
 
         self.var_msg_forn = tk.BooleanVar(value=False)
-        ttk.Checkbutton(side_box, text="Vincular ao fornecedor atual", variable=self.var_msg_forn).pack(anchor="w", padx=6, pady=(0, 6))
+        ttk.Checkbutton(side_box, text="Vincular ao fornecedor atual", variable=self.var_msg_forn).pack(anchor="w", padx=6, pady=(0, 4))
 
         btns_msg = tk.Frame(side_box, bg="white")
-        btns_msg.pack(fill="x", padx=6, pady=(0, 8))
+        btns_msg.pack(fill="x", padx=6, pady=(0, 6))
         ttk.Button(btns_msg, text="Salvar Modelo", command=lambda: self._salvar_mensagem("modelo")).pack(side="left", padx=2)
         ttk.Button(btns_msg, text="Salvar Rascunho", command=lambda: self._salvar_mensagem("rascunho")).pack(side="left", padx=2)
 
-        ttk.Button(side_box, text="Anexar arquivo", command=self._add_anexo).pack(anchor="w", padx=6, pady=(0, 6))
+        ttk.Button(side_box, text="Anexar arquivo", command=self._add_anexo).pack(anchor="w", padx=6, pady=(0, 4))
 
         wrapper_anexos = ttk.LabelFrame(side_box, text="Anexos")
         wrapper_anexos.pack(fill="both", expand=True, padx=6, pady=(4, 6))
-        self.frm_anexos = tk.Frame(wrapper_anexos, bg="white", height=80)
+        self.frm_anexos = tk.Frame(wrapper_anexos, bg="white", height=50)  # Reduzido de 60-80 para 50
         self.frm_anexos.pack(fill="both", expand=True, padx=4, pady=4)
         self.frm_anexos.pack_propagate(False)
         self.lbl_sem_anexo = tk.Label(self.frm_anexos, text="Nenhum anexo", bg="white", fg="#666")
         self.lbl_sem_anexo.pack(anchor="w")
 
-        # ========== ABAS: MODELOS / RASCUNHOS ==========
+        # ========== BLOCO 2: ABAS MODELOS/RASCUNHOS (COMPACTO) ==========
         lf_msg = ttk.LabelFrame(self, text="Mensagens (Modelos e Rascunhos)")
-        lf_msg.pack(fill="both", expand=False, padx=12, pady=(4, 8))
+        lf_msg.pack(fill="both", expand=False, padx=12, pady=5)
 
         busca_bar = tk.Frame(lf_msg)
-        busca_bar.pack(fill="x", padx=6, pady=6)
-        tk.Label(busca_bar, text="Buscar (título/conteúdo):").pack(side="left")
-        self.e_msg_busca = ttk.Entry(busca_bar, width=40)
+        busca_bar.pack(fill="x", padx=6, pady=4)
+        tk.Label(busca_bar, text="Buscar:").pack(side="left")
+        self.e_msg_busca = ttk.Entry(busca_bar, width=35)
         self.e_msg_busca.pack(side="left", padx=6)
-        ttk.Button(busca_bar, text="Filtrar listas", command=self._carregar_msgs).pack(side="left")
+        ttk.Button(busca_bar, text="Filtrar", command=self._carregar_msgs).pack(side="left")
 
         msg_edit = tk.Frame(lf_msg)
-        msg_edit.pack(fill="x", padx=6, pady=(0, 6))
-        ttk.Button(msg_edit, text="Editar selecionada", command=self._editar_msg).pack(side="left")
+        msg_edit.pack(fill="x", padx=6, pady=(0, 4))
+        ttk.Button(msg_edit, text="Editar", command=self._editar_msg).pack(side="left")
         ttk.Button(msg_edit, text="Salvar alterações", command=self._salvar_alteracoes_msg).pack(side="left", padx=6)
 
         nb = ttk.Notebook(lf_msg)
-        nb.pack(fill="both", expand=True, padx=6, pady=6)
+        nb.pack(fill="both", expand=True, padx=6, pady=4)
 
-        # Aba MODELOS
+        # Aba MODELOS - height reduzido
         aba_modelos = tk.Frame(nb)
         nb.add(aba_modelos, text="Modelos")
         cols_m = ("id", "titulo", "fornecedor_id", "criado_em")
-        self.tv_modelos = ttk.Treeview(aba_modelos, columns=cols_m, show="headings", height=5)
+        self.tv_modelos = ttk.Treeview(aba_modelos, columns=cols_m, show="headings", height=4)  # Reduzido de 5-6 para 4
         for c, h, w in zip(cols_m, ("ID", "Título", "Fornecedor", "Criado em"), (60, 250, 120, 140)):
             self.tv_modelos.heading(c, text=h)
             self.tv_modelos.column(c, width=w, anchor="w")
         self.tv_modelos.pack(fill="both", expand=True, padx=4, pady=4)
-        self.tv_modelos.bind("<Double-1>", lambda e: self._usar_msg("modelo"))
 
         bar_m = tk.Frame(aba_modelos)
-        bar_m.pack(fill="x", padx=4, pady=(0, 6))
-        ttk.Button(bar_m, text="Usar na mensagem", command=lambda: self._usar_msg("modelo")).pack(side="left")
+        bar_m.pack(fill="x", padx=4, pady=(0, 4))
+        ttk.Button(bar_m, text="Usar", command=lambda: self._usar_msg("modelo")).pack(side="left")
         ttk.Button(bar_m, text="Excluir", command=lambda: self._excluir_msg("modelo")).pack(side="left", padx=6)
         ttk.Button(bar_m, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=6)
 
-        # Aba RASCUNHOS
+        # Aba RASCUNHOS - height reduzido
         aba_rasc = tk.Frame(nb)
         nb.add(aba_rasc, text="Rascunhos")
-        self.tv_rasc = ttk.Treeview(aba_rasc, columns=cols_m, show="headings", height=5)
+        self.tv_rasc = ttk.Treeview(aba_rasc, columns=cols_m, show="headings", height=4)  # Reduzido
         for c, h, w in zip(cols_m, ("ID", "Título", "Fornecedor", "Criado em"), (60, 250, 120, 140)):
             self.tv_rasc.heading(c, text=h)
             self.tv_rasc.column(c, width=w, anchor="w")
         self.tv_rasc.pack(fill="both", expand=True, padx=4, pady=4)
-        self.tv_rasc.bind("<Double-1>", lambda e: self._usar_msg("rascunho"))
 
         bar_r = tk.Frame(aba_rasc)
-        bar_r.pack(fill="x", padx=4, pady=(0, 6))
-        ttk.Button(bar_r, text="Usar na mensagem", command=lambda: self._usar_msg("rascunho")).pack(side="left")
+        bar_r.pack(fill="x", padx=4, pady=(0, 4))
+        ttk.Button(bar_r, text="Usar", command=lambda: self._usar_msg("rascunho")).pack(side="left")
         ttk.Button(bar_r, text="Excluir", command=lambda: self._excluir_msg("rascunho")).pack(side="left", padx=6)
         ttk.Button(bar_r, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=6)
 
-        # ========== AÇÕES PRINCIPAIS ==========
+        # ========== BLOCO 3: AÇÕES PRINCIPAIS ==========
         rod = tk.Frame(self, bg="white")
-        rod.pack(fill="x", padx=12, pady=8)
+        rod.pack(fill="x", padx=12, pady=5)
         self.btn_email = ttk.Button(rod, text="Enviar por e-mail", command=self._enviar_email)
         self.btn_email.pack(side="right", padx=6)
         self.btn_export = ttk.Button(rod, text="Exportar para Excel", command=self._exportar_excel)
         self.btn_export.pack(side="right", padx=6)
 
-        # ========== HISTÓRICO DE ORÇAMENTOS ==========
-        lf_hist = ttk.LabelFrame(self, text="Orçamentos já salvos (no banco) — por fornecedor")
-        lf_hist.pack(fill="both", expand=True, padx=12, pady=(2, 8))
+        # ========== BLOCO 4: HISTÓRICO ORÇAMENTOS (COMPACTO) ==========
+        lf_hist = ttk.LabelFrame(self, text="Orçamentos já salvos")
+        lf_hist.pack(fill="both", expand=True, padx=12, pady=5)
 
         filtros = tk.Frame(lf_hist)
-        filtros.pack(fill="x", padx=6, pady=(6, 0))
-        tk.Label(filtros, text="De (YYYY-MM-DD):").pack(side="left")
-        self.f_data_ini = ttk.Entry(filtros, width=12)
+        filtros.pack(fill="x", padx=6, pady=4)
+        tk.Label(filtros, text="De:").pack(side="left")
+        self.f_data_ini = ttk.Entry(filtros, width=10)
         self.f_data_ini.pack(side="left", padx=4)
         tk.Label(filtros, text="Até:").pack(side="left")
-        self.f_data_fim = ttk.Entry(filtros, width=12)
+        self.f_data_fim = ttk.Entry(filtros, width=10)
         self.f_data_fim.pack(side="left", padx=4)
-        tk.Label(filtros, text="Termo (cód/nome/obs):").pack(side="left", padx=(12, 0))
-        self.f_busca = ttk.Entry(filtros, width=28)
+        tk.Label(filtros, text="Termo:").pack(side="left", padx=(12, 0))
+        self.f_busca = ttk.Entry(filtros, width=25)
         self.f_busca.pack(side="left", padx=4)
         tk.Label(filtros, text="Empenho:").pack(side="left", padx=(12, 0))
-        self.f_emp = ttk.Entry(filtros, width=14)
+        self.f_emp = ttk.Entry(filtros, width=12)
         self.f_emp.pack(side="left", padx=4)
         ttk.Button(filtros, text="Filtrar", command=self._resetar_paginacao).pack(side="left", padx=6)
         ttk.Button(filtros, text="Limpar", command=self._limpar_filtros).pack(side="left")
 
+        # Tabela - height reduzido
         cols_s = ("id", "criado_em", "cod_aghu", "nome_item", "qtde", "vl_unit", "vl_total", "numero_empenho", "observacao")
         heads_s = ("ID", "Criado em", "Cód AGHU", "Item", "Qtde", "Vlr Unit", "Vlr Total", "Nº Empenho", "Obs")
-        widths_s = (60, 140, 100, 260, 70, 90, 100, 120, 260)
+        widths_s = (50, 120, 90, 200, 60, 80, 90, 110, 200)
 
-        self.tv_salvos = ttk.Treeview(lf_hist, columns=cols_s, show="headings", height=6)
+        self.tv_salvos = ttk.Treeview(lf_hist, columns=cols_s, show="headings", height=5)  # Reduzido de 6-8 para 5
         for c, h, w in zip(cols_s, heads_s, widths_s):
             self.tv_salvos.heading(c, text=h)
             self.tv_salvos.column(c, width=w, anchor="w")
-        self.tv_salvos.pack(fill="both", expand=True, padx=6, pady=(6, 2))
+        self.tv_salvos.pack(fill="both", expand=True, padx=6, pady=4)
 
         barra_hist = tk.Frame(lf_hist, bg="white")
-        barra_hist.pack(fill="x", padx=6, pady=(0, 6))
+        barra_hist.pack(fill="x", padx=6, pady=(0, 4))
         ttk.Button(barra_hist, text="Atualizar", command=self._carregar_salvos).pack(side="left")
-        ttk.Button(barra_hist, text="Excluir selecionado", command=self._excluir_salvo).pack(side="left", padx=6)
-        ttk.Button(barra_hist, text="Exportar histórico (filtros)", command=self._exportar_historico).pack(side="left", padx=6)
+        ttk.Button(barra_hist, text="Excluir", command=self._excluir_salvo).pack(side="left", padx=6)
+        ttk.Button(barra_hist, text="Exportar", command=self._exportar_historico).pack(side="left", padx=6)
 
-        # Paginação Orçamentos
+        # Paginação
         pag = tk.Frame(lf_hist, bg="white")
-        pag.pack(fill="x", padx=6, pady=(0, 6))
+        pag.pack(fill="x", padx=6, pady=(0, 4))
         tk.Label(pag, text="Itens/página:").pack(side="left")
-        self.cb_page_size = ttk.Combobox(pag, state="readonly", width=5, values=[20, 50, 100, 200])
+        self.cb_page_size = ttk.Combobox(pag, state="readonly", width=5, values=[20, 50, 100])
         try:
             cfg = utils.carregar_config()
             ultimo = int(cfg.get("paginacao_orcamento", 50))
@@ -227,36 +224,38 @@ class TelaOrcamento(tk.Frame):
         self.lbl_pag = tk.Label(pag, text="Página 1/1", bg="white")
         self.lbl_pag.pack(side="left", padx=10)
 
-        # ========== MENSAGENS ENVIADAS ==========
+        # ========== BLOCO 5: MENSAGENS ENVIADAS (COMPACTO) ==========
         lf_msgs_env = ttk.LabelFrame(self, text="Mensagens enviadas")
-        lf_msgs_env.pack(fill="both", expand=True, padx=12, pady=(2, 8))
+        lf_msgs_env.pack(fill="both", expand=True, padx=12, pady=5)
 
         filtros_msg = tk.Frame(lf_msgs_env)
-        filtros_msg.pack(fill="x", padx=6, pady=(6, 0))
-        tk.Label(filtros_msg, text="De (YYYY-MM-DD):").pack(side="left")
-        self.f_msg_data_ini = ttk.Entry(filtros_msg, width=12)
+        filtros_msg.pack(fill="x", padx=6, pady=4)
+        tk.Label(filtros_msg, text="De:").pack(side="left")
+        self.f_msg_data_ini = ttk.Entry(filtros_msg, width=10)
         self.f_msg_data_ini.pack(side="left", padx=4)
         tk.Label(filtros_msg, text="Até:").pack(side="left")
-        self.f_msg_data_fim = ttk.Entry(filtros_msg, width=12)
+        self.f_msg_data_fim = ttk.Entry(filtros_msg, width=10)
         self.f_msg_data_fim.pack(side="left", padx=4)
         tk.Label(filtros_msg, text="Destinatário:").pack(side="left", padx=(12, 0))
-        self.f_msg_dest = ttk.Entry(filtros_msg, width=30)
+        self.f_msg_dest = ttk.Entry(filtros_msg, width=25)
         self.f_msg_dest.pack(side="left", padx=4)
         ttk.Button(filtros_msg, text="Filtrar", command=self._resetar_paginacao_msgs).pack(side="left", padx=6)
         ttk.Button(filtros_msg, text="Limpar", command=self._limpar_filtros_msgs).pack(side="left")
 
+        # Tabela mensagens - height reduzido
         cols_msg = ("id", "enviado_em", "destinatario", "assunto", "fornecedor")
         heads_msg = ("ID", "Enviado em", "Destinatário", "Assunto", "Fornecedor")
-        widths_msg = (60, 140, 200, 300, 150)
+        widths_msg = (50, 120, 180, 250, 150)
 
-        self.tv_msgs_enviadas = ttk.Treeview(lf_msgs_env, columns=cols_msg, show="headings", height=6)
+        self.tv_msgs_enviadas = ttk.Treeview(lf_msgs_env, columns=cols_msg, show="headings", height=5)  # Reduzido
         for c, h, w in zip(cols_msg, heads_msg, widths_msg):
             self.tv_msgs_enviadas.heading(c, text=h)
             self.tv_msgs_enviadas.column(c, width=w, anchor="w")
-        self.tv_msgs_enviadas.pack(fill="both", expand=True, padx=6, pady=(6, 2))
+        self.tv_msgs_enviadas.pack(fill="both", expand=True, padx=6, pady=4)
 
+        # Paginação mensagens
         pag_msg = tk.Frame(lf_msgs_env, bg="white")
-        pag_msg.pack(fill="x", padx=6, pady=(0, 6))
+        pag_msg.pack(fill="x", padx=6, pady=(0, 4))
         tk.Label(pag_msg, text="Itens/página:").pack(side="left")
         self.cb_page_size_msg = ttk.Combobox(pag_msg, state="readonly", width=5, values=[20, 50, 100])
         self.cb_page_size_msg.set(50)
@@ -268,7 +267,7 @@ class TelaOrcamento(tk.Frame):
         self.lbl_pag_msg = tk.Label(pag_msg, text="Página 1/1", bg="white")
         self.lbl_pag_msg.pack(side="left", padx=10)
 
-        # Inicializa paginação
+        # Inicializa
         self._page = 1
         self._total = 0
         self._page_msg = 1
@@ -276,7 +275,6 @@ class TelaOrcamento(tk.Frame):
         self.map_fornec = {}
         self._modelos_cache = []
 
-        # Carregamentos iniciais
         self._carregar_fornecedores()
         self._carregar_itens_rascunho()
         self._carregar_salvos()
