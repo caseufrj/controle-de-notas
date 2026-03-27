@@ -1138,3 +1138,131 @@ def etl_estado_atualizar(ultimo_hash: Optional[str],
 
     conn.commit()
     conn.close()
+
+# ===========================================================
+#  MENSAGENS ENVIADAS (HISTÓRICO DE E-MAILS)
+# ===========================================================
+
+def mensagem_enviada_registrar(d: Dict[str, Any]) -> int:
+    """Registra uma mensagem enviada no histórico."""
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO mensagens_enviadas (fornecedor_id, destinatario, assunto, conteudo, enviado_em)
+        VALUES (?, ?, ?, ?, datetime('now','localtime'))
+    """, (d.get("fornecedor_id"), d.get("destinatario"), d.get("assunto"), d.get("conteudo")))
+    conn.commit()
+    novo_id = cur.lastrowid
+    conn.close()
+    return novo_id
+
+
+def mensagens_enviadas_filtrar_paginado(
+        fornecedor_id: Optional[int] = None,
+        data_ini: Optional[str] = None,
+        data_fim: Optional[str] = None,
+        destinatario: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0
+    ) -> Dict[str, Any]:
+    """Lista mensagens enviadas com filtros e paginação."""
+    conn = conectar(); cur = conn.cursor()
+
+    sql = """
+        SELECT me.*, f.nome AS fornecedor_nome
+        FROM mensagens_enviadas me
+        LEFT JOIN fornecedores f ON f.id = me.fornecedor_id
+        WHERE 1 = 1
+    """
+    params = []
+
+    if fornecedor_id:
+        sql += " AND me.fornecedor_id = ?"
+        params.append(fornecedor_id)
+
+    if data_ini:
+        sql += " AND date(me.enviado_em) >= date(?)"
+        params.append(data_ini)
+
+    if data_fim:
+        sql += " AND date(me.enviado_em) <= date(?)"
+        params.append(data_fim)
+
+    if destinatario:
+        sql += " AND me.destinatario LIKE ?"
+        params.append(f"%{destinatario}%")
+
+    sql += " ORDER BY me.enviado_em DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+
+    cur.execute(sql, tuple(params))
+    rows = [dict(r) for r in cur.fetchall()]
+
+    # Total para paginação
+    total_sql = """
+        SELECT COUNT(*) FROM mensagens_enviadas me WHERE 1 = 1
+    """
+    total_params = []
+    if fornecedor_id:
+        total_sql += " AND me.fornecedor_id = ?"
+        total_params.append(fornecedor_id)
+    if data_ini:
+        total_sql += " AND date(me.enviado_em) >= date(?)"
+        total_params.append(data_ini)
+    if data_fim:
+        total_sql += " AND date(me.enviado_em) <= date(?)"
+        total_params.append(data_fim)
+    if destinatario:
+        total_sql += " AND me.destinatario LIKE ?"
+        total_params.append(f"%{destinatario}%")
+
+    cur.execute(total_sql, tuple(total_params))
+    total = int(cur.fetchone()[0])
+
+    conn.close()
+    return {"rows": rows, "total": total}
+
+
+def mensagens_enviadas_listar(
+        fornecedor_id: Optional[int] = None,
+        data_ini: Optional[str] = None,
+        data_fim: Optional[str] = None,
+        destinatario: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+    """Lista todas as mensagens enviadas (sem paginação, para exportação)."""
+    conn = conectar(); cur = conn.cursor()
+
+    sql = """
+        SELECT me.*, f.nome AS fornecedor_nome
+        FROM mensagens_enviadas me
+        LEFT JOIN fornecedores f ON f.id = me.fornecedor_id
+        WHERE 1 = 1
+    """
+    params = []
+
+    if fornecedor_id:
+        sql += " AND me.fornecedor_id = ?"
+        params.append(fornecedor_id)
+    if data_ini:
+        sql += " AND date(me.enviado_em) >= date(?)"
+        params.append(data_ini)
+    if data_fim:
+        sql += " AND date(me.enviado_em) <= date(?)"
+        params.append(data_fim)
+    if destinatario:
+        sql += " AND me.destinatario LIKE ?"
+        params.append(f"%{destinatario}%")
+
+    sql += " ORDER BY me.enviado_em DESC"
+
+    cur.execute(sql, tuple(params))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def orcamento_excluir(id_: int) -> None:
+    """Exclui um orçamento salvo."""
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("DELETE FROM orcamentos WHERE id=?", (id_,))
+    conn.commit()
+    conn.close()
