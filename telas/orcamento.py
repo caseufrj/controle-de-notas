@@ -68,7 +68,7 @@ class TelaOrcamento(tk.Frame):
         # Mensagem p/ email
         tk.Label(form, text="Mensagem p/ e-mail:").grid(column=0, row=4, sticky="nw", padx=6, pady=3)
         self.txt_msg = tk.Text(form, width=80, height=4)
-        self.txt_msg.grid(column=1, row=4, columnspan=5, sticky="w", padx=6, pady=3)
+        self.txt_msg.grid(column=1, row=4, columnspan=4, sticky="we", padx=6, pady=3)
     
         # Autosave
         self._autosave_job = None
@@ -125,7 +125,7 @@ class TelaOrcamento(tk.Frame):
         # BLOCO 3 — ABAS (MODELOS / RASCUNHOS)
         # ======================================================
         lf_msg = ttk.LabelFrame(form, text="Mensagens (Modelos e Rascunhos)")
-        self.txt_msg.grid(column=1, row=4, columnspan=4, sticky="we", padx=6, pady=3)
+        lf_msg.grid(column=1, row=6, columnspan=4, sticky="we", padx=6, pady=(4, 8))
     
         busca_bar = tk.Frame(lf_msg)
         busca_bar.pack(fill="x", padx=6, pady=6)
