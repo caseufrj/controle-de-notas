@@ -13,7 +13,7 @@ class TelaOrcamento(tk.Frame):
 
         # ========== TOPO: FORNECEDOR ==========
         topo = tk.Frame(self, bg="white")
-        topo.pack(fill="x", padx=12, pady=5)  # Reduzido de 10 para 5
+        topo.pack(fill="x", padx=12, pady=2)  # Reduzido de 10 para 5
 
         tk.Label(topo, text="Fornecedor:", bg="white").pack(side="left")
         self.cb_fornec = ttk.Combobox(topo, state="readonly", width=50)
