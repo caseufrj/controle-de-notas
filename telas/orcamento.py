@@ -12,14 +12,11 @@ import utils
 class TelaOrcamento(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="white")
-    
-        # IMPORTANTE: isso deve estar NO TOPO do arquivo, não dentro da classe:
-        # import os
-    
-        # ---------- Topo: fornecedor ----------
+
+        # ========== TOPO: FORNECEDOR ==========
         topo = tk.Frame(self, bg="white")
         topo.pack(fill="x", padx=12, pady=10)
-    
+
         tk.Label(topo, text="Fornecedor:", bg="white").pack(side="left")
         self.cb_fornec = ttk.Combobox(topo, state="readonly", width=50)
         self.cb_fornec.pack(side="left", padx=6)
@@ -32,116 +29,148 @@ class TelaOrcamento(tk.Frame):
                 self._carregar_msgs(),
             ),
         )
-    
+
         # Controladores internos
         self._after_ids = []
         self._anexos_extra = []
-    
-        # ======================================================
-        # BLOCO 1 — FORMULÁRIO PRINCIPAL
-        # ======================================================
+
+        # ========== BLOCO 1 — FORMULÁRIO PRINCIPAL ==========
         form = ttk.LabelFrame(self, text="Lançar itens para Orçamento")
         form.pack(fill="x", padx=12, pady=8)
-    
-        def campo(lbl, col, row, width=28):
-            tk.Label(form, text=lbl).grid(column=col, row=row, sticky="w", padx=6, pady=3)
-            e = ttk.Entry(form, width=width)
-            e.grid(column=col + 1, row=row, sticky="w", padx=6, pady=3)
+
+        # Frame para campos (esquerda) e botões (direita)
+        form_content = tk.Frame(form, bg="white")
+        form_content.pack(fill="both", expand=True, padx=6, pady=6)
+
+        # Coluna esquerda - Campos
+        campos_frame = tk.Frame(form_content, bg="white")
+        campos_frame.pack(side="left", fill="both", expand=True)
+
+        def campo(lbl, row, width=28):
+            tk.Label(campos_frame, text=lbl, bg="white").grid(
+                column=0, row=row, sticky="w", padx=6, pady=3
+            )
+            e = ttk.Entry(campos_frame, width=width)
+            e.grid(column=1, row=row, sticky="ew", padx=6, pady=3)
             return e
-    
-        self.e_cod = campo("Cód AGHU*:", 0, 0)
-        self.e_nome = campo("Nome item*:", 0, 1, 40)
-        self.e_qt   = campo("Qtde*:", 2, 0, 12)
-        self.e_vu   = campo("Vlr Unit*:", 2, 1, 12)
-        self.e_emp  = campo("Nº Empenho:", 4, 0)
-    
-        tk.Label(form, text="Observação:").grid(column=4, row=1, sticky="w", padx=6, pady=3)
-        self.e_obs = ttk.Entry(form, width=40)
-        self.e_obs.grid(column=5, row=1, sticky="w", padx=6, pady=3)
-    
-        # Modelo rápido
-        tk.Label(form, text="Modelo:").grid(column=0, row=3, sticky="w", padx=6, pady=3)
-        self.cb_modelo = ttk.Combobox(form, state="readonly", width=50)
-        self.cb_modelo.grid(column=1, row=3, columnspan=3, sticky="w", padx=6, pady=3)
-        ttk.Button(form, text="Carregar", command=self._carregar_modelo_rapido).grid(column=4, row=3, padx=6)
-    
-        # Mensagem p/ email
-        tk.Label(form, text="Mensagem p/ e-mail:").grid(column=0, row=4, sticky="nw", padx=6, pady=3)
-        self.txt_msg = tk.Text(form, width=80, height=4)
-        self.txt_msg.grid(column=1, row=4, columnspan=4, sticky="we", padx=6, pady=3)
-    
+
+        # Linha 0 - Cód e Qtde
+        self.e_cod = campo("Cód AGHU*:", 0)
+        
+        tk.Label(campos_frame, text="Qtde*:", bg="white").grid(column=2, row=0, sticky="w", padx=6, pady=3)
+        self.e_qt = ttk.Entry(campos_frame, width=12)
+        self.e_qt.grid(column=3, row=0, sticky="w", padx=6, pady=3)
+
+        # Linha 1 - Nome e Vlr Unit
+        self.e_nome = campo("Nome item*:", 1, 40)
+        
+        tk.Label(campos_frame, text="Vlr Unit*:", bg="white").grid(column=2, row=1, sticky="w", padx=6, pady=3)
+        self.e_vu = ttk.Entry(campos_frame, width=12)
+        self.e_vu.grid(column=3, row=1, sticky="w", padx=6, pady=3)
+
+        # Linha 2 - Empenho e Obs
+        tk.Label(campos_frame, text="Nº Empenho:", bg="white").grid(column=4, row=0, sticky="w", padx=6, pady=3)
+        self.e_emp = ttk.Entry(campos_frame, width=15)
+        self.e_emp.grid(column=5, row=0, sticky="w", padx=6, pady=3)
+
+        tk.Label(campos_frame, text="Observação:", bg="white").grid(column=4, row=1, sticky="w", padx=6, pady=3)
+        self.e_obs = ttk.Entry(campos_frame, width=30)
+        self.e_obs.grid(column=5, row=1, sticky="ew", padx=6, pady=3)
+
+        # Configurar expansão das colunas
+        campos_frame.columnconfigure(1, weight=1)
+        campos_frame.columnconfigure(5, weight=1)
+
+        # Coluna direita - Botão Add
+        btn_frame = tk.Frame(form_content, bg="white")
+        btn_frame.pack(side="right", padx=10)
+        ttk.Button(btn_frame, text="Add", command=self._adicionar, width=15).pack(pady=5)
+
+        # Linha do Modelo (abaixo dos campos)
+        modelo_frame = tk.Frame(form, bg="white")
+        modelo_frame.pack(fill="x", padx=6, pady=(0, 6))
+
+        tk.Label(modelo_frame, text="Modelo:", bg="white").pack(side="left", padx=6)
+        self.cb_modelo = ttk.Combobox(modelo_frame, state="readonly", width=50)
+        self.cb_modelo.pack(side="left", padx=6, fill="x", expand=True)
+        ttk.Button(modelo_frame, text="Carregar", command=self._carregar_modelo_rapido).pack(side="left", padx=6)
+
+        # Campo de mensagem
+        msg_frame = tk.Frame(form, bg="white")
+        msg_frame.pack(fill="both", expand=True, padx=6, pady=6)
+
+        tk.Label(msg_frame, text="Mensagem p/ e-mail:", bg="white").pack(anchor="w", padx=6, pady=(0, 4))
+        self.txt_msg = tk.Text(msg_frame, width=80, height=4)
+        self.txt_msg.pack(fill="both", expand=True, padx=6, pady=4)
+
         # Autosave
         self._autosave_job = None
         self._autosave_msg_id = None
         self._msg_editando_id = None
         self.txt_msg.bind("<KeyRelease>", lambda e: self._agendar_autosave())
         self.txt_msg.bind("<FocusOut>", lambda e: self._autosave_now())
-    
-        self._lbl_autosave = tk.Label(form, text="", fg="#2c7", bg="white")
-        self._lbl_autosave.grid(column=1, row=5, columnspan=5, sticky="w", padx=6, pady=(0, 4))
-    
-        # ======================================================
-        # BLOCO 2 — CAIXA LATERAL (MODELO / RASCUNHO / ANEXOS)
-        # ======================================================
+
+        self._lbl_autosave = tk.Label(msg_frame, text="", fg="#2c7", bg="white")
+        self._lbl_autosave.pack(anchor="w", padx=6, pady=(0, 4))
+
+        # ========== BLOCO 2 — CAIXA LATERAL (MODELO / RASCUNHO / ANEXOS) ==========
         side = tk.Frame(form, bg="white")
-        side.grid(column=5, row=0, rowspan=7, sticky="n", padx=(10, 6), pady=3)
-    
+        side.pack(side="right", padx=10, pady=6)
+
         ttk.Button(side, text="Add", command=self._adicionar).pack(fill="x", pady=(0, 8))
-    
+
         msg_box = ttk.LabelFrame(side, text="Mensagem: Modelo / Rascunho")
         msg_box.pack(fill="x")
-    
+
         tk.Label(msg_box, text="Título:").pack(anchor="w", padx=6, pady=(6, 0))
         self.e_titulo_msg = ttk.Entry(msg_box, width=28)
         self.e_titulo_msg.pack(anchor="w", padx=6, pady=(0, 6))
-    
+
         self.var_msg_forn = tk.BooleanVar(value=False)
         ttk.Checkbutton(msg_box, text="Vincular ao fornecedor atual", variable=self.var_msg_forn)\
             .pack(anchor="w", padx=6, pady=(0, 6))
-    
+
         btns_msg = tk.Frame(msg_box, bg="white")
         btns_msg.pack(fill="x", padx=6, pady=(0, 8))
         ttk.Button(btns_msg, text="Salvar Modelo", command=lambda: self._salvar_mensagem("modelo"))\
             .pack(side="left")
         ttk.Button(btns_msg, text="Salvar Rascunho", command=lambda: self._salvar_mensagem("rascunho"))\
             .pack(side="left", padx=6)
-    
-        # ---------- Botão de anexos ----------
+
+        # Botão de anexos
         ttk.Button(msg_box, text="Anexar arquivo", command=self._add_anexo)\
             .pack(anchor="w", padx=6, pady=(0, 6))
-    
-        # ---------- Área de anexos ----------
+
+        # Área de anexos
         wrapper_anexos = ttk.LabelFrame(msg_box, text="Anexos")
         wrapper_anexos.pack(fill="x", padx=6, pady=(4, 4))
-    
+
         self.frm_anexos = tk.Frame(wrapper_anexos, bg="white", height=60)
         self.frm_anexos.pack(fill="x", padx=4, pady=4)
         self.frm_anexos.pack_propagate(False)
-    
+
         self.lbl_sem_anexo = tk.Label(self.frm_anexos, text="Nenhum anexo", bg="white", fg="#666")
         self.lbl_sem_anexo.pack(anchor="w")
-    
-        # ======================================================
-        # BLOCO 3 — ABAS (MODELOS / RASCUNHOS)
-        # ======================================================
-        lf_msg = ttk.LabelFrame(form, text="Mensagens (Modelos e Rascunhos)")
-        lf_msg.grid(column=1, row=6, columnspan=4, sticky="we", padx=6, pady=(4, 8))
-    
+
+        # ========== BLOCO 3 — ABAS (MODELOS / RASCUNHOS) - FORA DO FORM ==========
+        lf_msg = ttk.LabelFrame(self, text="Mensagens (Modelos e Rascunhos)")
+        lf_msg.pack(fill="both", expand=False, padx=12, pady=(4, 8))
+
         busca_bar = tk.Frame(lf_msg)
         busca_bar.pack(fill="x", padx=6, pady=6)
         tk.Label(busca_bar, text="Buscar (título/conteúdo):").pack(side="left")
         self.e_msg_busca = ttk.Entry(busca_bar, width=40)
         self.e_msg_busca.pack(side="left", padx=6)
         ttk.Button(busca_bar, text="Filtrar listas", command=self._carregar_msgs).pack(side="left")
-    
+
         msg_edit = tk.Frame(lf_msg)
         msg_edit.pack(fill="x", padx=6, pady=(0, 6))
         ttk.Button(msg_edit, text="Editar selecionada", command=self._editar_msg).pack(side="left")
         ttk.Button(msg_edit, text="Salvar alterações", command=self._salvar_alteracoes_msg).pack(side="left", padx=6)
-    
+
         nb = ttk.Notebook(lf_msg)
         nb.pack(fill="both", expand=True, padx=6, pady=6)
-    
+
         # Aba MODELOS
         aba_modelos = tk.Frame(nb)
         nb.add(aba_modelos, text="Modelos")
@@ -152,86 +181,80 @@ class TelaOrcamento(tk.Frame):
             self.tv_modelos.column(c, width=w, anchor="w")
         self.tv_modelos.pack(fill="both", expand=True, padx=4, pady=4)
         self.tv_modelos.bind("<Double-1>", lambda e: self._usar_msg("modelo"))
-    
+
         bar_m = tk.Frame(aba_modelos)
         bar_m.pack(fill="x", padx=4, pady=(0, 6))
         ttk.Button(bar_m, text="Usar na mensagem", command=lambda: self._usar_msg("modelo")).pack(side="left")
         ttk.Button(bar_m, text="Excluir", command=lambda: self._excluir_msg("modelo")).pack(side="left", padx=6)
         ttk.Button(bar_m, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=6)
-    
+
         # Aba RASCUNHOS
         aba_rasc = tk.Frame(nb)
         nb.add(aba_rasc, text="Rascunhos")
-    
+
         self.tv_rasc = ttk.Treeview(aba_rasc, columns=cols_m, show="headings", height=6)
         for c, h, w in zip(cols_m, ("ID", "Título", "Fornecedor", "Criado em"), (60, 250, 120, 140)):
             self.tv_rasc.heading(c, text=h)
             self.tv_rasc.column(c, width=w, anchor="w")
         self.tv_rasc.pack(fill="both", expand=True, padx=4, pady=4)
         self.tv_rasc.bind("<Double-1>", lambda e: self._usar_msg("rascunho"))
-    
+
         bar_r = tk.Frame(aba_rasc)
         bar_r.pack(fill="x", padx=4, pady=(0, 6))
         ttk.Button(bar_r, text="Usar na mensagem", command=lambda: self._usar_msg("rascunho")).pack(side="left")
         ttk.Button(bar_r, text="Excluir", command=lambda: self._excluir_msg("rascunho")).pack(side="left", padx=6)
         ttk.Button(bar_r, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=6)
-    
-        # ======================================================
-        # BLOCO 4 — ITENS EM RASCUNHO
-        # ======================================================
+
+        # ========== BLOCO 4 — ITENS EM RASCUNHO ==========
         lf_rasc = ttk.LabelFrame(self, text="Itens em rascunho (não salvos)")
         lf_rasc.pack(fill="both", expand=True, padx=12, pady=(4, 2))
-    
+
         cols = ("cod", "nome", "qt", "vu", "emp", "obs", "vl_total")
         heads = ("Cód AGHU", "Nome", "Qtde", "Vlr Unit", "Nº Empenho", "Obs", "Vlr Total")
         widths = (100, 260, 60, 90, 120, 260, 100)
-    
+
         self.tv = ttk.Treeview(lf_rasc, columns=cols, show="headings", height=6)
         for c, h, w in zip(cols, heads, widths):
             self.tv.heading(c, text=h)
             self.tv.column(c, width=w, anchor="w")
         self.tv.pack(fill="both", expand=True, padx=6, pady=6)
-    
-        # ======================================================
-        # BLOCO 5 — AÇÕES PRINCIPAIS
-        # ======================================================
+
+        # ========== BLOCO 5 — AÇÕES PRINCIPAIS ==========
         rod = tk.Frame(self, bg="white")
         rod.pack(fill="x", padx=12, pady=8)
         self.btn_email = ttk.Button(rod, text="Enviar por e-mail", command=self._enviar_email)
         self.btn_email.pack(side="right", padx=6)
-    
+
         self.btn_export = ttk.Button(rod, text="Exportar para Excel", command=self._exportar_excel)
         self.btn_export.pack(side="right", padx=6)
-    
-        # ======================================================
-        # BLOCO 6 — HISTÓRICO + PAGINAÇÃO
-        # ======================================================
+
+        # ========== BLOCO 6 — HISTÓRICO + PAGINAÇÃO ==========
         lf_hist = ttk.LabelFrame(self, text="Orçamentos já salvos (no banco) — por fornecedor")
         lf_hist.pack(fill="both", expand=True, padx=12, pady=(2, 8))
-    
+
         filtros = tk.Frame(lf_hist)
         filtros.pack(fill="x", padx=6, pady=(6, 0))
-    
+
         tk.Label(filtros, text="De (YYYY-MM-DD):").pack(side="left")
         self.f_data_ini = ttk.Entry(filtros, width=12)
         self.f_data_ini.pack(side="left", padx=4)
-    
+
         tk.Label(filtros, text="Até:").pack(side="left")
         self.f_data_fim = ttk.Entry(filtros, width=12)
         self.f_data_fim.pack(side="left", padx=4)
-    
+
         tk.Label(filtros, text="Termo (cód/nome/obs):").pack(side="left", padx=(12, 0))
         self.f_busca = ttk.Entry(filtros, width=28)
         self.f_busca.pack(side="left", padx=4)
-    
+
         tk.Label(filtros, text="Empenho:").pack(side="left", padx=(12, 0))
         self.f_emp = ttk.Entry(filtros, width=14)
         self.f_emp.pack(side="left", padx=4)
-    
+
         ttk.Button(filtros, text="Filtrar", command=self._resetar_paginacao).pack(side="left", padx=6)
         ttk.Button(filtros, text="Limpar", command=self._limpar_filtros).pack(side="left")
-    
-        # ---------- Lista do histórico ----------
+
+        # Lista do histórico
         cols_s = (
             "id", "criado_em", "cod_aghu", "nome_item",
             "qtde", "vl_unit", "vl_total", "numero_empenho", "observacao"
@@ -241,62 +264,60 @@ class TelaOrcamento(tk.Frame):
             "Vlr Unit", "Vlr Total", "Nº Empenho", "Obs"
         )
         widths_s = (60, 140, 100, 260, 70, 90, 100, 120, 260)
-    
+
         self.tv_salvos = ttk.Treeview(lf_hist, columns=cols_s, show="headings", height=8)
         for c, h, w in zip(cols_s, heads_s, widths_s):
             self.tv_salvos.heading(c, text=h)
             self.tv_salvos.column(c, width=w, anchor="w")
         self.tv_salvos.pack(fill="both", expand=True, padx=6, pady=(6, 2))
-    
+
         # Botões do histórico
         barra_hist = tk.Frame(lf_hist, bg="white")
         barra_hist.pack(fill="x", padx=6, pady=(0, 6))
         ttk.Button(barra_hist, text="Atualizar", command=self._carregar_salvos).pack(side="left")
         ttk.Button(barra_hist, text="Excluir selecionado", command=self._excluir_salvo).pack(side="left", padx=6)
         ttk.Button(barra_hist, text="Exportar histórico (filtros)", command=self._exportar_historico).pack(side="left", padx=6)
-    
-        # ---------- Paginação ----------
+
+        # ========== PAGINAÇÃO ==========
         pag = tk.Frame(lf_hist, bg="white")
         pag.pack(fill="x", padx=6, pady=(0, 6))
-    
+
         tk.Label(pag, text="Itens/página:").pack(side="left")
         self.cb_page_size = ttk.Combobox(pag, state="readonly", width=5, values=[20, 50, 100, 200])
-    
+
         try:
             cfg = utils.carregar_config()
             ultimo = int(cfg.get("paginacao_orcamento", 50))
         except:
             ultimo = 50
-    
+
         self.after(10, lambda: self.cb_page_size.set(ultimo))
         self.cb_page_size.pack(side="left", padx=4)
         self.cb_page_size.bind("<<ComboboxSelected>>", self._on_page_size_changed)
-    
+
         ttk.Button(pag, text="<<", command=lambda: self._ir_pagina("first")).pack(side="left", padx=2)
         ttk.Button(pag, text="<", command=lambda: self._ir_pagina("prev")).pack(side="left", padx=2)
         ttk.Button(pag, text=">", command=lambda: self._ir_pagina("next")).pack(side="left", padx=2)
         ttk.Button(pag, text=">>", command=lambda: self._ir_pagina("last")).pack(side="left", padx=2)
-    
+
         self.lbl_pag = tk.Label(pag, text="Página 1/1", bg="white")
         self.lbl_pag.pack(side="left", padx=10)
-    
+
         # Inicializa paginação
         self._page = 1
         self._total = 0
-    
+
         # Estado geral
         self.map_fornec = {}
         self._modelos_cache = []
-    
-        # ======================================================
-        # BLOCO 7 — CARREGAMENTOS INICIAIS
-        # ======================================================
+
+        # Carregamentos iniciais
         self._carregar_fornecedores()
         self._carregar_itens_rascunho()
         self._carregar_salvos()
         self._carregar_msgs()
 
-    # ----------------- Suporte interno -----------------
+    # ==================== SUPORTE INTERNO ====================
 
     def _add_anexo(self):
         arq = filedialog.askopenfilename(
@@ -305,29 +326,29 @@ class TelaOrcamento(tk.Frame):
         )
         if not arq:
             return
-    
+
         self._anexos_extra.append(arq)
         self._atualizar_lista_anexos()
 
     def _atualizar_lista_anexos(self):
         for w in self.frm_anexos.winfo_children():
             w.destroy()
-    
+
         if not self._anexos_extra:
             self.lbl_sem_anexo = tk.Label(self.frm_anexos,
                 text="Nenhum anexo", bg="white", fg="#666")
             self.lbl_sem_anexo.pack(anchor="w")
             return
-    
+
         for idx, path in enumerate(self._anexos_extra, start=1):
             nome = os.path.basename(path)
-    
+
             linha = tk.Frame(self.frm_anexos, bg="white")
             linha.pack(anchor="w", fill="x", pady=1)
-    
+
             tk.Label(linha, text=f"{idx}. {nome}", bg="white")\
                 .pack(side="left", padx=(2, 6))
-    
+
             ttk.Button(linha, text="X", width=3,
                        command=lambda p=path: self._remover_anexo(p))\
                 .pack(side="left")
@@ -337,9 +358,8 @@ class TelaOrcamento(tk.Frame):
             self._anexos_extra.remove(caminho)
         except:
             pass
-    
-        self._atualizar_lista_anexos()
 
+        self._atualizar_lista_anexos()
 
     def _carregar_fornecedores(self):
         fs = banco.fornecedores_listar()
@@ -395,7 +415,7 @@ class TelaOrcamento(tk.Frame):
         for e in (self.e_cod, self.e_nome, self.e_qt, self.e_vu, self.e_emp, self.e_obs):
             e.delete(0, "end")
 
-    # ---------------- Página -----------------
+    # ==================== PAGINAÇÃO ====================
 
     def _salvar_page_size(self):
         try:
@@ -440,22 +460,21 @@ class TelaOrcamento(tk.Frame):
         titulo = self.cb_modelo.get()
         if not titulo:
             return
-    
+
         for m in self._modelos_cache:
             if m["titulo"] == titulo:
                 msg = banco.mensagem_obter(m["id"])
                 if msg:
                     self.txt_msg.delete("1.0", "end")
                     self.txt_msg.insert("1.0", msg.get("conteudo", ""))
-    
+
                     self.e_titulo_msg.delete(0, "end")
                     self.e_titulo_msg.insert(0, msg.get("titulo", ""))
-    
-                    # não sobrescreve automaticamente o modelo
+
                     self._autosave_msg_id = None
                 break
 
-    # ---------------- Histórico -----------------
+    # ==================== HISTÓRICO ====================
 
     def _limpar_filtros(self):
         self.f_data_ini.delete(0, "end")
@@ -524,7 +543,7 @@ class TelaOrcamento(tk.Frame):
         self._page = min(self._page, total_pages)
         self.lbl_pag.config(text=f"Página {self._page}/{total_pages} — {self._total} registro(s)")
 
-    # ---------------- EXPORTAR HISTÓRICO -----------------
+    # ==================== EXPORTAR HISTÓRICO ====================
 
     def _exportar_historico(self):
         fornecedor_id = self._fornecedor_id_atual()
@@ -584,7 +603,7 @@ class TelaOrcamento(tk.Frame):
         if not values_rows:
             messagebox.showinfo("Exportação", "Não há itens no rascunho para exportar.")
             return
-    
+
         # 1) Salva no banco antes de exportar
         try:
             self._salvar_orcamento_linhas(values_rows)
@@ -593,7 +612,7 @@ class TelaOrcamento(tk.Frame):
                 "Salvar orçamento",
                 f"Não foi possível salvar no banco antes de exportar:\n{e}"
             )
-    
+
         # 2) Monta a estrutura
         linhas = []
         for v in values_rows:
@@ -606,7 +625,7 @@ class TelaOrcamento(tk.Frame):
                 "Observação": v[5],
                 "Valor Total": float(str(v[6]).replace(",", "."))
             })
-    
+
         arq = filedialog.asksaveasfilename(
             defaultextension=".xlsx",
             filetypes=[("Excel", "*.xlsx")],
@@ -614,7 +633,7 @@ class TelaOrcamento(tk.Frame):
         )
         if not arq:
             return
-    
+
         # Exporta de fato
         try:
             df = utils.tabela_para_dataframe(
@@ -631,20 +650,20 @@ class TelaOrcamento(tk.Frame):
         if not sel:
             messagebox.showwarning("Atenção", "Selecione um orçamento salvo para excluir.")
             return
-    
+
         vals = self.tv_salvos.item(sel[0], "values")
         try:
             id_ = int(vals[0])
         except Exception:
             messagebox.showwarning("Erro", "Não foi possível identificar o ID do registro.")
             return
-    
+
         if not messagebox.askyesno("Confirmar", "Excluir o orçamento selecionado?"):
             return
-    
+
         try:
             banco.orcamento_excluir(id_)
-            self._carregar_salvos()   # Recarrega a lista após excluir
+            self._carregar_salvos()
             messagebox.showinfo("OK", "Registro excluído com sucesso.")
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao excluir: {e}")
@@ -652,90 +671,86 @@ class TelaOrcamento(tk.Frame):
     def _usar_msg(self, tipo: str):
         tv = self.tv_modelos if tipo == "modelo" else self.tv_rasc
         sel = tv.selection()
-    
+
         if not sel:
             messagebox.showwarning("Atenção", "Selecione uma mensagem.")
             return
-    
+
         vals = tv.item(sel[0], "values")
         try:
             mid = int(vals[0])
         except:
             return
-    
+
         msg = banco.mensagem_obter(mid)
         if not msg:
             return
-    
+
         self._msg_editando_id = mid
         self._autosave_msg_id = mid if msg.get("tipo") == "rascunho" else None
-    
+
         self.e_titulo_msg.delete(0, "end")
         self.e_titulo_msg.insert(0, msg.get("titulo", ""))
-    
+
         conteudo = msg.get("conteudo") or ""
         self.txt_msg.delete("1.0", "end")
         self.txt_msg.insert("1.0", conteudo)
-    
+
         self.txt_msg.focus_set()
-            
+
     def _carregar_msgs(self):
         """Carrega Modelos e Rascunhos combinando globais e do fornecedor atual."""
-    
+
         forn_id = self._fornecedor_id_atual()
         busca = self.e_msg_busca.get().strip() if hasattr(self, "e_msg_busca") else ""
-    
+
         # Limpa listas
         if hasattr(self, "tv_modelos"):
             for i in self.tv_modelos.get_children():
                 self.tv_modelos.delete(i)
-    
+
         if hasattr(self, "tv_rasc"):
             for i in self.tv_rasc.get_children():
                 self.tv_rasc.delete(i)
-    
+
         if hasattr(self, "cb_modelo"):
             self.cb_modelo.set("")
             self.cb_modelo["values"] = []
-    
-        # -------------------------
+
         # Função segura interna
-        # -------------------------
         def _safe_listar(tipo: str, fornecedor_id):
             try:
                 base = banco.mensagens_listar(tipo=tipo, fornecedor_id=fornecedor_id, busca=busca) or []
             except:
                 base = []
-    
+
             # Busca globais
             if fornecedor_id is not None:
                 try:
                     glb = banco.mensagens_listar(tipo=tipo, fornecedor_id=None, busca=busca) or []
                 except:
                     glb = []
-    
+
                 usados = set(m.get("id") for m in base)
                 for g in glb:
                     if g.get("id") not in usados:
                         base.append(g)
-    
+
             # Ordena
             try:
                 base.sort(key=lambda m: (m.get("criado_em") or "", m.get("id") or 0), reverse=True)
             except:
                 pass
-    
+
             return base
-    
-        # -------------------------
+
         # MODELOS
-        # -------------------------
         modelos = _safe_listar("modelo", forn_id)
-        self._modelos_cache = modelos[:]  # usado no carregar_modelo_rapido
-    
+        self._modelos_cache = modelos[:]
+
         if hasattr(self, "cb_modelo"):
             self.cb_modelo["values"] = [m.get("titulo", "") for m in modelos]
-    
+
         for m in modelos:
             escopo = "Global" if m.get("fornecedor_id") in (None, "") \
                      else f"Forn {m['fornecedor_id']}"
@@ -744,12 +759,10 @@ class TelaOrcamento(tk.Frame):
                 "end",
                 values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", ""))
             )
-    
-        # -------------------------
+
         # RASCUNHOS
-        # -------------------------
         rasc = _safe_listar("rascunho", forn_id)
-    
+
         for m in rasc:
             escopo = "Global" if m.get("fornecedor_id") in (None, "") \
                      else f"Forn {m['fornecedor_id']}"
@@ -759,16 +772,13 @@ class TelaOrcamento(tk.Frame):
                 values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", ""))
             )
 
-
     def _editar_msg(self):
         """Carrega para edição a mensagem selecionada (modelo ou rascunho)."""
-        # Verifica se há seleção em alguma das duas listas
         sel = self.tv_modelos.selection() or self.tv_rasc.selection()
         if not sel:
             messagebox.showwarning("Atenção", "Selecione uma mensagem nas listas.")
             return
-    
-        # Descobre em qual Treeview está a seleção
+
         tv = self.tv_modelos if self.tv_modelos.selection() else self.tv_rasc
         vals = tv.item(sel[0], "values")
         try:
@@ -776,65 +786,62 @@ class TelaOrcamento(tk.Frame):
         except:
             messagebox.showerror("Erro", "Não foi possível identificar a mensagem selecionada.")
             return
-    
+
         msg = banco.mensagem_obter(mid)
         if not msg:
             messagebox.showwarning("Aviso", "Mensagem não encontrada no banco.")
             return
-    
-        # Preenche editor
+
         self._msg_editando_id = mid
         self._autosave_msg_id = mid if msg.get("tipo") == "rascunho" else None
-    
+
         self.e_titulo_msg.delete(0, "end")
         self.e_titulo_msg.insert(0, msg.get("titulo", ""))
-    
+
         self.txt_msg.delete("1.0", "end")
         self.txt_msg.insert("1.0", msg.get("conteudo", ""))
-    
-        # Foca no editor
-        self.txt_msg.focus_set()
 
+        self.txt_msg.focus_set()
 
     def _salvar_alteracoes_msg(self):
         """Salva alterações feitas no editor para a mensagem atualmente em edição."""
         if not self._msg_editando_id:
             messagebox.showwarning("Edição", "Nenhuma mensagem carregada para edição.")
             return
-    
+
         titulo = (self.e_titulo_msg.get() or "").strip()
         conteudo = self.txt_msg.get("1.0", "end").strip()
-    
+
         if not titulo or not conteudo:
             messagebox.showwarning("Validação", "Título e conteúdo são obrigatórios.")
             return
-    
+
         try:
             banco.mensagem_atualizar(self._msg_editando_id, titulo, conteudo)
             self._carregar_msgs()
             messagebox.showinfo("OK", "Mensagem atualizada com sucesso.")
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao atualizar mensagem:\n{e}")
-                
+
     def _excluir_msg(self, tipo: str):
         """Exclui mensagem selecionada da lista."""
         tv = self.tv_modelos if tipo == "modelo" else self.tv_rasc
         sel = tv.selection()
-    
+
         if not sel:
             messagebox.showwarning("Atenção", "Selecione uma mensagem para excluir.")
             return
-    
+
         vals = tv.item(sel[0], "values")
         try:
             mid = int(vals[0])
         except:
             messagebox.showerror("Erro", "ID inválido.")
             return
-    
+
         if not messagebox.askyesno("Confirmar", "Excluir a mensagem selecionada?"):
             return
-    
+
         try:
             banco.mensagem_excluir(mid)
             self._msg_editando_id = None
@@ -842,15 +849,10 @@ class TelaOrcamento(tk.Frame):
             self._carregar_msgs()
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao excluir mensagem:\n{e}")
-       
-    # ---------------- Enviar Orçamento por Email -----------------
 
     def _enviar_email(self):
-        # >>> seu bloco original corrigido fica aqui <<<
-        # (omitido aqui para não duplicar — MAS JÁ FOI ENVIADO PRONTO NA MENSAGEM ANTERIOR)
+        # Implementar conforme sua necessidade
         pass
-
-    # ---------------- Carregar Rascunho -----------------
 
     def _carregar_itens_rascunho(self):
         for i in self.tv.get_children():
