@@ -681,7 +681,7 @@ class TelaOrcamento(tk.Frame):
             
     def _carregar_msgs(self):
         """Carrega Modelos e Rascunhos combinando globais e do fornecedor atual."""
-    
+        
         forn_id = self._fornecedor_id_atual()
         busca = self.e_msg_busca.get().strip() if hasattr(self, "e_msg_busca") else ""
     
@@ -697,6 +697,75 @@ class TelaOrcamento(tk.Frame):
         if hasattr(self, "cb_modelo"):
             self.cb_modelo.set("")
             self.cb_modelo["values"] = []
+    
+        # -------------------------
+        # Função segura interna
+        # -------------------------
+        def _safe_listar(tipo: str, fornecedor_id):
+            try:
+                base = banco.mensagens_listar(tipo=tipo, fornecedor_id=fornecedor_id, busca=busca) or []
+            except:
+                base = []
+    
+            # Busca globais
+            if fornecedor_id is not None:
+                try:
+                    glb = banco.mensagens_listar(tipo=tipo, fornecedor_id=None, busca=busca) or []
+                except:
+                    glb = []
+    
+                usados = set(m.get("id") for m in base)
+                for g in glb:
+                    if g.get("id") not in usados:
+                        base.append(g)
+    
+            # Ordena
+            try:
+                base.sort(key=lambda m: (m.get("criado_em") or "", m.get("id") or 0), reverse=True)
+            except:
+                pass
+    
+            return base
+    
+        # -------------------------
+        # MODELOS
+        # -------------------------
+        modelos = _safe_listar("modelo", forn_id)
+        self._modelos_cache = modelos[:]  # usado pelo carregar_modelo_rapido
+    
+        if hasattr(self, "cb_modelo"):
+            self.cb_modelo["values"] = [m.get("titulo", "") for m in modelos]
+    
+        for m in modelos:
+            escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
+            self.tv_modelos.insert(
+                "",
+                "end",
+                values=(
+                    m.get("id", ""),
+                    m.get("titulo", ""),
+                    escopo,
+                    m.get("criado_em", "")
+                )
+            )
+    
+        # -------------------------
+        # RASCUNHOS
+        # -------------------------
+        rasc = _safe_listar("rascunho", forn_id)
+    
+        for m in rasc:
+            escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
+            self.tv_rasc.insert(
+                "",
+                "end",
+                values=(
+                    m.get("id", ""),
+                    m.get("titulo", ""),
+                    escopo,
+                    m.get("criado_em", "")
+                )
+            )[]
 
 
     def _editar_msg(self):
@@ -782,65 +851,7 @@ class TelaOrcamento(tk.Frame):
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao excluir mensagem:\n{e}")
     
-        # -------------------------------
-        # Função interna segura
-        # -------------------------------
-        def _safe_listar(tipo: str, fornecedor_id):
-            try:
-                base = banco.mensagens_listar(tipo=tipo, fornecedor_id=fornecedor_id, busca=busca) or []
-            except:
-                base = []
-    
-            # Busca globais
-            if fornecedor_id is not None:
-                try:
-                    glb = banco.mensagens_listar(tipo=tipo, fornecedor_id=None, busca=busca) or []
-                except:
-                    glb = []
-    
-                usados = set(m.get("id") for m in base)
-                for g in glb:
-                    if g.get("id") not in usados:
-                        base.append(g)
-    
-            # Ordena
-            try:
-                base.sort(key=lambda m: (m.get("criado_em") or "", m.get("id") or 0), reverse=True)
-            except:
-                pass
-    
-            return base
-    
-        # -------------------------------
-        # MODELOS
-        #-------------------------------
-        modelos = _safe_listar("modelo", forn_id)
-        self._modelos_cache = modelos[:]  # usado pelo carregar_modelo_rapido
-    
-        if hasattr(self, "cb_modelo"):
-            self.cb_modelo["values"] = [m.get("titulo", "") for m in modelos]
-    
-        for m in modelos:
-            escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
-            self.tv_modelos.insert(
-                "",
-                "end",
-                values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", ""))
-            )
-    
-        # -------------------------------
-        # RASCUNHOS
-        #-------------------------------
-        rasc = _safe_listar("rascunho", forn_id)
-    
-        for m in rasc:
-            escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
-            self.tv_rasc.insert(
-                "",
-                "end",
-                values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", ""))
-            )
-
+       
     # ---------------- Enviar Orçamento por Email -----------------
 
     def _enviar_email(self):
