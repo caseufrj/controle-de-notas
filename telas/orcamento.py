@@ -103,12 +103,12 @@ class TelaOrcamento(tk.Frame):
 
         # <<<<<< BOTÃO DE ANEXAR ARQUIVO >>>>>>
         ttk.Button(msg_box, text="Anexar arquivo", command=self._add_anexo).pack(anchor="w", padx=6, pady=(0, 6))
-        # --- Lista visual dos anexos adicionados ---
+        # Frame que lista anexos
         self.frm_anexos = tk.Frame(msg_box, bg="white")
         self.frm_anexos.pack(fill="x", padx=6, pady=(0, 6))
         
-        self.lbl_anexos = tk.Label(self.frm_anexos, text="Nenhum anexo", bg="white", fg="#444")
-        self.lbl_anexos.pack(anchor="w")
+        tk.Label(self.frm_anexos, text="Nenhum anexo", bg="white", fg="#666")\
+            .pack(anchor="w")
 
         # ---------- Itens em rascunho ----------
         lf_rasc = ttk.LabelFrame(self, text="Itens em rascunho (não salvos)")
@@ -223,26 +223,33 @@ class TelaOrcamento(tk.Frame):
         self._atualizar_lista_anexos()
 
     def _atualizar_lista_anexos(self):
-        for widget in self.frm_anexos.winfo_children():
-            widget.destroy()
+        # limpa tudo que aparece no frame
+        for w in self.frm_anexos.winfo_children():
+            w.destroy()
     
         if not self._anexos_extra:
-            tk.Label(self.frm_anexos, text="Nenhum anexo", bg="white", fg="#444").pack(anchor="w")
+            tk.Label(self.frm_anexos, text="Nenhum anexo", bg="white", fg="#666")\
+                .pack(anchor="w")
             return
     
-        for idx, path in enumerate(self._anexos_extra, start=1):
+        # lista anexos
+        for idx, caminho in enumerate(self._anexos_extra, start=1):
             linha = tk.Frame(self.frm_anexos, bg="white")
-            linha.pack(anchor="w", fill="x")
+            linha.pack(anchor="w", fill="x", pady=1)
     
-            tk.Label(linha, text=f"{idx}. {path}", bg="white").pack(side="left")
+            tk.Label(linha, text=f"{idx}. {caminho}", bg="white")\
+                .pack(side="left", padx=(2, 6))
     
-            btn_del = ttk.Button(linha, text="Excluir", width=8,
-                command=lambda p=path: self._remover_anexo(p))
-            btn_del.pack(side="left", padx=8)
+            btn_x = ttk.Button(
+                linha, text="X", width=3,
+                command=lambda p=caminho: self._remover_anexo(p)
+            )
+            btn_x.pack(side="left")
 
-    def _remover_anexo(self, path):
+
+    def _remover_anexo(self, caminho):
         try:
-            self._anexos_extra.remove(path)
+            self._anexos_extra.remove(caminho)
         except:
             pass
         self._atualizar_lista_anexos()
@@ -557,34 +564,41 @@ class TelaOrcamento(tk.Frame):
             messagebox.showerror("Erro", f"Falha ao excluir: {e}")
 
     def _usar_msg(self, tipo: str):
+        # Seleciona a Treeview correta
         tv = self.tv_modelos if tipo == "modelo" else self.tv_rasc
+    
         sel = tv.selection()
         if not sel:
             messagebox.showwarning("Atenção", "Selecione uma mensagem.")
             return
     
+        # Pega dados da linha selecionada
         vals = tv.item(sel[0], "values")
         try:
             mid = int(vals[0])
         except:
-            messagebox.showerror("Erro", "ID inválido.")
+            messagebox.showerror("Erro", "Falha ao identificar ID da mensagem.")
             return
     
+        # Busca do banco
         msg = banco.mensagem_obter(mid)
         if not msg:
-            messagebox.showwarning("Aviso", "Mensagem não encontrada.")
+            messagebox.showwarning("Aviso", "Mensagem não encontrada no banco.")
             return
     
+        # Marca como mensagem ativa no editor
         self._msg_editando_id = mid
         self._autosave_msg_id = mid if msg.get("tipo") == "rascunho" else None
     
+        # Preenche título
         self.e_titulo_msg.delete(0, "end")
         self.e_titulo_msg.insert(0, msg.get("titulo", ""))
     
+        # Preenche texto
         self.txt_msg.delete("1.0", "end")
         self.txt_msg.insert("1.0", msg.get("conteudo", ""))
     
-        # Foca no campo mensagem
+        # Dá foco ao editor
         self.txt_msg.focus_set()
             
     def _carregar_msgs(self):
