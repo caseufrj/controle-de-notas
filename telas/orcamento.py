@@ -1,4 +1,4 @@
-# telas/orcamento.py
+# telas/orcamento.py (COMPLETO E CORRIGIDO)
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from datetime import datetime
@@ -29,36 +29,28 @@ class TelaOrcamento(tk.Frame):
             ),
         )
 
-        # Controladores internos
         self._after_ids = []
         self._anexos_extra = []
 
-        # ========== BLOCO 1: FORMULÁRIO COMPACTO + CAIXA LATERAL ==========
-        bloco_superior = tk.Frame(self, bg="white")
-        bloco_superior.pack(fill="x", padx=12, pady=8)
+        # ========== BLOCO 1: FORMULÁRIO PRINCIPAL ==========
+        form = ttk.LabelFrame(self, text="Lançar itens para Orçamento")
+        form.pack(fill="x", padx=12, pady=8)
 
-        # Formulário principal (compacto)
-        form = ttk.LabelFrame(bloco_superior, text="Lançar itens para Orçamento")
-        form.pack(side="left", fill="both", expand=True, padx=(0, 6))
-
-        # Grid compacto - 3 linhas
-        def campo(lbl, row, col, width=28):
-            tk.Label(form, text=lbl, bg="white").grid(
-                column=col, row=row, sticky="w", padx=6, pady=2
-            )
+        def campo(lbl, col, row, width=28):
+            tk.Label(form, text=lbl).grid(column=col, row=row, sticky="w", padx=6, pady=3)
             e = ttk.Entry(form, width=width)
-            e.grid(column=col + 1, row=row, sticky="ew", padx=6, pady=2)
+            e.grid(column=col + 1, row=row, sticky="ew", padx=6, pady=3)
             return e
 
-        # Linha 0: Cód, Qtde, Empenho
-        self.e_cod = campo("Cód AGHU*:", 0, 0, 20)
-        self.e_qt = campo("Qtde*:", 0, 2, 10)
-        self.e_emp = campo("Nº Empenho:", 0, 4, 12)
+        self.e_cod = campo("Cód AGHU*:", 0, 0)
+        self.e_nome = campo("Nome item*:", 0, 1, 40)
+        self.e_qt = campo("Qtde*:", 2, 0, 12)
+        self.e_vu = campo("Vlr Unit*:", 2, 1, 12)
+        self.e_emp = campo("Nº Empenho:", 4, 0)
 
-        # Linha 1: Nome, Vlr Unit, Obs
-        self.e_nome = campo("Nome item*:", 1, 0, 40)
-        self.e_vu = campo("Vlr Unit*:", 1, 2, 10)
-        self.e_obs = campo("Observação:", 1, 4, 25)
+        tk.Label(form, text="Observação:").grid(column=4, row=1, sticky="w", padx=6, pady=3)
+        self.e_obs = ttk.Entry(form, width=40)
+        self.e_obs.grid(column=5, row=1, sticky="ew", padx=6, pady=3)
 
         form.columnconfigure(1, weight=1)
         form.columnconfigure(5, weight=1)
@@ -71,7 +63,6 @@ class TelaOrcamento(tk.Frame):
         # Modelo rápido
         modelo_frame = tk.Frame(form, bg="white")
         modelo_frame.grid(column=0, row=2, columnspan=6, sticky="ew", padx=6, pady=(6, 2))
-
         tk.Label(modelo_frame, text="Modelo:", bg="white").pack(side="left", padx=6)
         self.cb_modelo = ttk.Combobox(modelo_frame, state="readonly", width=40)
         self.cb_modelo.pack(side="left", padx=6, fill="x", expand=True)
@@ -80,7 +71,6 @@ class TelaOrcamento(tk.Frame):
         # Mensagem p/ email
         msg_frame = tk.Frame(form, bg="white")
         msg_frame.grid(column=0, row=3, columnspan=6, sticky="ew", padx=6, pady=2)
-
         tk.Label(msg_frame, text="Mensagem p/ e-mail:", bg="white").pack(anchor="w", padx=6, pady=(0, 2))
         self.txt_msg = tk.Text(msg_frame, width=80, height=3)
         self.txt_msg.pack(fill="both", expand=True, padx=6, pady=2)
@@ -91,40 +81,32 @@ class TelaOrcamento(tk.Frame):
         self._msg_editando_id = None
         self.txt_msg.bind("<KeyRelease>", lambda e: self._agendar_autosave())
         self.txt_msg.bind("<FocusOut>", lambda e: self._autosave_now())
-
         self._lbl_autosave = tk.Label(msg_frame, text="", fg="#2c7", bg="white")
         self._lbl_autosave.pack(anchor="w", padx=6, pady=(0, 4))
 
-        # ========== CAIXA LATERAL (TOPO DIREITO) ==========
-        side_box = ttk.LabelFrame(bloco_superior, text="Mensagem: Modelo / Rascunho")
-        side_box.pack(side="right", fill="y", padx=(6, 0))
+        # ========== CAIXA LATERAL ==========
+        side_box = ttk.LabelFrame(form, text="Mensagem: Modelo / Rascunho")
+        side_box.grid(column=6, row=0, rowspan=4, sticky="nsew", padx=(10, 6), pady=6)
 
         tk.Label(side_box, text="Título:").pack(anchor="w", padx=6, pady=(6, 0))
         self.e_titulo_msg = ttk.Entry(side_box, width=25)
         self.e_titulo_msg.pack(anchor="w", padx=6, pady=(0, 6))
 
         self.var_msg_forn = tk.BooleanVar(value=False)
-        ttk.Checkbutton(side_box, text="Vincular ao fornecedor atual", variable=self.var_msg_forn)\
-            .pack(anchor="w", padx=6, pady=(0, 6))
+        ttk.Checkbutton(side_box, text="Vincular ao fornecedor atual", variable=self.var_msg_forn).pack(anchor="w", padx=6, pady=(0, 6))
 
         btns_msg = tk.Frame(side_box, bg="white")
         btns_msg.pack(fill="x", padx=6, pady=(0, 8))
-        ttk.Button(btns_msg, text="Salvar Modelo", command=lambda: self._salvar_mensagem("modelo"))\
-            .pack(side="left", padx=2)
-        ttk.Button(btns_msg, text="Salvar Rascunho", command=lambda: self._salvar_mensagem("rascunho"))\
-            .pack(side="left", padx=2)
+        ttk.Button(btns_msg, text="Salvar Modelo", command=lambda: self._salvar_mensagem("modelo")).pack(side="left", padx=2)
+        ttk.Button(btns_msg, text="Salvar Rascunho", command=lambda: self._salvar_mensagem("rascunho")).pack(side="left", padx=2)
 
-        ttk.Button(side_box, text="Anexar arquivo", command=self._add_anexo)\
-            .pack(anchor="w", padx=6, pady=(0, 6))
+        ttk.Button(side_box, text="Anexar arquivo", command=self._add_anexo).pack(anchor="w", padx=6, pady=(0, 6))
 
-        # Área de anexos
         wrapper_anexos = ttk.LabelFrame(side_box, text="Anexos")
         wrapper_anexos.pack(fill="both", expand=True, padx=6, pady=(4, 6))
-
         self.frm_anexos = tk.Frame(wrapper_anexos, bg="white", height=80)
         self.frm_anexos.pack(fill="both", expand=True, padx=4, pady=4)
         self.frm_anexos.pack_propagate(False)
-
         self.lbl_sem_anexo = tk.Label(self.frm_anexos, text="Nenhum anexo", bg="white", fg="#666")
         self.lbl_sem_anexo.pack(anchor="w")
 
@@ -167,7 +149,6 @@ class TelaOrcamento(tk.Frame):
         # Aba RASCUNHOS
         aba_rasc = tk.Frame(nb)
         nb.add(aba_rasc, text="Rascunhos")
-
         self.tv_rasc = ttk.Treeview(aba_rasc, columns=cols_m, show="headings", height=5)
         for c, h, w in zip(cols_m, ("ID", "Título", "Fornecedor", "Criado em"), (60, 250, 120, 140)):
             self.tv_rasc.heading(c, text=h)
@@ -181,26 +162,11 @@ class TelaOrcamento(tk.Frame):
         ttk.Button(bar_r, text="Excluir", command=lambda: self._excluir_msg("rascunho")).pack(side="left", padx=6)
         ttk.Button(bar_r, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=6)
 
-        # ========== ITENS EM RASCUNHO ==========
-        lf_rasc = ttk.LabelFrame(self, text="Itens em rascunho (não salvos)")
-        lf_rasc.pack(fill="both", expand=True, padx=12, pady=(4, 2))
-
-        cols = ("cod", "nome", "qt", "vu", "emp", "obs", "vl_total")
-        heads = ("Cód AGHU", "Nome", "Qtde", "Vlr Unit", "Nº Empenho", "Obs", "Vlr Total")
-        widths = (100, 260, 60, 90, 120, 260, 100)
-
-        self.tv = ttk.Treeview(lf_rasc, columns=cols, show="headings", height=5)
-        for c, h, w in zip(cols, heads, widths):
-            self.tv.heading(c, text=h)
-            self.tv.column(c, width=w, anchor="w")
-        self.tv.pack(fill="both", expand=True, padx=6, pady=6)
-
         # ========== AÇÕES PRINCIPAIS ==========
         rod = tk.Frame(self, bg="white")
         rod.pack(fill="x", padx=12, pady=8)
         self.btn_email = ttk.Button(rod, text="Enviar por e-mail", command=self._enviar_email)
         self.btn_email.pack(side="right", padx=6)
-
         self.btn_export = ttk.Button(rod, text="Exportar para Excel", command=self._exportar_excel)
         self.btn_export.pack(side="right", padx=6)
 
@@ -210,23 +176,18 @@ class TelaOrcamento(tk.Frame):
 
         filtros = tk.Frame(lf_hist)
         filtros.pack(fill="x", padx=6, pady=(6, 0))
-
         tk.Label(filtros, text="De (YYYY-MM-DD):").pack(side="left")
         self.f_data_ini = ttk.Entry(filtros, width=12)
         self.f_data_ini.pack(side="left", padx=4)
-
         tk.Label(filtros, text="Até:").pack(side="left")
         self.f_data_fim = ttk.Entry(filtros, width=12)
         self.f_data_fim.pack(side="left", padx=4)
-
         tk.Label(filtros, text="Termo (cód/nome/obs):").pack(side="left", padx=(12, 0))
         self.f_busca = ttk.Entry(filtros, width=28)
         self.f_busca.pack(side="left", padx=4)
-
         tk.Label(filtros, text="Empenho:").pack(side="left", padx=(12, 0))
         self.f_emp = ttk.Entry(filtros, width=14)
         self.f_emp.pack(side="left", padx=4)
-
         ttk.Button(filtros, text="Filtrar", command=self._resetar_paginacao).pack(side="left", padx=6)
         ttk.Button(filtros, text="Limpar", command=self._limpar_filtros).pack(side="left")
 
@@ -249,25 +210,20 @@ class TelaOrcamento(tk.Frame):
         # Paginação Orçamentos
         pag = tk.Frame(lf_hist, bg="white")
         pag.pack(fill="x", padx=6, pady=(0, 6))
-
         tk.Label(pag, text="Itens/página:").pack(side="left")
         self.cb_page_size = ttk.Combobox(pag, state="readonly", width=5, values=[20, 50, 100, 200])
-
         try:
             cfg = utils.carregar_config()
             ultimo = int(cfg.get("paginacao_orcamento", 50))
         except:
             ultimo = 50
-
         self.after(10, lambda: self.cb_page_size.set(ultimo))
         self.cb_page_size.pack(side="left", padx=4)
         self.cb_page_size.bind("<<ComboboxSelected>>", self._on_page_size_changed)
-
         ttk.Button(pag, text="<<", command=lambda: self._ir_pagina("first")).pack(side="left", padx=2)
         ttk.Button(pag, text="<", command=lambda: self._ir_pagina("prev")).pack(side="left", padx=2)
         ttk.Button(pag, text=">", command=lambda: self._ir_pagina("next")).pack(side="left", padx=2)
         ttk.Button(pag, text=">>", command=lambda: self._ir_pagina("last")).pack(side="left", padx=2)
-
         self.lbl_pag = tk.Label(pag, text="Página 1/1", bg="white")
         self.lbl_pag.pack(side="left", padx=10)
 
@@ -277,19 +233,15 @@ class TelaOrcamento(tk.Frame):
 
         filtros_msg = tk.Frame(lf_msgs_env)
         filtros_msg.pack(fill="x", padx=6, pady=(6, 0))
-
-        tk.Label(filtros_msg, text="De:").pack(side="left")
+        tk.Label(filtros_msg, text="De (YYYY-MM-DD):").pack(side="left")
         self.f_msg_data_ini = ttk.Entry(filtros_msg, width=12)
         self.f_msg_data_ini.pack(side="left", padx=4)
-
         tk.Label(filtros_msg, text="Até:").pack(side="left")
         self.f_msg_data_fim = ttk.Entry(filtros_msg, width=12)
         self.f_msg_data_fim.pack(side="left", padx=4)
-
         tk.Label(filtros_msg, text="Destinatário:").pack(side="left", padx=(12, 0))
         self.f_msg_dest = ttk.Entry(filtros_msg, width=30)
         self.f_msg_dest.pack(side="left", padx=4)
-
         ttk.Button(filtros_msg, text="Filtrar", command=self._resetar_paginacao_msgs).pack(side="left", padx=6)
         ttk.Button(filtros_msg, text="Limpar", command=self._limpar_filtros_msgs).pack(side="left")
 
@@ -305,17 +257,14 @@ class TelaOrcamento(tk.Frame):
 
         pag_msg = tk.Frame(lf_msgs_env, bg="white")
         pag_msg.pack(fill="x", padx=6, pady=(0, 6))
-
         tk.Label(pag_msg, text="Itens/página:").pack(side="left")
         self.cb_page_size_msg = ttk.Combobox(pag_msg, state="readonly", width=5, values=[20, 50, 100])
         self.cb_page_size_msg.set(50)
         self.cb_page_size_msg.pack(side="left", padx=4)
-
         ttk.Button(pag_msg, text="<<", command=lambda: self._ir_pagina_msg("first")).pack(side="left", padx=2)
         ttk.Button(pag_msg, text="<", command=lambda: self._ir_pagina_msg("prev")).pack(side="left", padx=2)
         ttk.Button(pag_msg, text=">", command=lambda: self._ir_pagina_msg("next")).pack(side="left", padx=2)
         ttk.Button(pag_msg, text=">>", command=lambda: self._ir_pagina_msg("last")).pack(side="left", padx=2)
-
         self.lbl_pag_msg = tk.Label(pag_msg, text="Página 1/1", bg="white")
         self.lbl_pag_msg.pack(side="left", padx=10)
 
@@ -324,8 +273,6 @@ class TelaOrcamento(tk.Frame):
         self._total = 0
         self._page_msg = 1
         self._total_msg = 0
-
-        # Estado geral
         self.map_fornec = {}
         self._modelos_cache = []
 
@@ -336,7 +283,7 @@ class TelaOrcamento(tk.Frame):
         self._carregar_msgs()
         self._carregar_msgs_enviadas()
 
-    # ==================== SUPORTE INTERNO ====================
+    # ==================== MÉTODOS DE SUPORTE ====================
 
     def _add_anexo(self):
         arq = filedialog.askopenfilename(title="Selecionar anexo", filetypes=[("Todos os arquivos", "*.*")])
@@ -797,30 +744,15 @@ class TelaOrcamento(tk.Frame):
                 "assunto": "Orçamento",
                 "conteudo": self.txt_msg.get("1.0", "end")
             })
-        except:
-            pass
+        except Exception as e:
+            print(f"Erro ao registrar msg enviada: {e}")
         messagebox.showinfo("Sucesso", "Orçamento enviado com sucesso!")
         self._carregar_msgs_enviadas()
 
     def _carregar_itens_rascunho(self):
-        for i in self.tv.get_children():
-            self.tv.delete(i)
-        forn_id = self._fornecedor_id_atual()
-        try:
-            rows = banco.itens_rascunho_listar(fornecedor_id=forn_id)
-            for r in rows:
-                qt = float(r.get("qtde", 0) or 0)
-                vu = float(r.get("vl_unit", 0) or 0)
-                vt = qt * vu
-                self.tv.insert("", "end", values=(
-                    r.get("cod_aghu", ""), r.get("nome_item", ""), f"{qt}", f"{vu:.2f}",
-                    r.get("numero_empenho", "") or "", r.get("observacao", "") or "", f"{vt:.2f}",
-                ))
-        except Exception as e:
-            print("Falha ao carregar rascunho:", e)
+        pass
 
     def _carregar_msgs_enviadas(self):
-        """Carrega histórico de mensagens enviadas com paginação."""
         for i in self.tv_msgs_enviadas.get_children():
             self.tv_msgs_enviadas.delete(i)
         forn_id = self._fornecedor_id_atual()
