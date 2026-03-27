@@ -523,6 +523,74 @@ class TelaOrcamento(tk.Frame):
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao excluir: {e}")
 
+    def _carregar_msgs(self):
+        """Carrega Modelos e Rascunhos combinando globais e do fornecedor atual."""
+        forn_id = self._fornecedor_id_atual()
+        busca = self.e_msg_busca.get().strip() if hasattr(self, "e_msg_busca") else ""
+    
+        # Limpa UI
+        if hasattr(self, "tv_modelos"):
+            for i in self.tv_modelos.get_children():
+                self.tv_modelos.delete(i)
+        if hasattr(self, "tv_rasc"):
+            for i in self.tv_rasc.get_children():
+                self.tv_rasc.delete(i)
+        if hasattr(self, "cb_modelo"):
+            self.cb_modelo.set("")
+            self.cb_modelo["values"] = []
+    
+        def _safe_listar(tipo: str, fornecedor_id):
+            lst = []
+            try:
+                lst = banco.mensagens_listar(tipo=tipo, fornecedor_id=fornecedor_id, busca=busca) or []
+            except:
+                lst = []
+    
+            # Também busca modelos globais (fornecedor_id = None)
+            if fornecedor_id is not None:
+                try:
+                    glb = banco.mensagens_listar(tipo=tipo, fornecedor_id=None, busca=busca) or []
+                except:
+                    glb = []
+    
+                seen = set(m.get("id") for m in lst)
+                for g in glb:
+                    if g.get("id") not in seen:
+                        lst.append(g)
+    
+            # Ordenação (mais recentes primeiro)
+            try:
+                lst.sort(key=lambda m: (m.get("criado_em") or "", m.get("id") or 0), reverse=True)
+            except:
+                pass
+    
+            return lst
+    
+        # --- Modelos ---
+        modelos = _safe_listar("modelo", forn_id)
+        self._modelos_cache = modelos[:]
+        if hasattr(self, "cb_modelo"):
+            self.cb_modelo["values"] = [m.get("titulo", "") for m in modelos]
+    
+        if hasattr(self, "tv_modelos"):
+            for m in modelos:
+                escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
+                self.tv_modelos.insert(
+                    "", "end",
+                    values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", ""))
+                )
+    
+        # --- Rascunhos ---
+        rasc = _safe_listar("rascunho", forn_id)
+        if hasattr(self, "tv_rasc"):
+            for m in rasc:
+                escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
+                self.tv_rasc.insert(
+                    "", "end",
+                    values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", ""))
+                )
+    ``
+
     # ---------------- Enviar Orçamento por Email -----------------
 
     def _enviar_email(self):
