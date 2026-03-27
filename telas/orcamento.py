@@ -103,12 +103,22 @@ class TelaOrcamento(tk.Frame):
 
         # <<<<<< BOTÃO DE ANEXAR ARQUIVO >>>>>>
         ttk.Button(msg_box, text="Anexar arquivo", command=self._add_anexo).pack(anchor="w", padx=6, pady=(0, 6))
-        # Frame que lista anexos
-        self.frm_anexos = tk.Frame(msg_box, bg="white")
-        self.frm_anexos.pack(fill="x", padx=6, pady=(0, 6))
+        # ===========================
+        # ÁREA DE ANEXOS (CORRIGIDA)
+        # ===========================
         
-        tk.Label(self.frm_anexos, text="Nenhum anexo", bg="white", fg="#666")\
-            .pack(anchor="w")
+        wrapper_anexos = ttk.LabelFrame(msg_box, text="Anexos")
+        wrapper_anexos.pack(fill="x", padx=6, pady=(4, 4))
+        
+        self.frm_anexos = tk.Frame(wrapper_anexos, bg="white", height=60)
+        self.frm_anexos.pack(fill="x", padx=4, pady=4)
+        
+        # Evita que o frame colapse verticalmente
+        self.frm_anexos.pack_propagate(False)
+        
+        # Exibe mensagem inicial
+        self.lbl_sem_anexo = tk.Label(self.frm_anexos, text="Nenhum anexo", bg="white", fg="#666")
+        self.lbl_sem_anexo.pack(anchor="w")
 
         # ---------- Itens em rascunho ----------
         lf_rasc = ttk.LabelFrame(self, text="Itens em rascunho (não salvos)")
@@ -225,37 +235,34 @@ class TelaOrcamento(tk.Frame):
     import os
 
     def _atualizar_lista_anexos(self):
-        # limpa tudo
         for w in self.frm_anexos.winfo_children():
             w.destroy()
     
         if not self._anexos_extra:
-            tk.Label(self.frm_anexos, text="Nenhum anexo", bg="white", fg="#666")\
-                .pack(anchor="w")
+            self.lbl_sem_anexo = tk.Label(self.frm_anexos,
+                text="Nenhum anexo", bg="white", fg="#666")
+            self.lbl_sem_anexo.pack(anchor="w")
             return
     
-        for idx, caminho in enumerate(self._anexos_extra, start=1):
+        for idx, path in enumerate(self._anexos_extra, start=1):
+            nome = os.path.basename(path)
+    
             linha = tk.Frame(self.frm_anexos, bg="white")
             linha.pack(anchor="w", fill="x", pady=1)
-    
-            # Mostra somente o nome do arquivo, não o caminho inteiro
-            nome = os.path.basename(caminho)
     
             tk.Label(linha, text=f"{idx}. {nome}", bg="white")\
                 .pack(side="left", padx=(2, 6))
     
-            # Botão X SEM SAIR DA TELA
-            btn_x = ttk.Button(
-                linha, text="X", width=3,
-                command=lambda p=caminho: self._remover_anexo(p)
-            )
-            btn_x.pack(side="left")
-            
+            ttk.Button(linha, text="X", width=3,
+                       command=lambda p=path: self._remover_anexo(p))\
+                .pack(side="left")
+
     def _remover_anexo(self, caminho):
         try:
             self._anexos_extra.remove(caminho)
         except:
             pass
+    
         self._atualizar_lista_anexos()
 
 
@@ -568,109 +575,112 @@ class TelaOrcamento(tk.Frame):
             messagebox.showerror("Erro", f"Falha ao excluir: {e}")
 
     def _usar_msg(self, tipo: str):
-        # Seleciona a Treeview correta
         tv = self.tv_modelos if tipo == "modelo" else self.tv_rasc
-    
         sel = tv.selection()
+    
         if not sel:
             messagebox.showwarning("Atenção", "Selecione uma mensagem.")
             return
     
-        # Pega dados da linha selecionada
         vals = tv.item(sel[0], "values")
         try:
             mid = int(vals[0])
         except:
-            messagebox.showerror("Erro", "Falha ao identificar ID da mensagem.")
             return
     
-        # Busca do banco
         msg = banco.mensagem_obter(mid)
         if not msg:
-            messagebox.showwarning("Aviso", "Mensagem não encontrada no banco.")
             return
     
-        # Marca como mensagem ativa no editor
         self._msg_editando_id = mid
         self._autosave_msg_id = mid if msg.get("tipo") == "rascunho" else None
     
-        # Preenche título
         self.e_titulo_msg.delete(0, "end")
         self.e_titulo_msg.insert(0, msg.get("titulo", ""))
     
-        # Preenche texto
+        conteudo = msg.get("conteudo") or ""
         self.txt_msg.delete("1.0", "end")
-        self.txt_msg.insert("1.0", msg.get("conteudo", ""))
+        self.txt_msg.insert("1.0", conteudo)
     
-        # Dá foco ao editor
         self.txt_msg.focus_set()
             
     def _carregar_msgs(self):
         """Carrega Modelos e Rascunhos combinando globais e do fornecedor atual."""
+    
         forn_id = self._fornecedor_id_atual()
         busca = self.e_msg_busca.get().strip() if hasattr(self, "e_msg_busca") else ""
     
-        # Limpa UI
+        # Limpa listas
         if hasattr(self, "tv_modelos"):
             for i in self.tv_modelos.get_children():
                 self.tv_modelos.delete(i)
+    
         if hasattr(self, "tv_rasc"):
             for i in self.tv_rasc.get_children():
                 self.tv_rasc.delete(i)
+    
         if hasattr(self, "cb_modelo"):
             self.cb_modelo.set("")
             self.cb_modelo["values"] = []
     
+        # -------------------------------
+        # Função interna segura
+        # -------------------------------
         def _safe_listar(tipo: str, fornecedor_id):
-            lst = []
             try:
-                lst = banco.mensagens_listar(tipo=tipo, fornecedor_id=fornecedor_id, busca=busca) or []
+                base = banco.mensagens_listar(tipo=tipo, fornecedor_id=fornecedor_id, busca=busca) or []
             except:
-                lst = []
+                base = []
     
-            # Também busca modelos globais (fornecedor_id = None)
+            # Busca globais
             if fornecedor_id is not None:
                 try:
                     glb = banco.mensagens_listar(tipo=tipo, fornecedor_id=None, busca=busca) or []
                 except:
                     glb = []
     
-                seen = set(m.get("id") for m in lst)
+                usados = set(m.get("id") for m in base)
                 for g in glb:
-                    if g.get("id") not in seen:
-                        lst.append(g)
+                    if g.get("id") not in usados:
+                        base.append(g)
     
-            # Ordenação (mais recentes primeiro)
+            # Ordena
             try:
-                lst.sort(key=lambda m: (m.get("criado_em") or "", m.get("id") or 0), reverse=True)
+                base.sort(key=lambda m: (m.get("criado_em") or "", m.get("id") or 0), reverse=True)
             except:
                 pass
     
-            return lst
+            return base
     
-        # --- Modelos ---
+        # -------------------------------
+        # MODELOS
+        -------------------------------
         modelos = _safe_listar("modelo", forn_id)
-        self._modelos_cache = modelos[:]
+        self._modelos_cache = modelos[:]  # usado pelo carregar_modelo_rapido
+    
         if hasattr(self, "cb_modelo"):
             self.cb_modelo["values"] = [m.get("titulo", "") for m in modelos]
     
-        if hasattr(self, "tv_modelos"):
-            for m in modelos:
-                escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
-                self.tv_modelos.insert(
-                    "", "end",
-                    values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", ""))
-                )
+        for m in modelos:
+            escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
+            self.tv_modelos.insert(
+                "",
+                "end",
+                values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", ""))
+            )
     
-        # --- Rascunhos ---
+        # -------------------------------
+        # RASCUNHOS
+        -------------------------------
         rasc = _safe_listar("rascunho", forn_id)
-        if hasattr(self, "tv_rasc"):
-            for m in rasc:
-                escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
-                self.tv_rasc.insert(
-                    "", "end",
-                    values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", ""))
-                )
+    
+        for m in rasc:
+            escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
+            self.tv_rasc.insert(
+                "",
+                "end",
+                values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", ""))
+            )
 
     # ---------------- Enviar Orçamento por Email -----------------
 
