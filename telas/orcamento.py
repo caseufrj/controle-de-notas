@@ -654,7 +654,7 @@ class TelaOrcamento(tk.Frame):
     
         # -------------------------------
         # MODELOS
-        -------------------------------
+        #-------------------------------
         modelos = _safe_listar("modelo", forn_id)
         self._modelos_cache = modelos[:]  # usado pelo carregar_modelo_rapido
     
