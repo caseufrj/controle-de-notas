@@ -222,8 +222,10 @@ class TelaOrcamento(tk.Frame):
         self._anexos_extra.append(arq)
         self._atualizar_lista_anexos()
 
+    import os
+
     def _atualizar_lista_anexos(self):
-        # limpa tudo que aparece no frame
+        # limpa tudo
         for w in self.frm_anexos.winfo_children():
             w.destroy()
     
@@ -232,21 +234,23 @@ class TelaOrcamento(tk.Frame):
                 .pack(anchor="w")
             return
     
-        # lista anexos
         for idx, caminho in enumerate(self._anexos_extra, start=1):
             linha = tk.Frame(self.frm_anexos, bg="white")
             linha.pack(anchor="w", fill="x", pady=1)
     
-            tk.Label(linha, text=f"{idx}. {caminho}", bg="white")\
+            # Mostra somente o nome do arquivo, não o caminho inteiro
+            nome = os.path.basename(caminho)
+    
+            tk.Label(linha, text=f"{idx}. {nome}", bg="white")\
                 .pack(side="left", padx=(2, 6))
     
+            # Botão X SEM SAIR DA TELA
             btn_x = ttk.Button(
                 linha, text="X", width=3,
                 command=lambda p=caminho: self._remover_anexo(p)
             )
             btn_x.pack(side="left")
-
-
+            
     def _remover_anexo(self, caminho):
         try:
             self._anexos_extra.remove(caminho)
