@@ -124,8 +124,8 @@ class TelaOrcamento(tk.Frame):
         # ======================================================
         # BLOCO 3 — ABAS (MODELOS / RASCUNHOS)
         # ======================================================
-        lf_msg = ttk.LabelFrame(self, text="Mensagens (Modelos e Rascunhos)")
-        lf_msg.pack(fill="both", expand=True, padx=12, pady=(4, 8))
+        lf_msg = ttk.LabelFrame(form, text="Mensagens (Modelos e Rascunhos)")
+        lf_msg.grid(column=1, row=6, columnspan=5, sticky="we", padx=6, pady=(4, 8))
     
         busca_bar = tk.Frame(lf_msg)
         busca_bar.pack(fill="x", padx=6, pady=6)
