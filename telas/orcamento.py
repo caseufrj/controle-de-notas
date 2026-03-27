@@ -500,6 +500,29 @@ class TelaOrcamento(tk.Frame):
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao exportar para Excel:\n{e}")
 
+    def _excluir_salvo(self):
+        sel = self.tv_salvos.selection()
+        if not sel:
+            messagebox.showwarning("Atenção", "Selecione um orçamento salvo para excluir.")
+            return
+    
+        vals = self.tv_salvos.item(sel[0], "values")
+        try:
+            id_ = int(vals[0])
+        except Exception:
+            messagebox.showwarning("Erro", "Não foi possível identificar o ID do registro.")
+            return
+    
+        if not messagebox.askyesno("Confirmar", "Excluir o orçamento selecionado?"):
+            return
+    
+        try:
+            banco.orcamento_excluir(id_)
+            self._carregar_salvos()   # Recarrega a lista após excluir
+            messagebox.showinfo("OK", "Registro excluído com sucesso.")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao excluir: {e}")
+
     # ---------------- Enviar Orçamento por Email -----------------
 
     def _enviar_email(self):
