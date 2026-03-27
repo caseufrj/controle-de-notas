@@ -681,7 +681,7 @@ class TelaOrcamento(tk.Frame):
             
     def _carregar_msgs(self):
         """Carrega Modelos e Rascunhos combinando globais e do fornecedor atual."""
-        
+    
         forn_id = self._fornecedor_id_atual()
         busca = self.e_msg_busca.get().strip() if hasattr(self, "e_msg_busca") else ""
     
@@ -731,22 +731,18 @@ class TelaOrcamento(tk.Frame):
         # MODELOS
         # -------------------------
         modelos = _safe_listar("modelo", forn_id)
-        self._modelos_cache = modelos[:]  # usado pelo carregar_modelo_rapido
+        self._modelos_cache = modelos[:]  # usado no carregar_modelo_rapido
     
         if hasattr(self, "cb_modelo"):
             self.cb_modelo["values"] = [m.get("titulo", "") for m in modelos]
     
         for m in modelos:
-            escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
+            escopo = "Global" if m.get("fornecedor_id") in (None, "") \
+                     else f"Forn {m['fornecedor_id']}"
             self.tv_modelos.insert(
                 "",
                 "end",
-                values=(
-                    m.get("id", ""),
-                    m.get("titulo", ""),
-                    escopo,
-                    m.get("criado_em", "")
-                )
+                values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", ""))
             )
     
         # -------------------------
@@ -755,17 +751,13 @@ class TelaOrcamento(tk.Frame):
         rasc = _safe_listar("rascunho", forn_id)
     
         for m in rasc:
-            escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
+            escopo = "Global" if m.get("fornecedor_id") in (None, "") \
+                     else f"Forn {m['fornecedor_id']}"
             self.tv_rasc.insert(
                 "",
                 "end",
-                values=(
-                    m.get("id", ""),
-                    m.get("titulo", ""),
-                    escopo,
-                    m.get("criado_em", "")
-                )
-            )[]
+                values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", ""))
+            )
 
 
     def _editar_msg(self):
@@ -823,7 +815,7 @@ class TelaOrcamento(tk.Frame):
             messagebox.showinfo("OK", "Mensagem atualizada com sucesso.")
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao atualizar mensagem:\n{e}")
-    
+                
     def _excluir_msg(self, tipo: str):
         """Exclui mensagem selecionada da lista."""
         tv = self.tv_modelos if tipo == "modelo" else self.tv_rasc
@@ -850,7 +842,6 @@ class TelaOrcamento(tk.Frame):
             self._carregar_msgs()
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao excluir mensagem:\n{e}")
-    
        
     # ---------------- Enviar Orçamento por Email -----------------
 
