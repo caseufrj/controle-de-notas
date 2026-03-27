@@ -589,7 +589,6 @@ class TelaOrcamento(tk.Frame):
                     "", "end",
                     values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", ""))
                 )
-    ``
 
     # ---------------- Enviar Orçamento por Email -----------------
 
