@@ -103,6 +103,13 @@ class TelaOrcamento(tk.Frame):
 
         # <<<<<< BOTÃO DE ANEXAR ARQUIVO >>>>>>
         ttk.Button(msg_box, text="Anexar arquivo", command=self._add_anexo).pack(anchor="w", padx=6, pady=(0, 6))
+        # --- Lista visual dos anexos adicionados ---
+        self.frm_anexos = tk.Frame(msg_box, bg="white")
+        self.frm_anexos.pack(fill="x", padx=6, pady=(0, 6))
+        
+        self.lbl_anexos = tk.Label(self.frm_anexos, text="Nenhum anexo", bg="white", fg="#444")
+        self.lbl_anexos.pack(anchor="w")
+
         # ---------- Itens em rascunho ----------
         lf_rasc = ttk.LabelFrame(self, text="Itens em rascunho (não salvos)")
         lf_rasc.pack(fill="both", expand=True, padx=12, pady=(4, 2))
@@ -211,9 +218,35 @@ class TelaOrcamento(tk.Frame):
         )
         if not arq:
             return
-
+    
         self._anexos_extra.append(arq)
-        messagebox.showinfo("Anexo", f"Arquivo anexado:\n{arq}")
+        self._atualizar_lista_anexos()
+
+    def _atualizar_lista_anexos(self):
+        for widget in self.frm_anexos.winfo_children():
+            widget.destroy()
+    
+        if not self._anexos_extra:
+            tk.Label(self.frm_anexos, text="Nenhum anexo", bg="white", fg="#444").pack(anchor="w")
+            return
+    
+        for idx, path in enumerate(self._anexos_extra, start=1):
+            linha = tk.Frame(self.frm_anexos, bg="white")
+            linha.pack(anchor="w", fill="x")
+    
+            tk.Label(linha, text=f"{idx}. {path}", bg="white").pack(side="left")
+    
+            btn_del = ttk.Button(linha, text="Excluir", width=8,
+                command=lambda p=path: self._remover_anexo(p))
+            btn_del.pack(side="left", padx=8)
+
+    def _remover_anexo(self, path):
+        try:
+            self._anexos_extra.remove(path)
+        except:
+            pass
+        self._atualizar_lista_anexos()
+
 
     def _carregar_fornecedores(self):
         fs = banco.fornecedores_listar()
@@ -523,6 +556,37 @@ class TelaOrcamento(tk.Frame):
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao excluir: {e}")
 
+    def _usar_msg(self, tipo: str):
+        tv = self.tv_modelos if tipo == "modelo" else self.tv_rasc
+        sel = tv.selection()
+        if not sel:
+            messagebox.showwarning("Atenção", "Selecione uma mensagem.")
+            return
+    
+        vals = tv.item(sel[0], "values")
+        try:
+            mid = int(vals[0])
+        except:
+            messagebox.showerror("Erro", "ID inválido.")
+            return
+    
+        msg = banco.mensagem_obter(mid)
+        if not msg:
+            messagebox.showwarning("Aviso", "Mensagem não encontrada.")
+            return
+    
+        self._msg_editando_id = mid
+        self._autosave_msg_id = mid if msg.get("tipo") == "rascunho" else None
+    
+        self.e_titulo_msg.delete(0, "end")
+        self.e_titulo_msg.insert(0, msg.get("titulo", ""))
+    
+        self.txt_msg.delete("1.0", "end")
+        self.txt_msg.insert("1.0", msg.get("conteudo", ""))
+    
+        # Foca no campo mensagem
+        self.txt_msg.focus_set()
+            
     def _carregar_msgs(self):
         """Carrega Modelos e Rascunhos combinando globais e do fornecedor atual."""
         forn_id = self._fornecedor_id_atual()
