@@ -671,7 +671,7 @@ class TelaOrcamento(tk.Frame):
     
         # -------------------------------
         # RASCUNHOS
-        -------------------------------
+        #-------------------------------
         rasc = _safe_listar("rascunho", forn_id)
     
         for m in rasc:
