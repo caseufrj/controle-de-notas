@@ -120,6 +120,63 @@ class TelaOrcamento(tk.Frame):
         self.lbl_sem_anexo = tk.Label(self.frm_anexos, text="Nenhum anexo", bg="white", fg="#666")
         self.lbl_sem_anexo.pack(anchor="w")
 
+        # ---------- Mensagens (Modelos e Rascunhos) ----------
+        lf_msg = ttk.LabelFrame(self, text="Mensagens (Modelos e Rascunhos)")
+        lf_msg.pack(fill="both", expand=True, padx=12, pady=(4, 8))
+        
+        # Barra de busca
+        busca_bar = tk.Frame(lf_msg)
+        busca_bar.pack(fill="x", padx=6, pady=6)
+        tk.Label(busca_bar, text="Buscar (título/conteúdo):").pack(side="left")
+        self.e_msg_busca = ttk.Entry(busca_bar, width=40)
+        self.e_msg_busca.pack(side="left", padx=6)
+        ttk.Button(busca_bar, text="Filtrar listas", command=self._carregar_msgs).pack(side="left")
+        
+        # Botões gerais
+        msg_edit = tk.Frame(lf_msg)
+        msg_edit.pack(fill="x", padx=6, pady=(0, 6))
+        ttk.Button(msg_edit, text="Editar selecionada", command=self._editar_msg).pack(side="left")
+        ttk.Button(msg_edit, text="Salvar alterações", command=self._salvar_alteracoes_msg).pack(side="left", padx=6)
+        
+        # Notebook
+        nb = ttk.Notebook(lf_msg)
+        nb.pack(fill="both", expand=True, padx=6, pady=6)
+        
+        # Aba MODELOS
+        aba_modelos = tk.Frame(nb)
+        nb.add(aba_modelos, text="Modelos")
+        
+        cols_m = ("id", "titulo", "fornecedor_id", "criado_em")
+        self.tv_modelos = ttk.Treeview(aba_modelos, columns=cols_m, show="headings", height=6)
+        for c, h, w in zip(cols_m, ("ID", "Título", "Fornecedor", "Criado em"), (60, 250, 120, 140)):
+            self.tv_modelos.heading(c, text=h)
+            self.tv_modelos.column(c, width=w, anchor="w")
+        self.tv_modelos.pack(fill="both", expand=True, padx=4, pady=4)
+        self.tv_modelos.bind("<Double-1>", lambda e: self._usar_msg("modelo"))
+        
+        bar_m = tk.Frame(aba_modelos)
+        bar_m.pack(fill="x", padx=4, pady=(0, 6))
+        ttk.Button(bar_m, text="Usar na mensagem", command=lambda: self._usar_msg("modelo")).pack(side="left")
+        ttk.Button(bar_m, text="Excluir", command=lambda: self._excluir_msg("modelo")).pack(side="left", padx=6)
+        ttk.Button(bar_m, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=6)
+        
+        # Aba RASCUNHOS
+        aba_rasc = tk.Frame(nb)
+        nb.add(aba_rasc, text="Rascunhos")
+        
+        self.tv_rasc = ttk.Treeview(aba_rasc, columns=cols_m, show="headings", height=6)
+        for c, h, w in zip(cols_m, ("ID", "Título", "Fornecedor", "Criado em"), (60, 250, 120, 140)):
+            self.tv_rasc.heading(c, text=h)
+            self.tv_rasc.column(c, width=w, anchor="w")
+        self.tv_rasc.pack(fill="both", expand=True, padx=4, pady=4)
+        self.tv_rasc.bind("<Double-1>", lambda e: self._usar_msg("rascunho"))
+        
+        bar_r = tk.Frame(aba_rasc)
+        bar_r.pack(fill="x", padx=4, pady=(0, 6))
+        ttk.Button(bar_r, text="Usar na mensagem", command=lambda: self._usar_msg("rascunho")).pack(side="left")
+        ttk.Button(bar_r, text="Excluir", command=lambda: self._excluir_msg("rascunho")).pack(side="left", padx=6)
+        ttk.Button(bar_r, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=6)
+
         # ---------- Itens em rascunho ----------
         lf_rasc = ttk.LabelFrame(self, text="Itens em rascunho (não salvos)")
         lf_rasc.pack(fill="both", expand=True, padx=12, pady=(4, 2))
@@ -622,6 +679,90 @@ class TelaOrcamento(tk.Frame):
         if hasattr(self, "cb_modelo"):
             self.cb_modelo.set("")
             self.cb_modelo["values"] = []
+
+
+    def _editar_msg(self):
+        """Carrega para edição a mensagem selecionada (modelo ou rascunho)."""
+        # Verifica se há seleção em alguma das duas listas
+        sel = self.tv_modelos.selection() or self.tv_rasc.selection()
+        if not sel:
+            messagebox.showwarning("Atenção", "Selecione uma mensagem nas listas.")
+            return
+    
+        # Descobre em qual Treeview está a seleção
+        tv = self.tv_modelos if self.tv_modelos.selection() else self.tv_rasc
+        vals = tv.item(sel[0], "values")
+        try:
+            mid = int(vals[0])
+        except:
+            messagebox.showerror("Erro", "Não foi possível identificar a mensagem selecionada.")
+            return
+    
+        msg = banco.mensagem_obter(mid)
+        if not msg:
+            messagebox.showwarning("Aviso", "Mensagem não encontrada no banco.")
+            return
+    
+        # Preenche editor
+        self._msg_editando_id = mid
+        self._autosave_msg_id = mid if msg.get("tipo") == "rascunho" else None
+    
+        self.e_titulo_msg.delete(0, "end")
+        self.e_titulo_msg.insert(0, msg.get("titulo", ""))
+    
+        self.txt_msg.delete("1.0", "end")
+        self.txt_msg.insert("1.0", msg.get("conteudo", ""))
+    
+        # Foca no editor
+        self.txt_msg.focus_set()
+
+
+    def _salvar_alteracoes_msg(self):
+        """Salva alterações feitas no editor para a mensagem atualmente em edição."""
+        if not self._msg_editando_id:
+            messagebox.showwarning("Edição", "Nenhuma mensagem carregada para edição.")
+            return
+    
+        titulo = (self.e_titulo_msg.get() or "").strip()
+        conteudo = self.txt_msg.get("1.0", "end").strip()
+    
+        if not titulo or not conteudo:
+            messagebox.showwarning("Validação", "Título e conteúdo são obrigatórios.")
+            return
+    
+        try:
+            banco.mensagem_atualizar(self._msg_editando_id, titulo, conteudo)
+            self._carregar_msgs()
+            messagebox.showinfo("OK", "Mensagem atualizada com sucesso.")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao atualizar mensagem:\n{e}")
+    
+    def _excluir_msg(self, tipo: str):
+        """Exclui mensagem selecionada da lista."""
+        tv = self.tv_modelos if tipo == "modelo" else self.tv_rasc
+        sel = tv.selection()
+    
+        if not sel:
+            messagebox.showwarning("Atenção", "Selecione uma mensagem para excluir.")
+            return
+    
+        vals = tv.item(sel[0], "values")
+        try:
+            mid = int(vals[0])
+        except:
+            messagebox.showerror("Erro", "ID inválido.")
+            return
+    
+        if not messagebox.askyesno("Confirmar", "Excluir a mensagem selecionada?"):
+            return
+    
+        try:
+            banco.mensagem_excluir(mid)
+            self._msg_editando_id = None
+            self._autosave_msg_id = None
+            self._carregar_msgs()
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao excluir mensagem:\n{e}")
     
         # -------------------------------
         # Função interna segura
