@@ -84,7 +84,7 @@ class TelaOrcamento(tk.Frame):
         # BLOCO 2 — CAIXA LATERAL (MODELO / RASCUNHO / ANEXOS)
         # ======================================================
         side = tk.Frame(form, bg="white")
-        side.grid(column=6, row=0, rowspan=5, sticky="ne", padx=(10, 6), pady=3)
+        side.grid(column=5, row=0, rowspan=7, sticky="n", padx=(10, 6), pady=3)
     
         ttk.Button(side, text="Add", command=self._adicionar).pack(fill="x", pady=(0, 8))
     
@@ -125,7 +125,7 @@ class TelaOrcamento(tk.Frame):
         # BLOCO 3 — ABAS (MODELOS / RASCUNHOS)
         # ======================================================
         lf_msg = ttk.LabelFrame(form, text="Mensagens (Modelos e Rascunhos)")
-        lf_msg.grid(column=1, row=6, columnspan=5, sticky="we", padx=6, pady=(4, 8))
+        self.txt_msg.grid(column=1, row=4, columnspan=4, sticky="we", padx=6, pady=3)
     
         busca_bar = tk.Frame(lf_msg)
         busca_bar.pack(fill="x", padx=6, pady=6)
