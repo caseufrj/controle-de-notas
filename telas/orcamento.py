@@ -33,10 +33,10 @@ class TelaOrcamento(tk.Frame):
         form = ttk.LabelFrame(self, text="Lançar itens para Orçamento")
         form.pack(fill="x", padx=12, pady=5)
 
-        def campo(lbl, col, row, width=28):
-            tk.Label(form, text=lbl).grid(column=col, row=row, sticky="w", padx=6, pady=2)
+        def campo(lbl, col, row, width=25):
+            tk.Label(form, text=lbl).grid(column=col, row=row, sticky="w", padx=3, pady=1)
             e = ttk.Entry(form, width=width)
-            e.grid(column=col + 1, row=row, sticky="ew", padx=6, pady=2)
+            e.grid(column=col + 1, row=row, sticky="ew", padx=3, pady=1)
             return e
 
         self.e_cod = campo("Cód AGHU*:", 0, 0)
@@ -54,12 +54,12 @@ class TelaOrcamento(tk.Frame):
 
         # Botão Add
         btn_frame = tk.Frame(form, bg="white")
-        btn_frame.grid(column=6, row=0, rowspan=2, sticky="n", padx=10)
+        btn_frame.grid(column=5, row=0, rowspan=2, sticky="n", padx=4)
         ttk.Button(btn_frame, text="Add", command=self._adicionar, width=10).pack(pady=2)
 
         # Modelo rápido
         modelo_frame = tk.Frame(form, bg="white")
-        modelo_frame.grid(column=0, row=2, columnspan=6, sticky="ew", padx=6, pady=2)
+        modelo_frame.grid(column=0, row=2, columnspan=5, sticky="ew", padx=3, pady=1)
         tk.Label(modelo_frame, text="Modelo:", bg="white").pack(side="left", padx=6)
         self.cb_modelo = ttk.Combobox(modelo_frame, state="readonly", width=40)
         self.cb_modelo.pack(side="left", padx=6, fill="x", expand=True)
@@ -67,9 +67,9 @@ class TelaOrcamento(tk.Frame):
 
         # Mensagem p/ email
         msg_frame = tk.Frame(form, bg="white")
-        msg_frame.grid(column=0, row=3, columnspan=6, sticky="ew", padx=6, pady=2)
+        msg_frame.grid(column=0, row=3, columnspan=5, sticky="ew", padx=3, pady=1)
         tk.Label(msg_frame, text="Mensagem p/ e-mail:", bg="white").pack(anchor="w", padx=6, pady=(0, 2))
-        self.txt_msg = tk.Text(msg_frame, width=80, height=2)
+        self.txt_msg = tk.Text(msg_frame, width=70, height=2)
         self.txt_msg.pack(fill="both", expand=True, padx=6, pady=2)
 
         # Autosave
@@ -108,8 +108,8 @@ class TelaOrcamento(tk.Frame):
         self.lbl_sem_anexo.pack(anchor="w")
 
         # ========== ABAS MODELOS/RASCUNHOS ==========
-        lf_msg = ttk.LabelFrame(self, text="Mensagens (Modelos e Rascunhos)")
-        lf_msg.pack(fill="both", expand=False, padx=12, pady=5)
+        lf_msg = ttk.LabelFrame(form, text="Mensagens (Modelos e Rascunhos)")
+        lf_msg.grid(column=0, row=4, columnspan=6, sticky="ew", padx=6, pady=5)
 
         busca_bar = tk.Frame(lf_msg)
         busca_bar.pack(fill="x", padx=6, pady=4)
