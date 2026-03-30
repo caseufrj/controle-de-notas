@@ -31,13 +31,19 @@ class TelaOrcamento(tk.Frame):
 
         # ========== BLOCO 1: FORMULÁRIO PRINCIPAL ==========
         form = ttk.LabelFrame(self, text="Lançar itens para Orçamento")
-        form.pack(fill="x", padx=12, pady=2)
+        form.pack(fill="x", side="top", padx=12, pady=2)
+
+        # Adicione isso para garantir que as linhas fiquem coladas:
+        for i in range(5):
+            form.rowconfigure(i, weight=0, minsize=0)
         
         def campo(lbl, col, row, width=22):
-            tk.Label(form, text=lbl).grid(column=col, row=row, sticky="w", padx=2, pady=0)
+            # pady=(0, 2) cria um pequeno respiro apenas entre as linhas
+            tk.Label(form, text=lbl).grid(column=col, row=row, sticky="w", padx=2, pady=(0, 2))
             e = ttk.Entry(form, width=width)
-            e.grid(column=col + 1, row=row, sticky="ew", padx=2, pady=0)
+            e.grid(column=col + 1, row=row, sticky="ew", padx=2, pady=(0, 2))
             return e
+
         
         # Campos principais
         self.e_cod = campo("Cód AGHU*:", 0, 0)
@@ -69,7 +75,9 @@ class TelaOrcamento(tk.Frame):
             .grid(column=0, row=3, sticky="w", padx=2, pady=(2, 0))
         
         self.txt_msg = tk.Text(form, height=1)
-        self.txt_msg.grid(column=0, row=4, columnspan=6, sticky="ew", padx=2, pady=1)
+        # Mude o pady para 0
+        self.txt_msg.grid(column=0, row=4, columnspan=6, sticky="ew", padx=2, pady=0)
+
         
         # Autosave
         self._autosave_job = None
