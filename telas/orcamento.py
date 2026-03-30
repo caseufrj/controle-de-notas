@@ -824,7 +824,7 @@ class TelaOrcamento(tk.Frame):
             })
 
     def _enviar_email(self):
-        values_rows = [self.tv.item(iid, "values") for iid in self.tv.get_children()]
+        values_rows = [self.tv_rasc.item(iid, "values") for iid in self.tv_rasc.get_children()]
         if not values_rows:
             messagebox.showwarning("Atenção", "Não há itens para enviar.")
             return
