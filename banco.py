@@ -987,6 +987,18 @@ def mensagem_inserir(d: Dict[str, Any]) -> int:
     conn.close()
     return new_id
 
+def mensagem_obter(id_msg):
+    """Retorna uma mensagem (modelo ou rascunho) pelo ID."""
+    try:
+        sql = """
+            SELECT id, tipo, titulo, conteudo, fornecedor_id, criado_em
+            FROM mensagens
+            WHERE id = ?
+        """
+        return executar_select_um(sql, (id_msg,))
+    except Exception as e:
+        print("Erro mensagem_obter:", e)
+        return None
 
 # ------ Listar mensagens modelo / rascunho ------
 def mensagens_listar(tipo: Optional[str] = None,
