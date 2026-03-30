@@ -174,14 +174,14 @@ class TelaOrcamento(tk.Frame):
         ttk.Button(bar_top, text="Filtrar", command=self._carregar_msgs).pack(side="left")
         
         # NOTEBOOK MODELOS / RASCUNHOS
-        nb = ttk.Notebook(lf_msg)
-        nb.pack(fill="both", expand=True, padx=6, pady=4)
+        self.nb_msg = ttk.Notebook(lf_msg)
+        self.nb_msg.pack(fill="both", expand=True, padx=6, pady=4)
         
         # -------------------------------------------------------------
         # ABA 1 — MODELOS
         # -------------------------------------------------------------
         aba_modelos = tk.Frame(nb)
-        nb.add(aba_modelos, text="Modelos")
+        self.nb_msg.add(aba_modelos, text="Modelos")
         
         cols_m = ("id", "titulo", "fornecedor_id", "criado_em")
         self.tv_modelos = ttk.Treeview(aba_modelos, columns=cols_m, show="headings", height=5)
@@ -206,7 +206,7 @@ class TelaOrcamento(tk.Frame):
         # ABA 2 — RASCUNHO
         # -------------------------------------------------------------
         aba_rasc = tk.Frame(nb)
-        nb.add(aba_rasc, text="Rascunhos")
+        self.nb_msg.add(aba_rasc, text="Rascunhos")
         
         cols_rasc = ("id", "titulo", "fornecedor", "resumo")
         heads_rasc = ("Cód AGHU", "Nome Item", "Qtde", "Fornecedor", "Resumo da mensagem")
@@ -781,12 +781,28 @@ class TelaOrcamento(tk.Frame):
             ))
 
     def _editar_msg(self):
-        sel = self.tv_modelos.selection() or self.tv_rasc.selection()
+        aba_atual = self.nb_msg.index(self.nb_msg.select())
+    
+        # 0 = Modelos
+        # 1 = Rascunhos
+    
+        if aba_atual == 0:
+            tv = self.tv_modelos
+            tipo = "modelo"
+    
+        elif aba_atual == 1:
+            tv = self.tv_rasc
+            tipo = "rascunho"
+    
+        else:
+            messagebox.showwarning("Atenção", "Aba inválida.")
+            return
+    
+        sel = tv.selection()
         if not sel:
             messagebox.showwarning("Atenção", "Selecione uma mensagem.")
             return
     
-        tv = self.tv_modelos if self.tv_modelos.selection() else self.tv_rasc
         vals = tv.item(sel[0], "values")
     
         try:
@@ -798,11 +814,12 @@ class TelaOrcamento(tk.Frame):
         msg = banco.mensagem_obter(mid)
     
         if not msg:
-            messagebox.showerror("Erro", "Mensagem não encontrada no banco.")
+            messagebox.showerror("Erro", "Mensagem não encontrada.")
             return
     
+        # 🔥 agora correto
         self._msg_editando_id = mid
-        self._autosave_msg_id = mid  # 🔥 IMPORTANTE
+        self._autosave_msg_id = mid if tipo == "rascunho" else None
     
         self.e_titulo_msg.delete(0, "end")
         self.e_titulo_msg.insert(0, msg.get("titulo", ""))
@@ -810,7 +827,7 @@ class TelaOrcamento(tk.Frame):
         self.txt_msg.delete("1.0", "end")
         self.txt_msg.insert("1.0", msg.get("conteudo", ""))
     
-        # 🔥 carregar anexos
+        # anexos
         import json
         anexos = msg.get("anexos")
         if anexos:
