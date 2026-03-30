@@ -178,17 +178,28 @@ class TelaOrcamento(tk.Frame):
 
         bar_r = tk.Frame(aba_rasc)
         bar_r.pack(fill="x", padx=4, pady=(0, 4))
-        ttk.Button(bar_r, text="Usar", command=lambda: self._usar_msg("rascunho")).pack(side="left")
-        ttk.Button(bar_r, text="Excluir", command=lambda: self._excluir_msg("rascunho")).pack(side="left", padx=6)
-        ttk.Button(bar_r, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=6)
-
-        # ========== AÇÕES PRINCIPAIS ==========
-        rod = tk.Frame(self, bg="white")
-        rod.pack(fill="x", padx=12, pady=5)
-        self.btn_email = ttk.Button(rod, text="Enviar por e-mail", command=self._enviar_email)
-        self.btn_email.pack(side="right", padx=6)
-        self.btn_export = ttk.Button(rod, text="Exportar para Excel", command=self._exportar_excel)
-        self.btn_export.pack(side="right", padx=6)
+        
+        # ESQUERDA
+        ttk.Button(bar_r, text="Usar", command=lambda: self._usar_msg("rascunho"))\
+            .pack(side="left")
+        
+        ttk.Button(bar_r, text="Excluir", command=lambda: self._excluir_msg("rascunho"))\
+            .pack(side="left", padx=6)
+        
+        ttk.Button(bar_r, text="Atualizar", command=self._carregar_msgs)\
+            .pack(side="left", padx=6)
+        
+        
+        # 👉 ESPAÇADOR (empurra os outros pra direita)
+        tk.Frame(bar_r).pack(side="left", expand=True)
+        
+        
+        # DIREITA (SEUS BOTÕES)
+        ttk.Button(bar_r, text="Exportar para Excel", command=self._exportar_excel)\
+            .pack(side="right", padx=6)
+        
+        ttk.Button(bar_r, text="Enviar por e-mail", command=self._enviar_email)\
+            .pack(side="right", padx=6)
 
         # ========== HISTÓRICO ORÇAMENTOS ==========
         lf_hist = ttk.LabelFrame(self, text="Orçamentos já salvos")
