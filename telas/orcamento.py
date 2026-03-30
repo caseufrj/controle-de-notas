@@ -208,7 +208,7 @@ class TelaOrcamento(tk.Frame):
         nb.add(aba_rasc, text="Rascunhos")
         
         self.tv_rasc = ttk.Treeview(aba_rasc, columns=cols_m, show="headings", height=5)
-        for c, h, w in zip(cols_m, ("ID","Título","Fornecedor","Criado em"), (60,250,120,140)):
+        for c, h, w in zip(cols_m, ("Cod AGHU","Nome Item", "Qtde", "Fornecedor","Criado em"), (60,250,120,140)):
             self.tv_rasc.heading(c, text=h)
             self.tv_rasc.column(c, width=w, anchor="w")
         self.tv_rasc.pack(fill="both", expand=True, padx=4, pady=4)
