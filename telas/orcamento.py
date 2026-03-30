@@ -33,10 +33,10 @@ class TelaOrcamento(tk.Frame):
         form = ttk.LabelFrame(self, text="Lançar itens para Orçamento")
         form.pack(fill="x", padx=12, pady=5)
 
-        def campo(lbl, col, row, width=25):
-            tk.Label(form, text=lbl).grid(column=col, row=row, sticky="w", padx=3, pady=1)
+        def campo(lbl, col, row, width=22):
+            tk.Label(form, text=lbl).grid(column=col, row=row, sticky="w", padx=2, pady=1)
             e = ttk.Entry(form, width=width)
-            e.grid(column=col + 1, row=row, sticky="ew", padx=3, pady=1)
+            e.grid(column=col + 1, row=row, sticky="ew", padx=2, pady=1)
             return e
 
         self.e_cod = campo("Cód AGHU*:", 0, 0)
@@ -54,7 +54,7 @@ class TelaOrcamento(tk.Frame):
 
         # Botão Add
         btn_frame = tk.Frame(form, bg="white")
-        btn_frame.grid(column=5, row=0, rowspan=2, sticky="n", padx=4)
+        btn_frame.grid(column=6, row=1, sticky="w", padx=6, pady=1)
         ttk.Button(btn_frame, text="Add", command=self._adicionar, width=10).pack(pady=2)
 
         # Modelo rápido
@@ -273,6 +273,12 @@ class TelaOrcamento(tk.Frame):
         self._carregar_salvos()
         self._carregar_msgs()
         self._carregar_msgs_enviadas()
+
+        form.grid_rowconfigure(0, pad=1)
+        form.grid_rowconfigure(1, pad=1)
+        form.grid_rowconfigure(2, pad=1)
+        form.grid_rowconfigure(3, pad=1)
+        
 
     # ==================== MÉTODOS DE SUPORTE ====================
 
