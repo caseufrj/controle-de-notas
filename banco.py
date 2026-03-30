@@ -1079,12 +1079,12 @@ def itens_rascunho_inserir(d: Dict[str, Any]) -> int:
     cur.execute("""
         INSERT INTO itens_rascunho
             (fornecedor_id, cod_aghu, nome_item, qtde, vl_unit,
-             numero_empenho, observacao)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+             numero_empenho, observacao, mensagem_email)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        d.get("fornecedor_id"), d["cod_aghu"], d["nome_item"],
-        d["qtde"], d["vl_unit"], d.get("numero_empenho"),
-        d.get("observacao")
+            d.get("fornecedor_id"), d["cod_aghu"], d["nome_item"],
+            d["qtde"], d["vl_unit"], d.get("numero_empenho"),
+            d.get("observacao"), d.get("mensagem_email")
     ))
     conn.commit()
     new_id = cur.lastrowid
