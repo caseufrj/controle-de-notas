@@ -119,7 +119,7 @@ class TelaOrcamento(tk.Frame):
         side_box = ttk.LabelFrame(right, text="Mensagem: Modelo / Rascunho")
         side_box.pack(fill="y", expand=True)
         
-        tk.Label(side_box, text="Título:").pack(anchor="w", padx=6, pady=(4, 0))
+        tk.Label(side_box, text="Assunto:").pack(anchor="w", padx=6, pady=(4, 0))
         self.e_titulo_msg = ttk.Entry(side_box, width=22)
         self.e_titulo_msg.pack(anchor="w", padx=6, pady=(0, 4))
         
@@ -208,7 +208,7 @@ class TelaOrcamento(tk.Frame):
         aba_rasc = tk.Frame(nb)
         nb.add(aba_rasc, text="Rascunhos")
         
-        cols_rasc = ("cod_aghu", "nome_item", "qtde", "fornecedor", "resumo")
+        cols_rasc = ("id", "titulo", "fornecedor", "resumo")
         heads_rasc = ("Cód AGHU", "Nome Item", "Qtde", "Fornecedor", "Resumo da mensagem")
         widths_rasc = (90, 250, 80, 180, 250)
         
@@ -504,7 +504,7 @@ class TelaOrcamento(tk.Frame):
                 "vl_unit": vu,
                 "numero_empenho": self.e_emp.get().strip(),
                 "observacao": self.e_obs.get().strip(),
-                "mensagem_email": self.txt_msg.get("1.0", "end").strip()
+                #"mensagem_email": self.txt_msg.get("1.0", "end").strip()
             })
         except Exception as e:
             messagebox.showwarning("Rascunho", f"Erro ao salvar rascunho:\n{e}")
@@ -770,7 +770,15 @@ class TelaOrcamento(tk.Frame):
         rasc = _safe_listar("rascunho", forn_id)
         for m in rasc:
             escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
-            self.tv_rasc.insert("", "end", values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", "")))
+            conteudo = m.get("conteudo", "") or ""
+            resumo = (conteudo[:60] + "...") if len(conteudo) > 60 else conteudo
+            
+            self.tv_rasc.insert("", "end", values=(
+                m.get("id", ""),
+                m.get("titulo", ""),
+                escopo,
+                resumo
+            ))
 
     def _editar_msg(self):
         sel = self.tv_modelos.selection() or self.tv_rasc.selection()
