@@ -159,92 +159,88 @@ class TelaOrcamento(tk.Frame):
         bar_top.pack(fill="x", padx=6, pady=4)
         
         # ESQUERDA (Editar)
-        ttk.Button(bar_top, text="Editar", command=self._editar_msg)\
-            .pack(side="left")
-        
-        ttk.Button(bar_top, text="Salvar alterações", command=self._salvar_alteracoes_msg)\
-            .pack(side="left", padx=6)
+        ttk.Button(bar_top, text="Editar", command=self._editar_msg).pack(side="left")
+        ttk.Button(bar_top, text="Salvar alterações", command=self._salvar_alteracoes_msg).pack(side="left", padx=6)
         
         # 👉 ESPAÇADOR (empurra pra direita)
         tk.Frame(bar_top).pack(side="left", expand=True)
         
         # DIREITA (Buscar)
         tk.Label(bar_top, text="Buscar:").pack(side="left")
-        
         self.e_msg_busca = ttk.Entry(bar_top, width=30)
         self.e_msg_busca.pack(side="left", padx=6)
+        ttk.Button(bar_top, text="Filtrar", command=self._carregar_msgs).pack(side="left")
         
-        ttk.Button(bar_top, text="Filtrar", command=self._carregar_msgs)\
-            .pack(side="left")
-        
-        # Notebook continua igual
+        # NOTEBOOK MODELOS / RASCUNHOS
         nb = ttk.Notebook(lf_msg)
         nb.pack(fill="both", expand=True, padx=6, pady=4)
-
+        
+        # -------------------------------------------------------------
+        # ABA 1 — MODELOS
+        # -------------------------------------------------------------
         aba_modelos = tk.Frame(nb)
         nb.add(aba_modelos, text="Modelos")
+        
         cols_m = ("id", "titulo", "fornecedor_id", "criado_em")
         self.tv_modelos = ttk.Treeview(aba_modelos, columns=cols_m, show="headings", height=5)
-        for c, h, w in zip(cols_m, ("ID", "Título", "Fornecedor", "Criado em"), (60, 250, 120, 140)):
+        for c, h, w in zip(cols_m, ("ID","Título","Fornecedor","Criado em"), (60,250,120,140)):
             self.tv_modelos.heading(c, text=h)
             self.tv_modelos.column(c, width=w, anchor="w")
         self.tv_modelos.pack(fill="both", expand=True, padx=4, pady=4)
-
+        
         bar_m = tk.Frame(aba_modelos)
-        bar_m.pack(fill="x", padx=4, pady=(0, 4))
+        bar_m.pack(fill="x", padx=4, pady=(0,4))
         
-        # ESQUERDA
-        ttk.Button(bar_m, text="Usar", command=lambda: self._usar_msg("modelo"))\
-            .pack(side="left")
+        ttk.Button(bar_m, text="Usar", command=lambda: self._usar_msg("modelo")).pack(side="left")
+        ttk.Button(bar_m, text="Excluir", command=lambda: self._excluir_msg("modelo")).pack(side="left", padx=6)
+        ttk.Button(bar_m, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=6)
         
-        ttk.Button(bar_m, text="Excluir", command=lambda: self._excluir_msg("modelo"))\
-            .pack(side="left", padx=6)
-        
-        ttk.Button(bar_m, text="Atualizar", command=self._carregar_msgs)\
-            .pack(side="left", padx=6)
-        
-        # 👉 ESPAÇADOR
         tk.Frame(bar_m).pack(side="left", expand=True)
         
-        # DIREITA (ADICIONAR)
-        ttk.Button(bar_m, text="Exportar para Excel", command=self._exportar_excel)\
-            .pack(side="right", padx=6)
+        ttk.Button(bar_m, text="Exportar para Excel", command=self._exportar_excel).pack(side="right", padx=6)
+        ttk.Button(bar_m, text="Enviar por e-mail", command=self._enviar_email).pack(side="right", padx=6)
         
-        ttk.Button(bar_m, text="Enviar por e-mail", command=self._enviar_email)\
-            .pack(side="right", padx=6)
-
+        # -------------------------------------------------------------
+        # ABA 2 — RASCUNHOS
+        # -------------------------------------------------------------
         aba_rasc = tk.Frame(nb)
         nb.add(aba_rasc, text="Rascunhos")
+        
         self.tv_rasc = ttk.Treeview(aba_rasc, columns=cols_m, show="headings", height=5)
-        for c, h, w in zip(cols_m, ("ID", "Título", "Fornecedor", "Criado em"), (60, 250, 120, 140)):
+        for c, h, w in zip(cols_m, ("ID","Título","Fornecedor","Criado em"), (60,250,120,140)):
             self.tv_rasc.heading(c, text=h)
             self.tv_rasc.column(c, width=w, anchor="w")
         self.tv_rasc.pack(fill="both", expand=True, padx=4, pady=4)
-
+        
         bar_r = tk.Frame(aba_rasc)
         bar_r.pack(fill="x", padx=4, pady=(0, 4))
         
-        # ESQUERDA
-        ttk.Button(bar_r, text="Usar", command=lambda: self._usar_msg("rascunho"))\
-            .pack(side="left")
+        ttk.Button(bar_r, text="Usar", command=lambda: self._usar_msg("rascunho")).pack(side="left")
+        ttk.Button(bar_r, text="Excluir", command=lambda: self._excluir_msg("rascunho")).pack(side="left", padx=6)
+        ttk.Button(bar_r, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=6)
         
-        ttk.Button(bar_r, text="Excluir", command=lambda: self._excluir_msg("rascunho"))\
-            .pack(side="left", padx=6)
-        
-        ttk.Button(bar_r, text="Atualizar", command=self._carregar_msgs)\
-            .pack(side="left", padx=6)
-        
-        
-        # 👉 ESPAÇADOR (empurra os outros pra direita)
         tk.Frame(bar_r).pack(side="left", expand=True)
         
+        ttk.Button(bar_r, text="Exportar para Excel", command=self._exportar_excel).pack(side="right", padx=6)
+        ttk.Button(bar_r, text="Enviar por e-mail", command=self._enviar_email).pack(side="right", padx=6)
         
-        # DIREITA (SEUS BOTÕES)
-        ttk.Button(bar_r, text="Exportar para Excel", command=self._exportar_excel)\
-            .pack(side="right", padx=6)
+        # -------------------------------------------------------------
+        # AQUI — TABELA DE ITENS EM RASCUNHO (self.tv)
+        # -------------------------------------------------------------
+        lf_rasc = ttk.LabelFrame(self, text="Itens em rascunho (não salvos)")
+        lf_rasc.pack(fill="both", expand=True, padx=12, pady=4)
         
-        ttk.Button(bar_r, text="Enviar por e-mail", command=self._enviar_email)\
-            .pack(side="right", padx=6)
+        cols = ("cod", "nome", "qt", "vu", "emp", "obs", "vl_total")
+        heads = ("Cód AGHU", "Nome", "Qtde", "Vlr Unit", "Nº Empenho", "Obs", "Vlr Total")
+        widths = (100, 260, 60, 90, 120, 260, 100)
+        
+        self.tv = ttk.Treeview(lf_rasc, columns=cols, show="headings", height=5)
+        for c, h, w in zip(cols, heads, widths):
+            self.tv.heading(c, text=h)
+            self.tv.column(c, width=w, anchor="w")
+        
+        self.tv.pack(fill="both", expand=True, padx=6, pady=4)
+
 
         # ========== NOTEBOOK HISTÓRICO + MENSAGENS ENVIADAS ==========
         notebook_hist = ttk.Notebook(self)
