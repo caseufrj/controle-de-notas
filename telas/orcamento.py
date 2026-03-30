@@ -202,15 +202,20 @@ class TelaOrcamento(tk.Frame):
         ttk.Button(bar_m, text="Enviar por e-mail", command=self._enviar_email).pack(side="right", padx=6)
         
         # -------------------------------------------------------------
-        # ABA 2 — RASCUNHOS
+        # ABA 2 — RASCUNHO
         # -------------------------------------------------------------
         aba_rasc = tk.Frame(nb)
         nb.add(aba_rasc, text="Rascunhos")
         
-        self.tv_rasc = ttk.Treeview(aba_rasc, columns=cols_m, show="headings", height=5)
-        for c, h, w in zip(cols_m, ("Cod AGHU","Nome Item", "Qtde", "Fornecedor","Criado em"), (60,250,120,140)):
+        cols_rasc = ("cod_aghu", "nome_item", "qtde", "fornecedor", "resumo")
+        heads_rasc = ("Cód AGHU", "Nome Item", "Qtde", "Fornecedor", "Resumo da mensagem")
+        widths_rasc = (90, 250, 80, 180, 250)
+        
+        self.tv_rasc = ttk.Treeview(aba_rasc, columns=cols_rasc, show="headings", height=6)
+        for c, h, w in zip(cols_rasc, heads_rasc, widths_rasc):
             self.tv_rasc.heading(c, text=h)
             self.tv_rasc.column(c, width=w, anchor="w")
+        
         self.tv_rasc.pack(fill="both", expand=True, padx=4, pady=4)
         
         bar_r = tk.Frame(aba_rasc)
@@ -471,20 +476,21 @@ class TelaOrcamento(tk.Frame):
     
         vt = qt * vu
     
-        # AGORA INSERE DIRETO NA ABA RASCUNHOS
+        # gerar resumo da mensagem
+        conteudo = self.txt_msg.get("1.0", "end").strip()
+        resumo = (conteudo[:60] + "...") if len(conteudo) > 60 else conteudo
+        
         self.tv_rasc.insert(
-            "", "end",
+            "",
+            "end",
             values=(
                 self.e_cod.get().strip(),
                 self.e_nome.get().strip(),
                 f"{qt}",
-                f"{vu:.2f}",
-                self.e_emp.get().strip(),
-                self.e_obs.get().strip(),
-                f"{vt:.2f}"
+                self.cb_fornec.get(),
+                resumo
             )
-        )
-    
+        )    
         try:
             banco.itens_rascunho_inserir({
                 "fornecedor_id": self._fornecedor_id_atual(),
@@ -493,7 +499,8 @@ class TelaOrcamento(tk.Frame):
                 "qtde": qt,
                 "vl_unit": vu,
                 "numero_empenho": self.e_emp.get().strip(),
-                "observacao": self.e_obs.get().strip()
+                "observacao": self.e_obs.get().strip(),
+                "mensagem_email": self.txt_msg.get("1.0", "end").strip()
             })
         except Exception as e:
             messagebox.showwarning("Rascunho", f"Erro ao salvar rascunho:\n{e}")
@@ -729,6 +736,7 @@ class TelaOrcamento(tk.Frame):
         if hasattr(self, "cb_modelo"):
             self.cb_modelo.set("")
             self.cb_modelo["values"] = []
+            
         def _safe_listar(tipo: str, fornecedor_id):
             try:
                 base = banco.mensagens_listar(tipo=tipo, fornecedor_id=fornecedor_id, busca=busca) or []
@@ -925,6 +933,10 @@ class TelaOrcamento(tk.Frame):
                 vu = float(r.get("vl_unit", 0) or 0)
                 vt = qt * vu
     
+                # gerar resumo baseado no campo mensagem_email (se você gravou isso no salvamento)
+                msg = r.get("mensagem_email", "") or ""
+                resumo = (msg[:60] + "...") if len(msg) > 60 else msg
+                
                 self.tv_rasc.insert(
                     "",
                     "end",
@@ -932,10 +944,8 @@ class TelaOrcamento(tk.Frame):
                         r.get("cod_aghu", ""),
                         r.get("nome_item", ""),
                         f"{qt}",
-                        f"{vu:.2f}",
-                        r.get("numero_empenho", ""),
-                        r.get("observacao", ""),
-                        f"{vt:.2f}"
+                        nome_forn,
+                        resumo
                     )
                 )
         except Exception as e:
