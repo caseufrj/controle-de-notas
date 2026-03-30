@@ -82,7 +82,7 @@ class TelaOrcamento(tk.Frame):
         tk.Label(left, text="Mensagem p/ e-mail:")\
             .grid(column=0, row=3, sticky="w", padx=2, pady=(4, 0))
         
-        self.txt_msg = tk.Text(left, height=2)
+        self.txt_msg = tk.Text(left, height=3)
         self.txt_msg.grid(column=0, row=4, columnspan=6, sticky="ew", padx=2, pady=2)
         
         self._lbl_autosave = tk.Label(left, text="", fg="#2c7")
