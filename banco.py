@@ -1083,19 +1083,23 @@ def mensagens_listar(tipo: Optional[str] = None,
 
 
 # ========== ATUALIZAR ==========
-def mensagem_atualizar(id_: int, novo_titulo: str, novo_conteudo: str) -> None:
+def mensagem_atualizar(id_: int, novo_titulo: str, novo_conteudo: str, anexos: str = None) -> None:
     """
-    Atualiza título e conteúdo de um modelo/rascunho.
+    Atualiza título, conteúdo e anexos de um modelo/rascunho.
     """
-    conn = conectar(); cur = conn.cursor()
+    conn = conectar()
+    cur = conn.cursor()
+
     cur.execute("""
         UPDATE mensagens_padrao
-           SET titulo=?, conteudo=?
-         WHERE id=?
-    """, (novo_titulo, novo_conteudo, id_))
+           SET titulo = ?, 
+               conteudo = ?, 
+               anexos = ?
+         WHERE id = ?
+    """, (novo_titulo, novo_conteudo, anexos, id_))
+
     conn.commit()
     conn.close()
-
 
 # ========== EXCLUIR ==========
 def mensagem_excluir(id_: int) -> None:
