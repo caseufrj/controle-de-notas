@@ -223,24 +223,6 @@ class TelaOrcamento(tk.Frame):
         
         ttk.Button(bar_r, text="Exportar para Excel", command=self._exportar_excel).pack(side="right", padx=6)
         ttk.Button(bar_r, text="Enviar por e-mail", command=self._enviar_email).pack(side="right", padx=6)
-        
-        # -------------------------------------------------------------
-        # AQUI — TABELA DE ITENS EM RASCUNHO (self.tv)
-        # -------------------------------------------------------------
-        lf_rasc = ttk.LabelFrame(self, text="Itens em rascunho (não salvos)")
-        lf_rasc.pack(fill="both", expand=True, padx=12, pady=4)
-        
-        cols = ("cod", "nome", "qt", "vu", "emp", "obs", "vl_total")
-        heads = ("Cód AGHU", "Nome", "Qtde", "Vlr Unit", "Nº Empenho", "Obs", "Vlr Total")
-        widths = (100, 260, 60, 90, 120, 260, 100)
-        
-        self.tv = ttk.Treeview(lf_rasc, columns=cols, show="headings", height=5)
-        for c, h, w in zip(cols, heads, widths):
-            self.tv.heading(c, text=h)
-            self.tv.column(c, width=w, anchor="w")
-        
-        self.tv.pack(fill="both", expand=True, padx=6, pady=4)
-
 
         # ========== NOTEBOOK HISTÓRICO + MENSAGENS ENVIADAS ==========
         notebook_hist = ttk.Notebook(self)
@@ -379,7 +361,6 @@ class TelaOrcamento(tk.Frame):
         self._modelos_cache = []
 
         self._carregar_fornecedores()
-        self._carregar_itens_rascunho()
         self._carregar_salvos()
         self._carregar_msgs()
         self._carregar_msgs_enviadas()
@@ -455,23 +436,40 @@ class TelaOrcamento(tk.Frame):
         except:
             messagebox.showwarning("Validação", "Digite números válidos.")
             return
+    
         if not (self.e_cod.get().strip() and self.e_nome.get().strip() and qt and vu):
             messagebox.showwarning("Validação", "Preencha todos os campos obrigatórios.")
             return
+    
         vt = qt * vu
-        self.tv.insert("", "end", values=(self.e_cod.get().strip(), self.e_nome.get().strip(),
-                f"{qt}", f"{vu:.2f}", self.e_emp.get().strip(), self.e_obs.get().strip(), f"{vt:.2f}"))
+    
+        # AGORA INSERE DIRETO NA ABA RASCUNHOS
+        self.tv_rasc.insert(
+            "", "end",
+            values=(
+                self.e_cod.get().strip(),
+                self.e_nome.get().strip(),
+                f"{qt}",
+                f"{vu:.2f}",
+                self.e_emp.get().strip(),
+                self.e_obs.get().strip(),
+                f"{vt:.2f}"
+            )
+        )
+    
         try:
             banco.itens_rascunho_inserir({
                 "fornecedor_id": self._fornecedor_id_atual(),
                 "cod_aghu": self.e_cod.get().strip(),
                 "nome_item": self.e_nome.get().strip(),
-                "qtde": qt, "vl_unit": vu,
+                "qtde": qt,
+                "vl_unit": vu,
                 "numero_empenho": self.e_emp.get().strip(),
                 "observacao": self.e_obs.get().strip()
             })
         except Exception as e:
             messagebox.showwarning("Rascunho", f"Erro ao salvar rascunho:\n{e}")
+    
         for e in (self.e_cod, self.e_nome, self.e_qt, self.e_vu, self.e_emp, self.e_obs):
             e.delete(0, "end")
 
@@ -848,7 +846,35 @@ class TelaOrcamento(tk.Frame):
         self._carregar_msgs_enviadas()
 
     def _carregar_itens_rascunho(self):
-        pass
+        for i in self.tv_rasc.get_children():
+            self.tv_rasc.delete(i)
+    
+        forn_id = self._fornecedor_id_atual()
+        if not forn_id:
+            return
+    
+        try:
+            rows = banco.itens_rascunho_listar(fornecedor_id=forn_id)
+            for r in rows:
+                qt = float(r.get("qtde", 0) or 0)
+                vu = float(r.get("vl_unit", 0) or 0)
+                vt = qt * vu
+    
+                self.tv_rasc.insert(
+                    "",
+                    "end",
+                    values=(
+                        r.get("cod_aghu", ""),
+                        r.get("nome_item", ""),
+                        f"{qt}",
+                        f"{vu:.2f}",
+                        r.get("numero_empenho", ""),
+                        r.get("observacao", ""),
+                        f"{vt:.2f}"
+                    )
+                )
+        except Exception as e:
+            print("Erro ao carregar rascunho:", e)
 
     def _carregar_msgs_enviadas(self):
         for i in self.tv_msgs_enviadas.get_children():
