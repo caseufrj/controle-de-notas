@@ -103,6 +103,7 @@ class TelaOrcamento(tk.Frame):
         # 🔥 AQUI — ANTES DOS BINDs
         self._autosave_msg_id = None
         self._msg_editando_id = None
+        self._rascunho_inicializado = False
         
         # Eventos autosave
         self.txt_msg.bind("<KeyRelease>", lambda e: self._agendar_autosave())
@@ -418,17 +419,44 @@ class TelaOrcamento(tk.Frame):
         self._autosave_job = self.after(1000, self._autosave_now)
 
     def _autosave_now(self):
-        if self._autosave_msg_id:
-            titulo = self.e_titulo_msg.get().strip()
-            conteudo = self.txt_msg.get("1.0", "end").strip()
-            if titulo and conteudo:
-                try:
-                    banco.mensagem_atualizar(self._autosave_msg_id, titulo, conteudo)
-                    self._lbl_autosave.config(text="Salvo automaticamente")
-                    self.after(2000, lambda: self._lbl_autosave.config(text=""))
-                except:
-                    pass
-
+        conteudo = self.txt_msg.get("1.0", "end").strip()
+        if not conteudo:
+            return
+    
+        titulo = self.e_titulo_msg.get().strip()
+    
+        # Se ainda não existe um rascunho associado
+        if not self._autosave_msg_id:
+            # cria um rascunho automático
+            titulo_auto = titulo or f"Rascunho {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
+            try:
+                novo_id = banco.mensagem_inserir({
+                    "tipo": "rascunho",
+                    "titulo": titulo_auto,
+                    "conteudo": conteudo,
+                    "fornecedor_id": self._fornecedor_id_atual()
+                })
+                self._autosave_msg_id = novo_id
+                self._msg_editando_id = novo_id
+    
+                self.e_titulo_msg.delete(0, "end")
+                self.e_titulo_msg.insert(0, titulo_auto)
+            except Exception as e:
+                print("Erro ao criar rascunho automático:", e)
+                return
+    
+        # Se já existe um rascunho → atualizar
+        else:
+            titulo_final = titulo or "Rascunho automático"
+            try:
+                banco.mensagem_atualizar(self._autosave_msg_id, titulo_final, conteudo)
+            except:
+                pass
+    
+        # Exibir feedback
+        self._lbl_autosave.config(text="Rascunho salvo automaticamente")
+        self.after(2000, lambda: self._lbl_autosave.config(text=""))
+        
     def _adicionar(self):
         try:
             qt = float(str(self.e_qt.get() or 0).replace(",", "."))
@@ -760,11 +788,27 @@ class TelaOrcamento(tk.Frame):
         if not self._msg_editando_id:
             messagebox.showwarning("Edição", "Nenhuma mensagem carregada para edição.")
             return
+    
         titulo = (self.e_titulo_msg.get() or "").strip()
         conteudo = self.txt_msg.get("1.0", "end").strip()
-        if not titulo or not conteudo:
-            messagebox.showwarning("Validação", "Título e conteúdo são obrigatórios.")
+    
+        if not conteudo:
+            messagebox.showwarning("Validação", "Conteúdo não pode ser vazio.")
             return
+    
+        # Obter info do banco para descobrir se é modelo ou rascunho
+        msg_atual = banco.mensagem_obter(self._msg_editando_id)
+        tipo_msg = msg_atual.get("tipo", "rascunho")
+    
+        # MODELO → exige título
+        if tipo_msg == "modelo" and not titulo:
+            messagebox.showwarning("Validação", "Título é obrigatório para modelos.")
+            return
+    
+        # RASCUNHO → título não obrigatório
+        if tipo_msg == "rascunho" and not titulo:
+            titulo = f"Rascunho {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
+    
         try:
             banco.mensagem_atualizar(self._msg_editando_id, titulo, conteudo)
             self._carregar_msgs()
@@ -797,17 +841,38 @@ class TelaOrcamento(tk.Frame):
     def _salvar_mensagem(self, tipo):
         titulo = self.e_titulo_msg.get().strip()
         conteudo = self.txt_msg.get("1.0", "end").strip()
-        if not titulo or not conteudo:
-            messagebox.showwarning("Validação", "Título e conteúdo são obrigatórios.")
-            return
+    
+        if tipo == "modelo":
+            if not titulo or not conteudo:
+                messagebox.showwarning("Validação", "Título e conteúdo são obrigatórios para modelos.")
+                return
+    
+        # Para rascunho → título NÃO é obrigatório
+        if tipo == "rascunho":
+            if not conteudo:
+                messagebox.showwarning("Validação", "Conteúdo não pode ser vazio.")
+                return
+            if not titulo:
+                titulo = f"Rascunho {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
+    
         fornecedor_id = self._fornecedor_id_atual() if self.var_msg_forn.get() else None
+    
         try:
             if self._msg_editando_id:
                 banco.mensagem_atualizar(self._msg_editando_id, titulo, conteudo)
             else:
-                banco.mensagem_inserir({"tipo": tipo, "titulo": titulo, "conteudo": conteudo, "fornecedor_id": fornecedor_id})
+                novo_id = banco.mensagem_inserir({
+                    "tipo": tipo,
+                    "titulo": titulo,
+                    "conteudo": conteudo,
+                    "fornecedor_id": fornecedor_id
+                })
+                self._msg_editando_id = novo_id
+                self._autosave_msg_id = novo_id
+    
             self._carregar_msgs()
             messagebox.showinfo("OK", f"{tipo.capitalize()} salvo com sucesso.")
+    
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao salvar mensagem:\n{e}")
 
