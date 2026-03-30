@@ -967,15 +967,18 @@ def orcamentos_total(
     conn.close()
     return total
 
-
 # ===========================================================
-#  MENSAGENS / RASCUNHOS (TELAS DO SISTEMA DEPENDEM DISSO)
+#  MENSAGENS / RASCUNHOS — FUNCIONANDO DE VERDADE
 # ===========================================================
 
-# ------ Inserir mensagens modelo / rascunho ------
+# ========== INSERIR ==========
 def mensagem_inserir(d: Dict[str, Any]) -> int:
-    campos = ("fornecedor_id","titulo","conteudo","tipo")
-    vals = (d.get("fornecedor_id"), d["titulo"], d["conteudo"], d.get("tipo","modelo"))
+    """
+    Insere uma nova mensagem padrão (modelo ou rascunho).
+    Tabela real: mensagens_padrao
+    """
+    campos = ("fornecedor_id", "titulo", "conteudo", "tipo")
+    vals = (d.get("fornecedor_id"), d["titulo"], d["conteudo"], d.get("tipo", "modelo"))
 
     conn = conectar(); cur = conn.cursor()
     cur.execute(
@@ -983,42 +986,40 @@ def mensagem_inserir(d: Dict[str, Any]) -> int:
         vals
     )
     conn.commit()
-    new_id = cur.lastrowid
+    novo_id = cur.lastrowid
     conn.close()
-    return new_id
+    return novo_id
 
-def mensagem_obter(id_msg):
+
+# ========== OBTER ==========
+def mensagem_obter(id_msg: int) -> Optional[Dict[str, Any]]:
     """
-    Retorna uma única mensagem (modelo ou rascunho) pelo ID.
-    Estrutura compatível com mensagens_listar(), usada em _editar_msg(), 
-    _usar_msg(), _carregar_modelo_rapido().
+    Retorna uma mensagem padrão (modelo/rascunho) pelo ID.
+    Funciona com _editar_msg(), _usar_msg(), _carregar_modelo_rapido().
     """
-    try:
-        sql = """
-            SELECT 
-                id,
-                tipo,
-                titulo,
-                conteudo,
-                fornecedor_id,
-                criado_em
-            FROM mensagens
-            WHERE id = ?
-        """
-        row = executar_select_um(sql, (id_msg,))  # ajuste aqui se seu executor tiver outro nome
+    conn = conectar(); cur = conn.cursor()
 
-        return row if row else None
+    cur.execute("""
+        SELECT id, fornecedor_id, titulo, conteudo, tipo, criado_em
+        FROM mensagens_padrao
+        WHERE id = ?
+    """, (id_msg,))
 
-    except Exception as e:
-        print("Erro em mensagem_obter:", e)
-        return None
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
 
-# ------ Listar mensagens modelo / rascunho ------
+
+# ========== LISTAR ==========
 def mensagens_listar(tipo: Optional[str] = None,
                      fornecedor_id: Optional[int] = None,
                      busca: str = "") -> List[Dict[str, Any]]:
-
+    """
+    Lista modelos e rascunhos.
+    Usa a tabela correta: mensagens_padrao.
+    """
     conn = conectar(); cur = conn.cursor()
+
     sql = "SELECT * FROM mensagens_padrao WHERE 1=1"
     params: List[Any] = []
 
@@ -1043,28 +1044,28 @@ def mensagens_listar(tipo: Optional[str] = None,
     return rows
 
 
-def mensagens_obter(id_: int) -> Optional[Dict[str, Any]]:
-    conn = conectar(); cur = conn.cursor()
-    cur.execute("SELECT * FROM mensagens_padrao WHERE id=?", (id_,))
-    row = cur.fetchone()
-    conn.close()
-    return dict(row) if row else None
-
-
-def mensagem_excluir(id_: int) -> None:
-    conn = conectar(); cur = conn.cursor()
-    cur.execute("DELETE FROM mensagens_padrao WHERE id=?", (id_,))
-    conn.commit()
-    conn.close()
-
-
+# ========== ATUALIZAR ==========
 def mensagem_atualizar(id_: int, novo_titulo: str, novo_conteudo: str) -> None:
+    """
+    Atualiza título e conteúdo de um modelo/rascunho.
+    """
     conn = conectar(); cur = conn.cursor()
     cur.execute("""
         UPDATE mensagens_padrao
            SET titulo=?, conteudo=?
          WHERE id=?
     """, (novo_titulo, novo_conteudo, id_))
+    conn.commit()
+    conn.close()
+
+
+# ========== EXCLUIR ==========
+def mensagem_excluir(id_: int) -> None:
+    """
+    Exclui um modelo/rascunho pelo ID.
+    """
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("DELETE FROM mensagens_padrao WHERE id=?", (id_,))
     conn.commit()
     conn.close()
 
