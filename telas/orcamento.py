@@ -82,7 +82,7 @@ class TelaOrcamento(tk.Frame):
         tk.Label(left, text="Mensagem p/ e-mail:")\
             .grid(column=0, row=3, sticky="w", padx=2, pady=(4, 0))
         
-        self.txt_msg = tk.Text(left, height=3)
+        self.txt_msg = tk.Text(left, height=5)
         self.txt_msg.grid(column=0, row=4, columnspan=6, sticky="ew", padx=2, pady=2)
         
         self._lbl_autosave = tk.Label(left, text="", fg="#2c7")
@@ -243,7 +243,7 @@ class TelaOrcamento(tk.Frame):
         heads_s = ("ID", "Criado em", "Cód AGHU", "Item", "Qtde", "Vlr Unit", "Vlr Total", "Nº Empenho", "Obs")
         widths_s = (50, 120, 90, 200, 60, 80, 90, 110, 200)
 
-        self.tv_salvos = ttk.Treeview(lf_hist, columns=cols_s, show="headings", height=5)
+        self.tv_salvos = ttk.Treeview(lf_hist, columns=cols_s, show="headings", height=4)
         for c, h, w in zip(cols_s, heads_s, widths_s):
             self.tv_salvos.heading(c, text=h)
             self.tv_salvos.column(c, width=w, anchor="w")
