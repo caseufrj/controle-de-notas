@@ -164,9 +164,26 @@ class TelaOrcamento(tk.Frame):
 
         bar_m = tk.Frame(aba_modelos)
         bar_m.pack(fill="x", padx=4, pady=(0, 4))
-        ttk.Button(bar_m, text="Usar", command=lambda: self._usar_msg("modelo")).pack(side="left")
-        ttk.Button(bar_m, text="Excluir", command=lambda: self._excluir_msg("modelo")).pack(side="left", padx=6)
-        ttk.Button(bar_m, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=6)
+        
+        # ESQUERDA
+        ttk.Button(bar_m, text="Usar", command=lambda: self._usar_msg("modelo"))\
+            .pack(side="left")
+        
+        ttk.Button(bar_m, text="Excluir", command=lambda: self._excluir_msg("modelo"))\
+            .pack(side="left", padx=6)
+        
+        ttk.Button(bar_m, text="Atualizar", command=self._carregar_msgs)\
+            .pack(side="left", padx=6)
+        
+        # 👉 ESPAÇADOR
+        tk.Frame(bar_m).pack(side="left", expand=True)
+        
+        # DIREITA (ADICIONAR)
+        ttk.Button(bar_m, text="Exportar para Excel", command=self._exportar_excel)\
+            .pack(side="right", padx=6)
+        
+        ttk.Button(bar_m, text="Enviar por e-mail", command=self._enviar_email)\
+            .pack(side="right", padx=6)
 
         aba_rasc = tk.Frame(nb)
         nb.add(aba_rasc, text="Rascunhos")
