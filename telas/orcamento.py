@@ -31,59 +31,68 @@ class TelaOrcamento(tk.Frame):
 
         # ========== BLOCO 1: FORMULÁRIO PRINCIPAL (COMPACTO) ==========
         form = ttk.LabelFrame(self, text="Lançar itens para Orçamento")
-        form.pack(fill="x", padx=12, pady=5)
-
+        form.pack(fill="x", padx=12, pady=2)
+        
+        # Padronização compacta
+        PADX = 3
+        PADY = 1
+        
         def campo(lbl, col, row, width=22):
-            tk.Label(form, text=lbl).grid(column=col, row=row, sticky="w", padx=2, pady=1)
+            tk.Label(form, text=lbl).grid(column=col, row=row, sticky="w", padx=PADX, pady=PADY)
             e = ttk.Entry(form, width=width)
-            e.grid(column=col + 1, row=row, sticky="ew", padx=2, pady=1)
+            e.grid(column=col + 1, row=row, sticky="ew", padx=PADX, pady=PADY)
             return e
-
+        
+        # Linha 0
         self.e_cod = campo("Cód AGHU*:", 0, 0)
-        self.e_nome = campo("Nome item*:", 0, 1, 40)
-        self.e_qt = campo("Qtde*:", 2, 0, 12)
-        self.e_vu = campo("Vlr Unit*:", 2, 1, 12)
+        self.e_qt = campo("Qtde*:", 2, 0, 10)
         self.e_emp = campo("Nº Empenho:", 4, 0)
-
-        tk.Label(form, text="Observação:").grid(column=4, row=1, sticky="w", padx=6, pady=2)
-        self.e_obs = ttk.Entry(form, width=40)
-        self.e_obs.grid(column=5, row=1, sticky="ew", padx=6, pady=2)
-
-        form.columnconfigure(1, weight=1)
-        form.columnconfigure(5, weight=1)
-
-        # Botão Add
-        btn_frame = tk.Frame(form, bg="white")
-        btn_frame.grid(column=6, row=1, sticky="w", padx=6, pady=1)
-        ttk.Button(btn_frame, text="Add", command=self._adicionar, width=10).pack(pady=2)
-
-        # Modelo rápido
-        modelo_frame = tk.Frame(form, bg="white")
-        modelo_frame.grid(column=0, row=2, columnspan=5, sticky="ew", padx=3, pady=1)
-        tk.Label(modelo_frame, text="Modelo:", bg="white").pack(side="left", padx=6)
-        self.cb_modelo = ttk.Combobox(modelo_frame, state="readonly", width=40)
-        self.cb_modelo.pack(side="left", padx=6, fill="x", expand=True)
-        ttk.Button(modelo_frame, text="Carregar", command=self._carregar_modelo_rapido).pack(side="left", padx=6)
-
-        # Mensagem p/ email
-        msg_frame = tk.Frame(form, bg="white")
-        msg_frame.grid(column=0, row=3, columnspan=5, sticky="ew", padx=3, pady=1)
-        tk.Label(msg_frame, text="Mensagem p/ e-mail:", bg="white").pack(anchor="w", padx=6, pady=(0, 2))
-        self.txt_msg = tk.Text(msg_frame, width=70, height=2)
-        self.txt_msg.pack(fill="both", expand=True, padx=6, pady=2)
-
-        # Autosave
-        self._autosave_job = None
-        self._autosave_msg_id = None
-        self._msg_editando_id = None
+        
+        # Linha 1
+        self.e_nome = campo("Nome item*:", 0, 1, 40)
+        self.e_vu = campo("Vlr Unit*:", 2, 1, 10)
+        
+        tk.Label(form, text="Observação:").grid(column=4, row=1, sticky="w", padx=PADX, pady=PADY)
+        self.e_obs = ttk.Entry(form, width=35)
+        self.e_obs.grid(column=5, row=1, sticky="ew", padx=PADX, pady=PADY)
+        
+        # 👉 BOTÃO ADD (AGORA NO LUGAR CERTO)
+        ttk.Button(form, text="Add", command=self._adicionar, width=10)\
+            .grid(column=5, row=2, sticky="e", padx=PADX, pady=2)
+        
+        # Linha 2 - Modelo
+        tk.Label(form, text="Modelo:").grid(column=0, row=2, sticky="w", padx=PADX, pady=PADY)
+        self.cb_modelo = ttk.Combobox(form, state="readonly", width=35)
+        self.cb_modelo.grid(column=1, row=2, columnspan=3, sticky="ew", padx=PADX, pady=PADY)
+        
+        ttk.Button(form, text="Carregar", command=self._carregar_modelo_rapido)\
+            .grid(column=4, row=2, sticky="w", padx=PADX, pady=PADY)
+        
+        # Linha 3 - Mensagem
+        tk.Label(form, text="Mensagem p/ e-mail:").grid(column=0, row=3, sticky="w", padx=PADX, pady=(2, 0))
+        
+        self.txt_msg = tk.Text(form, height=2)
+        self.txt_msg.grid(column=0, row=4, columnspan=6, sticky="ew", padx=PADX, pady=(0, 2))
+        
+        # Autosave label
+        self._lbl_autosave = tk.Label(form, text="", fg="#2c7")
+        self._lbl_autosave.grid(column=0, row=5, columnspan=6, sticky="w", padx=PADX, pady=(0, 2))
+        
+        # Eventos autosave
         self.txt_msg.bind("<KeyRelease>", lambda e: self._agendar_autosave())
         self.txt_msg.bind("<FocusOut>", lambda e: self._autosave_now())
-        self._lbl_autosave = tk.Label(msg_frame, text="", fg="#2c7", bg="white")
-        self._lbl_autosave.pack(anchor="w", padx=6, pady=(0, 2))
+        
+        # Ajuste de colunas (responsivo)
+        for col in [1, 3, 5]:
+            form.columnconfigure(col, weight=1)
+        
+        # Altura compacta das linhas
+        for i in range(6):
+            form.grid_rowconfigure(i, minsize=22)
 
         # ========== CAIXA LATERAL ==========
         side_box = ttk.LabelFrame(form, text="Mensagem: Modelo / Rascunho")
-        side_box.grid(column=6, row=0, rowspan=4, sticky="nsew", padx=(10, 6), pady=6)
+        side_box.grid(column=6, row=0, rowspan=3, sticky="n", padx=(8, 4), pady=4)
 
         tk.Label(side_box, text="Título:").pack(anchor="w", padx=6, pady=(4, 0))
         self.e_titulo_msg = ttk.Entry(side_box, width=22)
