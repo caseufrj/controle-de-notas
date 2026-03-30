@@ -789,17 +789,39 @@ class TelaOrcamento(tk.Frame):
         tv = self.tv_modelos if self.tv_modelos.selection() else self.tv_rasc
         vals = tv.item(sel[0], "values")
     
-        mid = int(vals[0])
+        try:
+            mid = int(vals[0])
+        except:
+            messagebox.showerror("Erro", "ID inválido.")
+            return
+    
         msg = banco.mensagem_obter(mid)
     
+        if not msg:
+            messagebox.showerror("Erro", "Mensagem não encontrada no banco.")
+            return
+    
         self._msg_editando_id = mid
-        self._autosave_msg_id = mid  # 🔥 ESSENCIAL
+        self._autosave_msg_id = mid  # 🔥 IMPORTANTE
     
         self.e_titulo_msg.delete(0, "end")
         self.e_titulo_msg.insert(0, msg.get("titulo", ""))
     
         self.txt_msg.delete("1.0", "end")
         self.txt_msg.insert("1.0", msg.get("conteudo", ""))
+    
+        # 🔥 carregar anexos
+        import json
+        anexos = msg.get("anexos")
+        if anexos:
+            try:
+                self._anexos_extra = json.loads(anexos)
+            except:
+                self._anexos_extra = []
+        else:
+            self._anexos_extra = []
+    
+        self._atualizar_lista_anexos()
     
         self.txt_msg.focus_set()
 
