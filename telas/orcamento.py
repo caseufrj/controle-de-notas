@@ -84,7 +84,7 @@ class TelaOrcamento(tk.Frame):
         
         # Frame pra agrupar texto + scroll
         frame_msg = tk.Frame(left)
-        frame_msg.grid(column=0, row=4, columnspan=6, sticky="nsew", padx=2, pady=2)
+        frame_msg.grid(column=0, row=4, columnspan=4, sticky="nsew", padx=2, pady=2)
         
         # Campo de texto
         self.txt_msg = tk.Text(frame_msg, height=7, width=30, wrap="word")
@@ -99,6 +99,10 @@ class TelaOrcamento(tk.Frame):
         
         self._lbl_autosave = tk.Label(left, text="", fg="#2c7")
         self._lbl_autosave.grid(column=0, row=5, columnspan=6, sticky="w", padx=2)
+        
+        # 🔥 AQUI — ANTES DOS BINDs
+        self._autosave_msg_id = None
+        self._msg_editando_id = None
         
         # Eventos autosave
         self.txt_msg.bind("<KeyRelease>", lambda e: self._agendar_autosave())
@@ -149,19 +153,31 @@ class TelaOrcamento(tk.Frame):
         # ========== ABAS MODELOS/RASCUNHOS ==========
         lf_msg = ttk.LabelFrame(form, text="Mensagens (Modelos e Rascunhos)")
         lf_msg.pack(fill="x", padx=6, pady=5)
-
-        busca_bar = tk.Frame(lf_msg)
-        busca_bar.pack(fill="x", padx=6, pady=4)
-        tk.Label(busca_bar, text="Buscar:").pack(side="left")
-        self.e_msg_busca = ttk.Entry(busca_bar, width=35)
+        
+        # 🔥 BARRA ÚNICA (Editar + Buscar)
+        bar_top = tk.Frame(lf_msg)
+        bar_top.pack(fill="x", padx=6, pady=4)
+        
+        # ESQUERDA (Editar)
+        ttk.Button(bar_top, text="Editar", command=self._editar_msg)\
+            .pack(side="left")
+        
+        ttk.Button(bar_top, text="Salvar alterações", command=self._salvar_alteracoes_msg)\
+            .pack(side="left", padx=6)
+        
+        # 👉 ESPAÇADOR (empurra pra direita)
+        tk.Frame(bar_top).pack(side="left", expand=True)
+        
+        # DIREITA (Buscar)
+        tk.Label(bar_top, text="Buscar:").pack(side="left")
+        
+        self.e_msg_busca = ttk.Entry(bar_top, width=30)
         self.e_msg_busca.pack(side="left", padx=6)
-        ttk.Button(busca_bar, text="Filtrar", command=self._carregar_msgs).pack(side="left")
-
-        msg_edit = tk.Frame(lf_msg)
-        msg_edit.pack(fill="x", padx=6, pady=(0, 4))
-        ttk.Button(msg_edit, text="Editar", command=self._editar_msg).pack(side="left")
-        ttk.Button(msg_edit, text="Salvar alterações", command=self._salvar_alteracoes_msg).pack(side="left", padx=6)
-
+        
+        ttk.Button(bar_top, text="Filtrar", command=self._carregar_msgs)\
+            .pack(side="left")
+        
+        # Notebook continua igual
         nb = ttk.Notebook(lf_msg)
         nb.pack(fill="both", expand=True, padx=6, pady=4)
 
