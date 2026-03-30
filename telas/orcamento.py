@@ -31,20 +31,21 @@ class TelaOrcamento(tk.Frame):
 
         # ========== BLOCO 1: FORMULÁRIO PRINCIPAL ==========
         form = ttk.LabelFrame(self, text="Lançar itens para Orçamento")
-        form.pack(fill="x", side="top", padx=12, pady=2)
+        # Adicione side e anchor
+        form.pack(fill="x", side="top", anchor="n", padx=12, pady=2)
+
 
         # Adicione isso para garantir que as linhas fiquem coladas:
         for i in range(5):
             form.rowconfigure(i, weight=0, minsize=0)
         
         def campo(lbl, col, row, width=22):
-            # pady=(0, 2) cria um pequeno respiro apenas entre as linhas
-            tk.Label(form, text=lbl).grid(column=col, row=row, sticky="w", padx=2, pady=(0, 2))
+            # Use ipady=0 para comprimir a altura interna
+            tk.Label(form, text=lbl).grid(column=col, row=row, sticky="w", padx=2, pady=1)
             e = ttk.Entry(form, width=width)
-            e.grid(column=col + 1, row=row, sticky="ew", padx=2, pady=(0, 2))
+            e.grid(column=col + 1, row=row, sticky="ew", padx=2, pady=1)
             return e
 
-        
         # Campos principais
         self.e_cod = campo("Cód AGHU*:", 0, 0)
         self.e_qt = campo("Qtde*:", 2, 0, 10)
@@ -129,10 +130,15 @@ class TelaOrcamento(tk.Frame):
         self.lbl_sem_anexo = tk.Label(self.frm_anexos, text="Nenhum anexo", fg="#666")
         self.lbl_sem_anexo.pack(anchor="w")
         
-        # Ajuste de colunas (responsivo)
+        # Mantenha suas colunas
         form.columnconfigure(1, weight=1)
         form.columnconfigure(3, weight=1)
         form.columnconfigure(5, weight=1)
+        
+        # FORCE as linhas a não crescerem (adicione isso)
+        for i in range(6):
+            form.rowconfigure(i, weight=0)
+
 
         # ========== ABAS MODELOS/RASCUNHOS ==========
         lf_msg = ttk.LabelFrame(form, text="Mensagens (Modelos e Rascunhos)")
