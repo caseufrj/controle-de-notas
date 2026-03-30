@@ -435,7 +435,7 @@ class TelaOrcamento(tk.Frame):
         titulo = self.e_titulo_msg.get().strip()
     
         # Se ainda não existe um rascunho associado
-        if not self._autosave_msg_id:
+        if not self._autosave_msg_id and not self._msg_editando_id:
             # cria um rascunho automático
             titulo_auto = titulo or f"Rascunho {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
             try:
@@ -783,25 +783,24 @@ class TelaOrcamento(tk.Frame):
     def _editar_msg(self):
         sel = self.tv_modelos.selection() or self.tv_rasc.selection()
         if not sel:
-            messagebox.showwarning("Atenção", "Selecione uma mensagem nas listas.")
+            messagebox.showwarning("Atenção", "Selecione uma mensagem.")
             return
+    
         tv = self.tv_modelos if self.tv_modelos.selection() else self.tv_rasc
         vals = tv.item(sel[0], "values")
-        try:
-            mid = int(vals[0])
-        except:
-            messagebox.showerror("Erro", "Não foi possível identificar a mensagem selecionada.")
-            return
+    
+        mid = int(vals[0])
         msg = banco.mensagem_obter(mid)
-        if not msg:
-            messagebox.showwarning("Aviso", "Mensagem não encontrada no banco.")
-            return
+    
         self._msg_editando_id = mid
-        self._autosave_msg_id = mid if msg.get("tipo") == "rascunho" else None
+        self._autosave_msg_id = mid  # 🔥 ESSENCIAL
+    
         self.e_titulo_msg.delete(0, "end")
         self.e_titulo_msg.insert(0, msg.get("titulo", ""))
+    
         self.txt_msg.delete("1.0", "end")
         self.txt_msg.insert("1.0", msg.get("conteudo", ""))
+    
         self.txt_msg.focus_set()
 
     def _salvar_alteracoes_msg(self):
@@ -859,37 +858,53 @@ class TelaOrcamento(tk.Frame):
             messagebox.showerror("Erro", f"Falha ao excluir mensagem:\n{e}")
 
     def _salvar_mensagem(self, tipo):
+        import json
+    
         titulo = self.e_titulo_msg.get().strip()
         conteudo = self.txt_msg.get("1.0", "end").strip()
     
+        # ================= VALIDAÇÕES =================
         if tipo == "modelo":
             if not titulo or not conteudo:
                 messagebox.showwarning("Validação", "Título e conteúdo são obrigatórios para modelos.")
                 return
     
-        # Para rascunho → título NÃO é obrigatório
         if tipo == "rascunho":
             if not conteudo:
                 messagebox.showwarning("Validação", "Conteúdo não pode ser vazio.")
                 return
+    
+            # título automático se vazio
             if not titulo:
                 titulo = f"Rascunho {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
     
         fornecedor_id = self._fornecedor_id_atual() if self.var_msg_forn.get() else None
     
         try:
+            # ================= ATUALIZAR =================
             if self._msg_editando_id:
-                banco.mensagem_atualizar(self._msg_editando_id, titulo, conteudo)
+                banco.mensagem_atualizar(
+                    self._msg_editando_id,
+                    titulo,
+                    conteudo,
+                    anexos=json.dumps(self._anexos_extra)  # 🔥 NOVO
+                )
+    
+            # ================= INSERIR =================
             else:
                 novo_id = banco.mensagem_inserir({
                     "tipo": tipo,
                     "titulo": titulo,
                     "conteudo": conteudo,
-                    "fornecedor_id": fornecedor_id
+                    "fornecedor_id": fornecedor_id,
+                    "anexos": json.dumps(self._anexos_extra)  # 🔥 NOVO
                 })
+    
+                # 🔥 importante pro autosave não criar outro
                 self._msg_editando_id = novo_id
                 self._autosave_msg_id = novo_id
     
+            # ================= PÓS-SALVAMENTO =================
             self._carregar_msgs()
             messagebox.showinfo("OK", f"{tipo.capitalize()} salvo com sucesso.")
     
