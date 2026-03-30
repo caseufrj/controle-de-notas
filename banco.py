@@ -758,10 +758,28 @@ def saldo_empenho_por_fornecedor(fornecedor_id: int) -> List[Dict[str, Any]]:
 
 def orcamento_inserir(d: Dict[str, Any]) -> int:
     campos = (
-        "fornecedor_id","cod_aghu","nome_item","qtde",
-        "vl_unit","numero_empenho","observacao","mensagem_email"
+        "grupo_id",
+        "fornecedor_id",
+        "cod_aghu",
+        "nome_item",
+        "qtde",
+        "vl_unit",
+        "numero_empenho",
+        "observacao",
+        "mensagem_email"
     )
-    vals = tuple(d.get(k) for k in campos)
+
+    vals = (
+        d.get("grupo_id"),
+        d.get("fornecedor_id"),
+        d.get("cod_aghu"),
+        d.get("nome_item"),
+        d.get("qtde"),
+        d.get("vl_unit"),
+        d.get("numero_empenho"),
+        d.get("observacao"),
+        d.get("mensagem_email")  # ← mesma msg para todos
+    )
 
     conn = conectar(); cur = conn.cursor()
 
@@ -773,6 +791,26 @@ def orcamento_inserir(d: Dict[str, Any]) -> int:
     novo_id = cur.lastrowid
     conn.close()
     return novo_id
+
+import uuid
+
+def orcamento_salvar_envio(itens: list, mensagem: str, fornecedor_id: int):
+    grupo_id = str(uuid.uuid4())
+
+    for it in itens:
+        orcamento_inserir({
+            "grupo_id": grupo_id,
+            "fornecedor_id": fornecedor_id,
+            "cod_aghu": it["cod_aghu"],
+            "nome_item": it["nome_item"],
+            "qtde": it["qtde"],
+            "vl_unit": it["vl_unit"],
+            "numero_empenho": it.get("numero_empenho"),
+            "observacao": it.get("observacao"),
+            "mensagem_email": mensagem  # ← AQUI é o pulo do gato
+        })
+
+    return grupo_id
 
 
 def orcamentos_listar(fornecedor_id: Optional[int] = None,
