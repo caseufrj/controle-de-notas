@@ -29,7 +29,7 @@ class TelaOrcamento(tk.Frame):
         self._after_ids = []
         self._anexos_extra = []
 
-        # ========== BLOCO 1: FORMULÁRIO PRINCIPAL (COMPACTO) ==========
+        # ========== BLOCO 1: FORMULÁRIO PRINCIPAL ==========
         form = ttk.LabelFrame(self, text="Lançar itens para Orçamento")
         form.pack(fill="x", padx=12, pady=2)
         
@@ -39,42 +39,37 @@ class TelaOrcamento(tk.Frame):
             e.grid(column=col + 1, row=row, sticky="ew", padx=2, pady=0)
             return e
         
-        # Campos
+        # Campos principais
         self.e_cod = campo("Cód AGHU*:", 0, 0)
-        self.e_nome = campo("Nome item*:", 0, 1, 40)
-        self.e_qt = campo("Qtde*:", 2, 0, 12)
-        self.e_vu = campo("Vlr Unit*:", 2, 1, 12)
+        self.e_qt = campo("Qtde*:", 2, 0, 10)
         self.e_emp = campo("Nº Empenho:", 4, 0)
         
-        tk.Label(form, text="Observação:").grid(column=4, row=1, sticky="w", padx=4, pady=0)
-        self.e_obs = ttk.Entry(form, width=40)
-        self.e_obs.grid(column=5, row=1, sticky="ew", padx=4, pady=0)
+        self.e_nome = campo("Nome item*:", 0, 1, 40)
+        self.e_vu = campo("Vlr Unit*:", 2, 1, 10)
         
-        # ✅ BOTÃO ADD (corrigido)
+        tk.Label(form, text="Observação:").grid(column=4, row=1, sticky="w", padx=2, pady=0)
+        self.e_obs = ttk.Entry(form, width=35)
+        self.e_obs.grid(column=5, row=1, sticky="ew", padx=2, pady=0)
+        
+        # ✅ BOTÃO ADD (alinhado corretamente)
         ttk.Button(form, text="Add", command=self._adicionar, width=10)\
-            .grid(column=5, row=2, sticky="e", padx=4, pady=2)
+            .grid(column=5, row=2, sticky="e", padx=2, pady=2)
         
         # Modelo
-        modelo_frame = tk.Frame(form, bg="white")
-        modelo_frame.grid(column=0, row=2, columnspan=5, sticky="ew", padx=2, pady=0)
+        tk.Label(form, text="Modelo:").grid(column=0, row=2, sticky="w", padx=2, pady=0)
         
-        tk.Label(modelo_frame, text="Modelo:", bg="white").pack(side="left", padx=4)
-        self.cb_modelo = ttk.Combobox(modelo_frame, state="readonly", width=40)
-        self.cb_modelo.pack(side="left", padx=4, fill="x", expand=True)
+        self.cb_modelo = ttk.Combobox(form, state="readonly")
+        self.cb_modelo.grid(column=1, row=2, columnspan=3, sticky="ew", padx=2, pady=0)
         
-        ttk.Button(modelo_frame, text="Carregar", command=self._carregar_modelo_rapido)\
-            .pack(side="left", padx=4)
+        ttk.Button(form, text="Carregar", command=self._carregar_modelo_rapido)\
+            .grid(column=4, row=2, sticky="w", padx=2, pady=0)
         
         # Mensagem
-        msg_frame = tk.Frame(form, bg="white")
-        msg_frame.grid(column=0, row=3, columnspan=5, sticky="ew", padx=2, pady=0)
+        tk.Label(form, text="Mensagem p/ e-mail:")\
+            .grid(column=0, row=3, sticky="w", padx=2, pady=(2, 0))
         
-        tk.Label(msg_frame, text="Mensagem p/ e-mail:", bg="white")\
-            .pack(anchor="w", padx=4, pady=(0, 1))
-        
-        # ✅ altura reduzida
-        self.txt_msg = tk.Text(msg_frame, width=70, height=1)
-        self.txt_msg.pack(fill="both", expand=True, padx=4, pady=1)
+        self.txt_msg = tk.Text(form, height=1)
+        self.txt_msg.grid(column=0, row=4, columnspan=6, sticky="ew", padx=2, pady=1)
         
         # Autosave
         self._autosave_job = None
@@ -84,14 +79,14 @@ class TelaOrcamento(tk.Frame):
         self.txt_msg.bind("<KeyRelease>", lambda e: self._agendar_autosave())
         self.txt_msg.bind("<FocusOut>", lambda e: self._autosave_now())
         
-        self._lbl_autosave = tk.Label(msg_frame, text="", fg="#2c7", bg="white")
-        self._lbl_autosave.pack(anchor="w", padx=4, pady=(0, 1))
+        self._lbl_autosave = tk.Label(form, text="", fg="#2c7")
+        self._lbl_autosave.grid(column=0, row=5, columnspan=6, sticky="w", padx=2, pady=0)
         
         # ========== CAIXA LATERAL ==========
         side_box = ttk.LabelFrame(form, text="Mensagem: Modelo / Rascunho")
         
-        # ✅ CORREÇÃO PRINCIPAL (não estica mais tudo)
-        side_box.grid(column=6, row=0, rowspan=2, sticky="n", padx=(8, 4), pady=4)
+        # ✅ NÃO ESTICA MAIS O LAYOUT
+        side_box.grid(column=6, row=0, rowspan=3, sticky="n", padx=(8, 4), pady=2)
         
         tk.Label(side_box, text="Título:").pack(anchor="w", padx=6, pady=(4, 0))
         self.e_titulo_msg = ttk.Entry(side_box, width=22)
@@ -104,7 +99,7 @@ class TelaOrcamento(tk.Frame):
             variable=self.var_msg_forn
         ).pack(anchor="w", padx=6, pady=(0, 4))
         
-        btns_msg = tk.Frame(side_box, bg="white")
+        btns_msg = tk.Frame(side_box)
         btns_msg.pack(fill="x", padx=6, pady=(0, 4))
         
         ttk.Button(btns_msg, text="Salvar Modelo",
@@ -119,20 +114,17 @@ class TelaOrcamento(tk.Frame):
         wrapper_anexos = ttk.LabelFrame(side_box, text="Anexos")
         wrapper_anexos.pack(fill="both", expand=True, padx=6, pady=(4, 6))
         
-        self.frm_anexos = tk.Frame(wrapper_anexos, bg="white", height=50)
+        self.frm_anexos = tk.Frame(wrapper_anexos, height=50)
         self.frm_anexos.pack(fill="both", expand=True, padx=4, pady=4)
         self.frm_anexos.pack_propagate(False)
         
-        self.lbl_sem_anexo = tk.Label(self.frm_anexos, text="Nenhum anexo", bg="white", fg="#666")
+        self.lbl_sem_anexo = tk.Label(self.frm_anexos, text="Nenhum anexo", fg="#666")
         self.lbl_sem_anexo.pack(anchor="w")
         
-        # Ajuste de colunas
+        # Ajuste de colunas (responsivo)
         form.columnconfigure(1, weight=1)
+        form.columnconfigure(3, weight=1)
         form.columnconfigure(5, weight=1)
-        
-        # ✅ altura compacta das linhas
-        for i in range(6):
-            form.grid_rowconfigure(i, minsize=22)
 
         # ========== ABAS MODELOS/RASCUNHOS ==========
         lf_msg = ttk.LabelFrame(form, text="Mensagens (Modelos e Rascunhos)")
