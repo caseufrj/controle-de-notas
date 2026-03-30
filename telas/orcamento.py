@@ -246,100 +246,133 @@ class TelaOrcamento(tk.Frame):
         ttk.Button(bar_r, text="Enviar por e-mail", command=self._enviar_email)\
             .pack(side="right", padx=6)
 
-        # ========== HISTÓRICO ORÇAMENTOS ==========
-        lf_hist = ttk.LabelFrame(self, text="Orçamentos já salvos")
-        lf_hist.pack(fill="both", expand=True, padx=12, pady=5)
-
+        # ========== NOTEBOOK HISTÓRICO + MENSAGENS ENVIADAS ==========
+        notebook_hist = ttk.Notebook(self)
+        notebook_hist.pack(fill="both", expand=True, padx=12, pady=5)
+        
+        # -------------------------------------------------------------
+        # ABA 1 — ORÇAMENTOS SALVOS
+        # -------------------------------------------------------------
+        lf_hist = ttk.Frame(notebook_hist)
+        notebook_hist.add(lf_hist, text="Orçamentos")
+        
+        # --- FILTROS ---
         filtros = tk.Frame(lf_hist)
         filtros.pack(fill="x", padx=6, pady=4)
+        
         tk.Label(filtros, text="De:").pack(side="left")
         self.f_data_ini = ttk.Entry(filtros, width=10)
         self.f_data_ini.pack(side="left", padx=4)
+        
         tk.Label(filtros, text="Até:").pack(side="left")
         self.f_data_fim = ttk.Entry(filtros, width=10)
         self.f_data_fim.pack(side="left", padx=4)
+        
         tk.Label(filtros, text="Termo:").pack(side="left", padx=(12, 0))
         self.f_busca = ttk.Entry(filtros, width=25)
         self.f_busca.pack(side="left", padx=4)
+        
         tk.Label(filtros, text="Empenho:").pack(side="left", padx=(12, 0))
         self.f_emp = ttk.Entry(filtros, width=12)
         self.f_emp.pack(side="left", padx=4)
+        
         ttk.Button(filtros, text="Filtrar", command=self._resetar_paginacao).pack(side="left", padx=6)
         ttk.Button(filtros, text="Limpar", command=self._limpar_filtros).pack(side="left")
-
+        
+        # --- TABELA ORÇAMENTOS ---
         cols_s = ("id", "criado_em", "cod_aghu", "nome_item", "qtde", "vl_unit", "vl_total", "numero_empenho", "observacao")
         heads_s = ("ID", "Criado em", "Cód AGHU", "Item", "Qtde", "Vlr Unit", "Vlr Total", "Nº Empenho", "Obs")
         widths_s = (50, 120, 90, 200, 60, 80, 90, 110, 200)
-
+        
         self.tv_salvos = ttk.Treeview(lf_hist, columns=cols_s, show="headings", height=5)
         for c, h, w in zip(cols_s, heads_s, widths_s):
             self.tv_salvos.heading(c, text=h)
             self.tv_salvos.column(c, width=w, anchor="w")
         self.tv_salvos.pack(fill="both", expand=True, padx=6, pady=4)
-
+        
+        # --- BARRA ---
         barra_hist = tk.Frame(lf_hist, bg="white")
         barra_hist.pack(fill="x", padx=6, pady=(0, 4))
+        
         ttk.Button(barra_hist, text="Atualizar", command=self._carregar_salvos).pack(side="left")
         ttk.Button(barra_hist, text="Excluir", command=self._excluir_salvo).pack(side="left", padx=6)
         ttk.Button(barra_hist, text="Exportar", command=self._exportar_historico).pack(side="left", padx=6)
-
+        
+        # --- PAGINAÇÃO ORÇAMENTOS ---
         pag = tk.Frame(lf_hist, bg="white")
         pag.pack(fill="x", padx=6, pady=(0, 4))
+        
         tk.Label(pag, text="Itens/página:").pack(side="left")
         self.cb_page_size = ttk.Combobox(pag, state="readonly", width=5, values=[20, 50, 100])
+        
         try:
             cfg = utils.carregar_config()
             ultimo = int(cfg.get("paginacao_orcamento", 50))
         except:
             ultimo = 50
+        
         self.after(10, lambda: self.cb_page_size.set(ultimo))
         self.cb_page_size.pack(side="left", padx=4)
         self.cb_page_size.bind("<<ComboboxSelected>>", self._on_page_size_changed)
+        
         ttk.Button(pag, text="<<", command=lambda: self._ir_pagina("first")).pack(side="left", padx=2)
         ttk.Button(pag, text="<", command=lambda: self._ir_pagina("prev")).pack(side="left", padx=2)
         ttk.Button(pag, text=">", command=lambda: self._ir_pagina("next")).pack(side="left", padx=2)
         ttk.Button(pag, text=">>", command=lambda: self._ir_pagina("last")).pack(side="left", padx=2)
+        
         self.lbl_pag = tk.Label(pag, text="Página 1/1", bg="white")
         self.lbl_pag.pack(side="left", padx=10)
-
-        # ========== MENSAGENS ENVIADAS ==========
-        lf_msgs_env = ttk.LabelFrame(self, text="Mensagens enviadas")
-        lf_msgs_env.pack(fill="both", expand=True, padx=12, pady=5)
-
+        
+        # -------------------------------------------------------------
+        # ABA 2 — MENSAGENS ENVIADAS
+        # -------------------------------------------------------------
+        lf_msgs_env = ttk.Frame(notebook_hist)
+        notebook_hist.add(lf_msgs_env, text="Mensagens enviadas")
+        
+        # --- FILTROS MSG ---
         filtros_msg = tk.Frame(lf_msgs_env)
         filtros_msg.pack(fill="x", padx=6, pady=4)
+        
         tk.Label(filtros_msg, text="De:").pack(side="left")
         self.f_msg_data_ini = ttk.Entry(filtros_msg, width=10)
         self.f_msg_data_ini.pack(side="left", padx=4)
+        
         tk.Label(filtros_msg, text="Até:").pack(side="left")
         self.f_msg_data_fim = ttk.Entry(filtros_msg, width=10)
         self.f_msg_data_fim.pack(side="left", padx=4)
+        
         tk.Label(filtros_msg, text="Destinatário:").pack(side="left", padx=(12, 0))
         self.f_msg_dest = ttk.Entry(filtros_msg, width=25)
         self.f_msg_dest.pack(side="left", padx=4)
+        
         ttk.Button(filtros_msg, text="Filtrar", command=self._resetar_paginacao_msgs).pack(side="left", padx=6)
         ttk.Button(filtros_msg, text="Limpar", command=self._limpar_filtros_msgs).pack(side="left")
-
+        
+        # --- TABELA MSG ENVIADAS ---
         cols_msg = ("id", "enviado_em", "destinatario", "assunto", "fornecedor")
         heads_msg = ("ID", "Enviado em", "Destinatário", "Assunto", "Fornecedor")
         widths_msg = (50, 120, 180, 250, 150)
-
+        
         self.tv_msgs_enviadas = ttk.Treeview(lf_msgs_env, columns=cols_msg, show="headings", height=5)
         for c, h, w in zip(cols_msg, heads_msg, widths_msg):
             self.tv_msgs_enviadas.heading(c, text=h)
             self.tv_msgs_enviadas.column(c, width=w, anchor="w")
         self.tv_msgs_enviadas.pack(fill="both", expand=True, padx=6, pady=4)
-
+        
+        # --- PAGINAÇÃO MSG ---
         pag_msg = tk.Frame(lf_msgs_env, bg="white")
         pag_msg.pack(fill="x", padx=6, pady=(0, 4))
+        
         tk.Label(pag_msg, text="Itens/página:").pack(side="left")
         self.cb_page_size_msg = ttk.Combobox(pag_msg, state="readonly", width=5, values=[20, 50, 100])
         self.cb_page_size_msg.set(50)
         self.cb_page_size_msg.pack(side="left", padx=4)
+        
         ttk.Button(pag_msg, text="<<", command=lambda: self._ir_pagina_msg("first")).pack(side="left", padx=2)
         ttk.Button(pag_msg, text="<", command=lambda: self._ir_pagina_msg("prev")).pack(side="left", padx=2)
         ttk.Button(pag_msg, text=">", command=lambda: self._ir_pagina_msg("next")).pack(side="left", padx=2)
         ttk.Button(pag_msg, text=">>", command=lambda: self._ir_pagina_msg("last")).pack(side="left", padx=2)
+        
         self.lbl_pag_msg = tk.Label(pag_msg, text="Página 1/1", bg="white")
         self.lbl_pag_msg.pack(side="left", padx=10)
 
