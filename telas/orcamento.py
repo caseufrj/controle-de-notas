@@ -82,8 +82,20 @@ class TelaOrcamento(tk.Frame):
         tk.Label(left, text="Mensagem p/ e-mail:")\
             .grid(column=0, row=3, sticky="w", padx=2, pady=(4, 0))
         
-        self.txt_msg = tk.Text(left, height=5)
-        self.txt_msg.grid(column=0, row=4, columnspan=6, sticky="ew", padx=2, pady=2)
+        # Frame pra agrupar texto + scroll
+        frame_msg = tk.Frame(left)
+        frame_msg.grid(column=0, row=4, columnspan=6, sticky="nsew", padx=2, pady=2)
+        
+        # Campo de texto
+        self.txt_msg = tk.Text(frame_msg, height=7, width=30, wrap="word")
+        self.txt_msg.pack(side="left", fill="both", expand=True)
+        
+        # Scrollbar
+        scroll = ttk.Scrollbar(frame_msg, orient="vertical", command=self.txt_msg.yview)
+        scroll.pack(side="right", fill="y")
+        
+        # Conectar scrollbar ao Text
+        self.txt_msg.config(yscrollcommand=scroll.set)
         
         self._lbl_autosave = tk.Label(left, text="", fg="#2c7")
         self._lbl_autosave.grid(column=0, row=5, columnspan=6, sticky="w", padx=2)
