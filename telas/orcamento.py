@@ -102,6 +102,7 @@ class TelaOrcamento(tk.Frame):
         
         # 🔥 AQUI — ANTES DOS BINDs
         self._autosave_msg_id = None
+        self._autosave_job = None
         self._msg_editando_id = None
         self._rascunho_inicializado = False
         
@@ -371,6 +372,8 @@ class TelaOrcamento(tk.Frame):
         self._carregar_msgs()
         self._carregar_msgs_enviadas()
 
+        self.tv_rasc.bind("<<TreeviewSelect>>", self._ao_selecionar_rascunho)
+
 
     # ==================== MÉTODOS DE SUPORTE ====================
 
@@ -417,6 +420,7 @@ class TelaOrcamento(tk.Frame):
 
     def _reset_autosave_context(self):
         self._autosave_msg_id = None
+        self._msg_editando_id = None
 
     def _agendar_autosave(self):
         if self._autosave_job:
@@ -658,7 +662,7 @@ class TelaOrcamento(tk.Frame):
         messagebox.showinfo("Exportar", f"Arquivo salvo em:\n{arq}")
 
     def _exportar_excel(self):
-        values_rows = [self.tv.item(iid, "values") for iid in self.tv.get_children()]
+        values_rows = [self.tv_rasc.item(iid, "values") for iid in self.tv_rasc.get_children()]
         if not values_rows:
             messagebox.showinfo("Exportação", "Não há itens no rascunho para exportar.")
             return
@@ -935,7 +939,6 @@ class TelaOrcamento(tk.Frame):
     
                 # gerar resumo baseado no campo mensagem_email (se você gravou isso no salvamento)
                 msg = r.get("mensagem_email", "") or ""
-                msg = r.get("mensagem_email", "") or ""
                 resumo = (msg[:60] + "...") if len(msg) > 60 else msg
                 
                 self.tv_rasc.insert("", "end", values=(
@@ -947,6 +950,35 @@ class TelaOrcamento(tk.Frame):
                 ))
         except Exception as e:
             print("Erro ao carregar rascunho:", e)
+
+    def _ao_selecionar_rascunho(self, event):
+        sel = self.tv_rasc.selection()
+        if not sel:
+            return
+    
+        item = self.tv_rasc.item(sel[0])
+        cod_aghu = item["values"][0]
+        nome_item = item["values"][1]
+    
+        forn_id = self._fornecedor_id_atual()
+        if not forn_id:
+            return
+    
+        try:
+            rows = banco.itens_rascunho_listar(fornecedor_id=forn_id)
+    
+            for r in rows:
+                if r["cod_aghu"] == cod_aghu and r["nome_item"] == nome_item:
+                    msg = r.get("mensagem_email", "") or ""
+    
+                    # 🔥 carregar mensagem completa
+                    self.txt_msg.delete("1.0", "end")
+                    self.txt_msg.insert("1.0", msg)
+    
+                    break
+    
+        except Exception as e:
+            print("Erro ao carregar mensagem completa:", e)
 
     def _carregar_msgs_enviadas(self):
         for i in self.tv_msgs_enviadas.get_children():
