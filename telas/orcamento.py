@@ -276,8 +276,14 @@ class TelaOrcamento(tk.Frame):
         self.f_emp = ttk.Entry(filtros, width=12)
         self.f_emp.pack(side="left", padx=4)
         
+        # Botões todos na mesma linha
         ttk.Button(filtros, text="Filtrar", command=self._resetar_paginacao).pack(side="left", padx=6)
-        ttk.Button(filtros, text="Limpar", command=self._limpar_filtros).pack(side="left")
+        ttk.Button(filtros, text="Limpar", command=self._limpar_filtros).pack(side="left", padx=4)
+        
+        # 🔥 Botões movidos para a mesma linha:
+        ttk.Button(filtros, text="Atualizar", command=self._carregar_salvos).pack(side="left", padx=(20,4))
+        ttk.Button(filtros, text="Excluir", command=self._excluir_salvo).pack(side="left", padx=4)
+        ttk.Button(filtros, text="Exportar", command=self._exportar_historico).pack(side="left", padx=4)
         
         # --- TABELA ORÇAMENTOS ---
         cols_s = ("id", "criado_em", "cod_aghu", "nome_item", "qtde", "vl_unit", "vl_total", "numero_empenho", "observacao")
@@ -289,15 +295,7 @@ class TelaOrcamento(tk.Frame):
             self.tv_salvos.heading(c, text=h)
             self.tv_salvos.column(c, width=w, anchor="w")
         self.tv_salvos.pack(fill="both", expand=True, padx=6, pady=4)
-        
-        # --- BARRA ---
-        barra_hist = tk.Frame(lf_hist, bg="white")
-        barra_hist.pack(fill="x", padx=6, pady=(0, 4))
-        
-        ttk.Button(barra_hist, text="Atualizar", command=self._carregar_salvos).pack(side="left")
-        ttk.Button(barra_hist, text="Excluir", command=self._excluir_salvo).pack(side="left", padx=6)
-        ttk.Button(barra_hist, text="Exportar", command=self._exportar_historico).pack(side="left", padx=6)
-        
+                
         # --- PAGINAÇÃO ORÇAMENTOS ---
         pag = tk.Frame(lf_hist, bg="white")
         pag.pack(fill="x", padx=6, pady=(0, 4))
