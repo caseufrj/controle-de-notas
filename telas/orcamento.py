@@ -87,7 +87,7 @@ class TelaOrcamento(tk.Frame):
         frame_msg.grid(column=0, row=4, columnspan=4, sticky="nsew", padx=2, pady=2)
         
         # Campo de texto
-        self.txt_msg = tk.Text(frame_msg, height=7, width=30, wrap="word")
+        self.txt_msg = tk.Text(frame_msg, height=8, width=30, wrap="word")
         self.txt_msg.pack(side="left", fill="both", expand=True)
         
         # Scrollbar
@@ -184,7 +184,7 @@ class TelaOrcamento(tk.Frame):
         aba_modelos = tk.Frame(nb)
         nb.add(aba_modelos, text="Modelos")
         cols_m = ("id", "titulo", "fornecedor_id", "criado_em")
-        self.tv_modelos = ttk.Treeview(aba_modelos, columns=cols_m, show="headings", height=4)
+        self.tv_modelos = ttk.Treeview(aba_modelos, columns=cols_m, show="headings", height=5)
         for c, h, w in zip(cols_m, ("ID", "Título", "Fornecedor", "Criado em"), (60, 250, 120, 140)):
             self.tv_modelos.heading(c, text=h)
             self.tv_modelos.column(c, width=w, anchor="w")
@@ -215,7 +215,7 @@ class TelaOrcamento(tk.Frame):
 
         aba_rasc = tk.Frame(nb)
         nb.add(aba_rasc, text="Rascunhos")
-        self.tv_rasc = ttk.Treeview(aba_rasc, columns=cols_m, show="headings", height=4)
+        self.tv_rasc = ttk.Treeview(aba_rasc, columns=cols_m, show="headings", height=5)
         for c, h, w in zip(cols_m, ("ID", "Título", "Fornecedor", "Criado em"), (60, 250, 120, 140)):
             self.tv_rasc.heading(c, text=h)
             self.tv_rasc.column(c, width=w, anchor="w")
@@ -271,7 +271,7 @@ class TelaOrcamento(tk.Frame):
         heads_s = ("ID", "Criado em", "Cód AGHU", "Item", "Qtde", "Vlr Unit", "Vlr Total", "Nº Empenho", "Obs")
         widths_s = (50, 120, 90, 200, 60, 80, 90, 110, 200)
 
-        self.tv_salvos = ttk.Treeview(lf_hist, columns=cols_s, show="headings", height=4)
+        self.tv_salvos = ttk.Treeview(lf_hist, columns=cols_s, show="headings", height=5)
         for c, h, w in zip(cols_s, heads_s, widths_s):
             self.tv_salvos.heading(c, text=h)
             self.tv_salvos.column(c, width=w, anchor="w")
