@@ -935,19 +935,16 @@ class TelaOrcamento(tk.Frame):
     
                 # gerar resumo baseado no campo mensagem_email (se você gravou isso no salvamento)
                 msg = r.get("mensagem_email", "") or ""
+                msg = r.get("mensagem_email", "") or ""
                 resumo = (msg[:60] + "...") if len(msg) > 60 else msg
                 
-                self.tv_rasc.insert(
-                    "",
-                    "end",
-                    values=(
-                        r.get("cod_aghu", ""),
-                        r.get("nome_item", ""),
-                        f"{qt}",
-                        nome_forn,
-                        resumo
-                    )
-                )
+                self.tv_rasc.insert("", "end", values=(
+                    r["cod_aghu"],
+                    r["nome_item"],
+                    f"{qt}",
+                    nome_forn,
+                    resumo
+                ))
         except Exception as e:
             print("Erro ao carregar rascunho:", e)
 
