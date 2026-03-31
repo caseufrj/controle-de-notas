@@ -123,7 +123,7 @@ def montar_tela_inicial(root: tk.Tk):
     print("[DEBUG] tela_inicial: montar_tela_inicial()")
     root.protocol("WM_DELETE_WINDOW", root.destroy)
 
-    # prepara banco
+    # init banco
     try:
         try:
             from banco import criar_tabelas as _criar_tabelas
@@ -133,7 +133,7 @@ def montar_tela_inicial(root: tk.Tk):
     except:
         pass
 
-    # prepara auth
+    # init auth
     try:
         from auth import auth_init
         auth_init()
@@ -142,23 +142,21 @@ def montar_tela_inicial(root: tk.Tk):
 
     estilizar(root)
 
-    # Canvas base
+    # =========================================================
+    # CANVAS principal (com scroll total)
+    # =========================================================
     canvas = tk.Canvas(root, highlightthickness=0, bd=0)
     canvas.pack(fill="both", expand=True)
 
-    # === SCROLL TOTAL ===
     def on_mousewheel(evt):
         canvas.yview_scroll(int(-1 * (evt.delta / 120)), "units")
     canvas.bind_all("<MouseWheel>", on_mousewheel)
 
-    # scrollregion inicial
-    canvas.configure(scrollregion=(0, 0, 1000, 2000))
-
-    # guardar referências
     root._tela_inicial_widgets = [canvas]
     root._render_after = None
     root._login_win = None
     root._reg_win = None
+    root._footer_win = None
 
     # carregar logo
     root._logo_img = None
@@ -174,19 +172,27 @@ def montar_tela_inicial(root: tk.Tk):
         except:
             root._logo_img = None
 
+    # BOTÕES
     def on_click_login():
         abrir_modal_login(root)
     def on_click_registro():
         abrir_modal_registro(root)
 
     btn_login = ttk.Button(root, text="LOGIN", style="Primary.TButton", command=on_click_login)
-    btn_reg = ttk.Button(root, text="REGISTRO / CADASTRO", style="Outline.TButton", command=on_click_registro)
+    btn_reg   = ttk.Button(root, text="REGISTRO / CADASTRO", style="Outline.TButton", command=on_click_registro)
 
     root._tela_inicial_widgets.extend([btn_login, btn_reg])
 
     root._login_win = canvas.create_window(0, 0, window=btn_login, anchor="center")
-    root._reg_win = canvas.create_window(0, 0, window=btn_reg, anchor="center")
+    root._reg_win   = canvas.create_window(0, 0, window=btn_reg,   anchor="center")
 
+    # rodapé (AGORA ROLÁVEL)
+    footer = tk.Frame(root, bg="#0b2f4a", height=48)
+    root._footer_win = canvas.create_window(0, 0, window=footer, anchor="nw")
+
+    # =========================================================
+    # RENDER
+    # =========================================================
     def render():
         try:
             if not canvas.winfo_exists():
@@ -199,49 +205,52 @@ def montar_tela_inicial(root: tk.Tk):
         try:
             w, h = root.winfo_width(), root.winfo_height()
 
-            try:
-                canvas.delete("grad")
-                canvas.delete("ui")
-            except:
-                return
+            canvas.delete("grad")
+            canvas.delete("ui")
 
+            # Fundo gradiente
             if not NO_GRADIENT:
                 desenhar_gradiente(canvas, w, h, BG_TOP, BG_MID, BG_BOTTOM)
             else:
-                canvas.create_rectangle(0, 0, w, h, fill=BG_MID,
-                                        outline="", tags=("ui",))
+                canvas.create_rectangle(
+                    0, 0, w, h, fill=BG_MID,
+                    outline="", tags=("ui",)
+                )
 
+            # TÍTULOS
             cx = w // 2
-
             canvas.create_text(cx, 70, text=TITULO,
                                font=("Segoe UI Semibold", 20),
                                fill="#113a5e", tags=("ui",))
-
             canvas.create_text(cx, 108, text=APP_NAME,
                                font=("Segoe UI", 12),
                                fill="#1f4c77", tags=("ui",))
 
+            # LOGO
             y_logo = 320
-            if getattr(root, "_logo_img", None):
-                canvas.create_image(cx, y_logo, image=root._logo_img,
-                                    tags=("ui",))
+            if root._logo_img:
+                canvas.create_image(cx, y_logo, image=root._logo_img, tags=("ui",))
             else:
                 canvas.create_oval(cx-34, y_logo-34, cx+34, y_logo+34,
                                    outline="#0d3758", width=3,
                                    tags=("ui",))
 
-            if getattr(root, "_login_win", None):
+            # POSICIONAR BOTÕES
+            if root._login_win:
                 canvas.coords(root._login_win, cx, y_logo + 240)
                 canvas.tag_raise(root._login_win)
-            if getattr(root, "_reg_win", None):
+
+            if root._reg_win:
                 canvas.coords(root._reg_win, cx, y_logo + 300)
                 canvas.tag_raise(root._reg_win)
 
-            canvas.create_rectangle(0, h - 48, w, h,
-                                    fill="#0b2f4a", width=0,
-                                    tags=("ui",))
+            # POSICIONAR RODAPÉ (sempre ABAIXO dos botões)
+            footer_y = y_logo + 360
+            if root._footer_win:
+                canvas.coords(root._footer_win, 0, footer_y)
+                canvas.itemconfig(root._footer_win, width=w)
 
-            # === scrollregion atual ===
+            # scrollregion atual
             canvas.configure(scrollregion=canvas.bbox("all"))
 
         finally:
@@ -249,9 +258,11 @@ def montar_tela_inicial(root: tk.Tk):
 
     def schedule_render(evt=None):
         if root._render_after:
-            try: root.after_cancel(root._render_after)
-            except: pass
-        root._render_after = root.after(90, render)
+            try:
+                root.after_cancel(root._render_after)
+            except:
+                pass
+        root._render_after = root.after(80, render)
 
     schedule_render()
     root._cfg_bind_id = root.bind("<Configure>", schedule_render)
