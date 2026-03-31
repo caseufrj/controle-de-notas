@@ -1011,16 +1011,29 @@ def orcamentos_total(
 
 # ========== INSERIR ==========
 def mensagem_inserir(d: Dict[str, Any]) -> int:
-    """
-    Insere uma nova mensagem padrão (modelo ou rascunho).
-    Tabela real: mensagens_padrao
-    """
-    campos = ("fornecedor_id", "titulo", "conteudo", "tipo")
-    vals = (d.get("fornecedor_id"), d["titulo"], d["conteudo"], d.get("tipo", "modelo"))
+    campos = (
+        "fornecedor_id", "titulo", "conteudo", "tipo",
+        "cod_aghu", "nome_item", "fornecedor_nome",
+        "vl_unit", "numero_empenho", "anexos"
+    )
+
+    vals = (
+        d.get("fornecedor_id"),
+        d.get("titulo"),
+        d.get("conteudo"),
+        d.get("tipo", "rascunho"),
+        d.get("cod_aghu"),
+        d.get("nome_item"),
+        d.get("fornecedor_nome"),
+        d.get("vl_unit"),
+        d.get("numero_empenho"),
+        d.get("anexos")
+    )
 
     conn = conectar(); cur = conn.cursor()
     cur.execute(
-        f"INSERT INTO mensagens_padrao ({','.join(campos)}) VALUES (?,?,?,?)",
+        f"INSERT INTO mensagens_padrao ({','.join(campos)}) "
+        f"VALUES ({','.join(['?']*len(campos))})",
         vals
     )
     conn.commit()
@@ -1083,26 +1096,30 @@ def mensagens_listar(tipo: Optional[str] = None,
 
 
 # ========== ATUALIZAR ==========
-def mensagem_atualizar(id_: int, novo_titulo: str, novo_conteudo: str, anexos: str = None) -> None:
-    conn = conectar()
-    cur = conn.cursor()
-
-    if anexos is None:
-        cur.execute("""
-            UPDATE mensagens_padrao
-               SET titulo = ?, 
-                   conteudo = ?
-             WHERE id = ?
-        """, (novo_titulo, novo_conteudo, id_))
-    else:
-        cur.execute("""
-            UPDATE mensagens_padrao
-               SET titulo = ?, 
-                   conteudo = ?, 
-                   anexos = ?
-             WHERE id = ?
-        """, (novo_titulo, novo_conteudo, anexos, id_))
-
+def mensagem_atualizar(id_: int, d: Dict[str, Any]) -> None:
+    conn = conectar(); cur = conn.cursor()
+    cur.execute("""
+        UPDATE mensagens_padrao SET
+            titulo=?,
+            conteudo=?,
+            cod_aghu=?,
+            nome_item=?,
+            fornecedor_nome=?,
+            vl_unit=?,
+            numero_empenho=?,
+            anexos=?
+        WHERE id=?
+    """, (
+        d.get("titulo"),
+        d.get("conteudo"),
+        d.get("cod_aghu"),
+        d.get("nome_item"),
+        d.get("fornecedor_nome"),
+        d.get("vl_unit"),
+        d.get("numero_empenho"),
+        d.get("anexos"),
+        id_
+    ))
     conn.commit()
     conn.close()
 
