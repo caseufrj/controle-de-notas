@@ -6,7 +6,6 @@ import os
 import banco
 import utils
 
-
 class TelaOrcamento(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="white")
