@@ -213,7 +213,7 @@ def montar_tela_inicial(root: tk.Tk):
         bg_canvas.delete("all")
 
         w = bg_canvas.winfo_width()
-        h = int(root.winfo_height() * 0.70)   # altura perfeita igual imagem 2
+        h = int(root.winfo_height() * 0.82)   # altura perfeita igual imagem 2
         bg_canvas.config(height=h)
 
         if w <= 0:
