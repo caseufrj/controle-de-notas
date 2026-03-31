@@ -201,7 +201,7 @@ def montar_tela_inicial(root: tk.Tk):
     # ================================
     # 2) SCROLL INVISÍVEL
     # ================================
-    BG_BASE = BG_MID  # mesma cor do fundo
+    BG_BASE = BG_MID
 
     scroll_canvas = tk.Canvas(
         root,
@@ -215,16 +215,25 @@ def montar_tela_inicial(root: tk.Tk):
     scroll_frame = tk.Frame(scroll_canvas, bg=BG_BASE)
     win_id = scroll_canvas.create_window((0, 0), window=scroll_frame, anchor="n")
 
-    # espaço superior (empurra conteúdo pra baixo)
-    tk.Frame(scroll_frame, height=460, bg=BG_BASE).pack()
+    # ===== ESPAÇAMENTO DINÂMICO (ALINHA COM LOGO) =====
+    spacer = tk.Frame(scroll_frame, bg=BG_BASE)
+    spacer.pack(fill="x")
 
-    # scroll com mouse (SEM barra visível)
+    def atualizar_espaco(event=None):
+        h = scroll_canvas.winfo_height()
+        topo = int(h * 0.52)  # 🔥 AJUSTE FINO AQUI (0.50–0.55 ideal)
+        spacer.configure(height=topo)
+
+    scroll_canvas.bind("<Configure>", atualizar_espaco)
+
+    # ================================
+    # SCROLL COM MOUSE (invisível)
+    # ================================
     def on_mousewheel(evt):
         scroll_canvas.yview_scroll(int(-1 * (evt.delta / 120)), "units")
 
     scroll_canvas.bind_all("<MouseWheel>", on_mousewheel)
 
-    # ajustar área rolável
     def on_configure(evt):
         scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
         scroll_canvas.itemconfig(win_id, width=scroll_canvas.winfo_width())
@@ -257,7 +266,7 @@ def montar_tela_inicial(root: tk.Tk):
     root._tela_inicial_widgets.extend([scroll_canvas, scroll_frame])
 
     # ================================
-    # 4) RENDER DO FUNDO
+    # 4) RENDER DO FUNDO (RESPONSIVO)
     # ================================
     def render_bg():
         if not canvas_bg.winfo_exists():
@@ -279,9 +288,14 @@ def montar_tela_inicial(root: tk.Tk):
 
         cx = w // 2
 
+        # posições RESPONSIVAS 🔥
+        y_titulo = int(h * 0.12)
+        y_sub = int(h * 0.17)
+        y_logo = int(h * 0.38)
+
         # textos
         canvas_bg.create_text(
-            cx, 70,
+            cx, y_titulo,
             text=TITULO,
             font=("Segoe UI Semibold", 20),
             fill="#113a5e",
@@ -289,7 +303,7 @@ def montar_tela_inicial(root: tk.Tk):
         )
 
         canvas_bg.create_text(
-            cx, 108,
+            cx, y_sub,
             text=APP_NAME,
             font=("Segoe UI", 12),
             fill="#1f4c77",
@@ -297,7 +311,6 @@ def montar_tela_inicial(root: tk.Tk):
         )
 
         # logo
-        y_logo = 320
         if root._logo_img:
             canvas_bg.create_image(cx, y_logo, image=root._logo_img, tags="ui")
         else:
@@ -317,7 +330,7 @@ def montar_tela_inicial(root: tk.Tk):
             tags="ui"
         )
 
-    # debounce
+    # debounce (evita travar ao redimensionar)
     def debounce(evt=None):
         if root._render_after:
             try:
