@@ -1012,21 +1012,25 @@ def orcamentos_total(
 # ========== INSERIR ==========
 def mensagem_inserir(d):
     campos = (
-        "fornecedor_id", "titulo", "conteudo", "tipo",
-        "cod_aghu", "nome_item", "fornecedor_nome",
-        "vl_unit", "numero_empenho", "anexos"
+        "fornecedor_id","titulo","conteudo","tipo",
+        "cod_aghu","nome_item","fornecedor_nome",
+        "vl_unit","numero_empenho",
+        "qtde","observacao",
+        "anexos"
     )
 
     vals = (
         d.get("fornecedor_id"),
         d.get("titulo"),
         d.get("conteudo"),
-        d.get("tipo", "rascunho"),
+        d.get("tipo","rascunho"),
         d.get("cod_aghu"),
         d.get("nome_item"),
         d.get("fornecedor_nome"),
         d.get("vl_unit"),
         d.get("numero_empenho"),
+        d.get("qtde"),
+        d.get("observacao"),
         d.get("anexos")
     )
 
