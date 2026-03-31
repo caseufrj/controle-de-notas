@@ -39,6 +39,40 @@ STATUS_DEFAULT = "Em vigência"
 # ======================================================================
 #  UTILITÁRIOS
 # ======================================================================
+# ============================================================
+# CARREGA MAPA DE E-MAILS A PARTIR DA ABA "Planilha1 (2)"
+# ============================================================
+def carregar_emails_planilha(caminho_arquivo: str) -> dict:
+    try:
+        df_em = pd.read_excel(
+            caminho_arquivo,
+            sheet_name="Planilha1 (2)",
+            engine="openpyxl"
+        )
+    except Exception:
+        return {}
+
+    # Normalizar cabeçalhos
+    df_em.columns = df_em.columns.str.strip().str.upper()
+
+    map_email = {}
+
+    for _, row in df_em.iterrows():
+        cnpj = re.sub(r"\D", "", str(row.get("CNPJ", "")))
+        if not cnpj:
+            continue
+
+        emails = []
+        for col in ["EMAIL", "EMAIL CORRETO", "OBS ENVIO"]:
+            if col in df_em.columns:
+                v = str(row.get(col, "")).strip()
+                if v and v.lower() != "nan":
+                    emails.append(v)
+
+        map_email[cnpj] = ";".join(emails)
+
+    return map_email
+
 def _norm(s: Any) -> str:
     return str(s or "").strip()
 
@@ -175,6 +209,8 @@ def importar_atas_xlsx(caminho: str) -> Dict[str, Any]:
         return {"ok": False, "msg": "Arquivo não encontrado"}
 
     df = pd.read_excel(caminho, engine="openpyxl")
+    # ------ carregar mapa de e-mails ------
+    map_emails = carregar_emails_planilha(caminho)
 
     if df.empty:
         return {"ok": False, "msg": "Planilha vazia"}
@@ -212,7 +248,27 @@ def importar_atas_xlsx(caminho: str) -> Dict[str, Any]:
                 if key_f in cache_f:
                     fid = cache_f[key_f]
                 else:
+                    # ========================
+                    # FORNECEDOR COM E-MAIL
+                    # ========================
+                    email_planilha = map_emails.get(cnpj_f, "").strip()
+                    
+                    # tentar upsert normal
                     fid = _fornecedor_upsert(cur, nome_f, cnpj_f)
+                    
+                    # atualizar e-mail se ainda não existir no banco
+                    cur.execute("SELECT email FROM fornecedores WHERE id=?", (fid,))
+                    rmail = cur.fetchone()
+                    
+                    email_atual = (rmail["email"] or "").strip() if rmail else ""
+                    
+                    # se o banco não tinha e-mail e a planilha tem, atualizar
+                    if not email_atual and email_planilha:
+                        cur.execute(
+                            "UPDATE fornecedores SET email=? WHERE id=?",
+                            (email_planilha, fid)
+                        )
+                    
                     cache_f[key_f] = fid
 
                 # ATA
