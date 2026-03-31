@@ -210,7 +210,8 @@ def montar_tela_inicial(root: tk.Tk):
 
             # Fundo gradiente
             if not NO_GRADIENT:
-                desenhar_gradiente(canvas, w, h, BG_TOP, BG_MID, BG_BOTTOM)
+                altura_total = max(h, y_logo + 420)
+                desenhar_gradiente(canvas, w, altura_total, BG_TOP, BG_MID, BG_BOTTOM)
             else:
                 canvas.create_rectangle(
                     0, 0, w, h, fill=BG_MID,
