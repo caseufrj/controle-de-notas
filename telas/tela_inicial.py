@@ -157,7 +157,10 @@ def montar_tela_inicial(root: tk.Tk):
     root.protocol("WM_DELETE_WINDOW", root.destroy)
     root.configure(bg="#ffffff")
 
-    # init banco
+    # --- Garantir que o atributo logo exista ANTES de qualquer callback ---
+    root._logo_img = None  
+
+    # --- Inicializa banco ---
     try:
         try:
             from banco import criar_tabelas as _criar_tabelas
@@ -167,7 +170,7 @@ def montar_tela_inicial(root: tk.Tk):
     except:
         pass
 
-    # init auth
+    # --- Inicializa auth ---
     try:
         from auth import auth_init
         auth_init()
@@ -177,63 +180,73 @@ def montar_tela_inicial(root: tk.Tk):
     estilizar(root)
 
     # =========================================================
-    # CANVAS PRINCIPAL (SCROLL TOTAL)
+    # 1) CANVAS PRINCIPAL — TELA INTEIRA ROLÁVEL
     # =========================================================
     canvas = tk.Canvas(root, highlightthickness=0, bd=0, bg="#ffffff")
     canvas.pack(fill="both", expand=True)
 
-    frame = tk.Frame(canvas, bg="#ffffff")
-    window_id = canvas.create_window(0, 0, window=frame, anchor="nw")
+    root._tela_inicial_widgets = [canvas]
 
-    # scroll
-    def on_mousewheel(event):
-        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+    main_frame = tk.Frame(canvas, bg="#ffffff")
+    frame_id = canvas.create_window((0, 0), window=main_frame, anchor="nw")
+
+    # --- scroll com mouse ---
+    def on_mousewheel(evt):
+        canvas.yview_scroll(int(-1 * (evt.delta / 120)), "units")
 
     canvas.bind_all("<MouseWheel>", on_mousewheel)
 
-    def update_scroll(event=None):
+    def update_scroll(evt=None):
         canvas.configure(scrollregion=canvas.bbox("all"))
-        canvas.itemconfig(window_id, width=canvas.winfo_width())
+        canvas.itemconfig(frame_id, width=canvas.winfo_width())
 
-    frame.bind("<Configure>", update_scroll)
+    main_frame.bind("<Configure>", update_scroll)
 
     # =========================================================
-    # FUNDO (GRADIENTE) COMO CANVAS DINÂMICO
+    # 2) FUNDO GRADIENTE (DENTRO DO main_frame)
     # =========================================================
-    bg_canvas = tk.Canvas(frame, highlightthickness=0, bd=0)
-    bg_canvas.pack(fill="x")
+    bg_canvas = tk.Canvas(main_frame, highlightthickness=0, bd=0)
+    bg_canvas.pack(fill="x")  # expande na largura
 
-    def render_bg(e=None):
+    def render_bg(evt=None):
         bg_canvas.delete("all")
 
         w = bg_canvas.winfo_width()
+        h = int(root.winfo_height() * 0.70)  # altura proporcional igual à IMAGEM 2
 
-        # altura proporcional ao monitor (igual imagem 2)
-        h = int(root.winfo_height() * 0.7)
+        if w <= 0:
+            return
+
         bg_canvas.config(height=h)
 
         # gradiente
         if not NO_GRADIENT:
             desenhar_gradiente(bg_canvas, w, h, BG_TOP, BG_MID, BG_BOTTOM)
         else:
-            bg_canvas.create_rectangle(0, 0, w, h, fill=BG_MID, outline="")
+            bg_canvas.create_rectangle(0, 0, w, h,
+                                       fill=BG_MID, outline="")
 
         cx = w // 2
 
-        # posições iguais à sua imagem 2
+        # posições iguais à IMAGEM 2
         y_titulo = int(h * 0.18)
         y_sub    = int(h * 0.26)
         y_logo   = int(h * 0.48)
 
+        # título superior
         bg_canvas.create_text(cx, y_titulo, text=TITULO,
-                              font=("Segoe UI Semibold", 20), fill="#113a5e")
+                              font=("Segoe UI Semibold", 20),
+                              fill="#113a5e")
 
+        # subtítulo
         bg_canvas.create_text(cx, y_sub, text=APP_NAME,
-                              font=("Segoe UI", 12), fill="#1f4c77")
+                              font=("Segoe UI", 12),
+                              fill="#1f4c77")
 
-        # logo
-        if root._logo_img:
-            bg_canvas.create_image(cx, y_logo, image=root._logo_img)
+        # LOGO
+        logo = getattr(root, "_logo_img", None)
+        if logo:
+            bg_canvas.create_image(cx, y_logo, image=logo)
         else:
             bg_canvas.create_oval(cx-34, y_logo-34, cx+34, y_logo+34,
                                   outline="#0d3758", width=3)
@@ -241,10 +254,24 @@ def montar_tela_inicial(root: tk.Tk):
     bg_canvas.bind("<Configure>", render_bg)
 
     # =========================================================
-    # BOTÕES (FORA DO CANVAS DO FUNDO)
+    # 3) CARREGAR LOGO (somente DEPOIS dos binds)
     # =========================================================
-    btn_area = tk.Frame(frame, bg="#ffffff")
-    btn_area.pack(pady=40)
+    if CAMINHO_LOGO and os.path.exists(CAMINHO_LOGO):
+        try:
+            img = tk.PhotoImage(file=CAMINHO_LOGO)
+            if img.width() > 250:
+                fator = img.width() // 250
+                img = img.subsample(fator)
+            root._logo_img = img
+            render_bg()
+        except:
+            pass
+
+    # =========================================================
+    # 4) BOTÕES — IDENTICOS À IMAGEM 2
+    # =========================================================
+    btn_area = tk.Frame(main_frame, bg="#ffffff")
+    btn_area.pack(pady=(30, 250))  # espaçamento idêntico à imagem 2
 
     def on_click_login():
         abrir_modal_login(root)
@@ -252,18 +279,25 @@ def montar_tela_inicial(root: tk.Tk):
     def on_click_registro():
         abrir_modal_registro(root)
 
-    ttk.Button(btn_area, text="LOGIN",
-               style="Primary.TButton",
-               command=on_click_login).pack(pady=(0, 10))
+    ttk.Button(
+        btn_area,
+        text="LOGIN",
+        style="Primary.TButton",
+        command=on_click_login
+    ).pack(pady=(0, 15))
 
-    ttk.Button(btn_area, text="REGISTRO / CADASTRO",
-               style="Outline.TButton",
-               command=on_click_registro).pack()
+    ttk.Button(
+        btn_area,
+        text="REGISTRO / CADASTRO",
+        style="Outline.TButton",
+        command=on_click_registro
+    ).pack()
 
-    # espaço final
-    tk.Frame(frame, height=200, bg="#ffffff").pack()
+    # --- espaço final ---
+    tk.Frame(main_frame, height=200, bg="#ffffff").pack()
 
-    update_scroll()
+    # garantir cálculo de scroll
+    root.after(150, update_scroll)
 
 # -----------------------------------------------------------------------------
 # Modais
