@@ -322,7 +322,7 @@ def usuario_alterar_senha(usuario_id: int,
                           senha_atual: str,
                           nova_senha: str) -> None:
 
-    if not nova_senha or len(nova_senha) < 10:
+    if not nova_senha or len(nova_senha) < 8:
         raise ValueError(
             "A nova senha deve ter pelo menos 10 caracteres.\n"
             "Exemplo recomendado: Ebserh@2024"
