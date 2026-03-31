@@ -349,6 +349,15 @@ def importar_atas_xlsx(caminho: str) -> Dict[str, Any]:
                     stats["itens_atualizados"] += 1
 
             except Exception as e:
+                import traceback
+                erro_completo = traceback.format_exc()
+            
+                print("\n=============================================")
+                print(f" ERRO NA LINHA {idx+2}")
+                print("---------------------------------------------")
+                print(erro_completo)
+                print("=============================================\n")
+            
                 erros.append(f"Linha {idx+2}: {e}")
 
         conn.commit()
