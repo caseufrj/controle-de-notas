@@ -429,15 +429,14 @@ class TelaOrcamento(tk.Frame):
 
     def _autosave_now(self):
         import json
-    
         titulo = self.e_titulo_msg.get().strip()
         conteudo = self.txt_msg.get("1.0", "end").strip()
     
-        # Criar título automático se não houver
+        # cria título automático se vazio
         if not titulo:
             titulo = f"Rascunho {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
     
-        # Dados extras do rascunho (para salvar completo)
+        # montar dados completos do rascunho
         d = {
             "tipo": "rascunho",
             "titulo": titulo,
@@ -451,13 +450,14 @@ class TelaOrcamento(tk.Frame):
             "anexos": json.dumps(self._anexos_extra)
         }
     
-        # Criar rascunho se ainda não existir
+        # ===================== CRIAR RASCUNHO =====================
         if not self._autosave_msg_id and not self._msg_editando_id:
             try:
                 novo_id = banco.mensagem_inserir(d)
                 self._autosave_msg_id = novo_id
                 self._msg_editando_id = novo_id
     
+                # atualizar campo do título
                 self.e_titulo_msg.delete(0, "end")
                 self.e_titulo_msg.insert(0, titulo)
     
@@ -465,7 +465,7 @@ class TelaOrcamento(tk.Frame):
                 print("Erro ao criar rascunho automático:", e)
                 return
     
-        # Atualizar rascunho existente
+        # ===================== ATUALIZAR RASCUNHO =====================
         else:
             try:
                 banco.mensagem_atualizar(
@@ -477,24 +477,12 @@ class TelaOrcamento(tk.Frame):
                     fornecedor_nome=d["fornecedor_nome"],
                     vl_unit=d["vl_unit"],
                     numero_empenho=d["numero_empenho"],
-                    anexos=d["anexos"],
+                    anexos=d["anexos"]
                 )
             except Exception as e:
                 print("Erro ao atualizar rascunho automático:", e)
     
-        # Feedback
-        self._lbl_autosave.config(text="Rascunho salvo automaticamente")
-        self.after(2000, lambda: self._lbl_autosave.config(text=""))
-    
-        # Se já existe um rascunho → atualizar
-        else:
-            titulo_final = titulo or "Rascunho automático"
-            try:
-                banco.mensagem_atualizar(self._autosave_msg_id, titulo_final, conteudo)
-            except:
-                pass
-    
-        # Exibir feedback
+        # ===================== FEEDBACK =====================
         self._lbl_autosave.config(text="Rascunho salvo automaticamente")
         self.after(2000, lambda: self._lbl_autosave.config(text=""))
         
