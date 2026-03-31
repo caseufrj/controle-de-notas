@@ -1044,13 +1044,26 @@ def mensagem_inserir(d):
 # ========== OBTER ==========
 def mensagem_obter(id_msg: int) -> Optional[Dict[str, Any]]:
     """
-    Retorna uma mensagem padrão (modelo/rascunho) pelo ID.
-    Funciona com _editar_msg(), _usar_msg(), _carregar_modelo_rapido().
+    Retorna uma mensagem padrão (modelo/rascunho) pelo ID,
+    incluindo todos os campos extras (cod_aghu, nome_item, etc.)
     """
-    conn = conectar(); cur = conn.cursor()
+    conn = conectar()
+    cur = conn.cursor()
 
     cur.execute("""
-        SELECT id, fornecedor_id, titulo, conteudo, tipo, criado_em
+        SELECT 
+            id,
+            fornecedor_id,
+            titulo,
+            conteudo,
+            tipo,
+            criado_em,
+            cod_aghu,
+            nome_item,
+            fornecedor_nome,
+            vl_unit,
+            numero_empenho,
+            anexos
         FROM mensagens_padrao
         WHERE id = ?
     """, (id_msg,))
