@@ -201,15 +201,20 @@ def montar_tela_inicial(root: tk.Tk):
     # 2) FRAME ROLÁVEL (NÃO USA CANVAS → FUNDO FICA VISÍVEL)
     # ======================================================
     scroll_frame = tk.Frame(root, bg="")  
-    scroll_frame.place(relx=0, rely=0, relwidth=1, relheight=1)
+    scroll_frame.place(x=0, y=int(root.winfo_height() * 0.55), relwidth=1)
 
-    scroll_y = 0  # deslocamento da rolagem
-
+    base_y = int(root.winfo_height() * 0.55)  # posição inicial (abaixo da logo)
+    scroll_offset = 0
+    
     def on_mousewheel(evt):
-        nonlocal scroll_y
-        scroll_y += int(-1 * (evt.delta / 120) * 20)
-        scroll_y = max(0, scroll_y)  # impede subir demais
-        scroll_frame.place_configure(y=scroll_y)
+        nonlocal scroll_offset
+        scroll_offset += int(-1 * (evt.delta / 120) * 20)
+    
+        # impede que suba acima da base
+        if scroll_offset < 0:
+            scroll_offset = 0
+    
+        scroll_frame.place_configure(y=base_y + scroll_offset)
 
     root.bind_all("<MouseWheel>", on_mousewheel)
 
@@ -223,8 +228,7 @@ def montar_tela_inicial(root: tk.Tk):
         abrir_modal_registro(root)
 
     # Espaço inicial para alinhar com a logo (ajuste fino aqui)
-    tk.Frame(scroll_frame, height=420, bg="").pack()
-
+    
     ttk.Button(
         scroll_frame,
         text="LOGIN",
