@@ -156,6 +156,9 @@ def montar_tela_inicial(root: tk.Tk):
     print("[DEBUG] tela_inicial: montar_tela_inicial()")
     root.protocol("WM_DELETE_WINDOW", root.destroy)
 
+    # FIX para o erro: "unknown color name ''"
+    root.configure(bg="#ffffff")   # <<< ESTA LINHA RESOLVE TUDO
+
     # inicializa banco
     try:
         try:
