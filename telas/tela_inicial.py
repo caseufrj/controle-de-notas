@@ -155,242 +155,401 @@ def desmontar_tela_inicial(root: tk.Tk):
 
 def montar_tela_inicial(root: tk.Tk):
     print("[DEBUG] tela_inicial: montar_tela_inicial()")
-    # Ao estar na tela inicial, clicar no X fecha completamente o app
     root.protocol("WM_DELETE_WINDOW", root.destroy)
+    root.configure(bg="#ffffff")
 
-    # prepara banco (imports tardios e tolerantes)
+    # --- Garante que o atributo existe antes dos callbacks ---
+    root._logo_img = None
+
+    # === init banco ===
     try:
         try:
             from banco import criar_tabelas as _criar_tabelas
-            print("[DEBUG] tela_inicial: import banco.criar_tabelas OK")
         except ImportError:
             from bd import criar_tabelas as _criar_tabelas
-            print("[DEBUG] tela_inicial: import bd.criar_tabelas OK (fallback)")
-        try:
-            _criar_tabelas()
-            print("[DEBUG] tela_inicial: criar_tabelas() OK")
-        except Exception as e:
-            print("[DEBUG] tela_inicial: criar_tabelas() FALHOU:", e)
-    except Exception as e:
-        print("[DEBUG] tela_inicial: import criar_tabelas FALHOU:", e)
-        log_path = os.path.join(os.path.expanduser("~"), "controle_notas_erro.log")
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write("\n" + "=" * 80 + "\n")
-            f.write("Falha ao importar/rodar criar_tabelas do banco:\n")
-            f.write(traceback.format_exc())
+        _criar_tabelas()
+    except:
+        pass
 
-    # inicializa auth
+    # === init auth ===
     try:
         from auth import auth_init
         auth_init()
-        print("[DEBUG] tela_inicial: auth_init() OK")
-    except Exception as e:
-        print("[DEBUG] tela_inicial: auth_init() FALHOU:", e)
-        log_path = os.path.join(os.path.expanduser("~"), "controle_notas_erro.log")
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write("\n" + "=" * 80 + "\n")
-            f.write("Falha no auth_init():\n")
-            f.write(traceback.format_exc())
+    except:
+        pass
 
     estilizar(root)
 
-    # Canvas base
-    canvas = tk.Canvas(root, highlightthickness=0, bd=0)
+    # ======================================================
+    # CANVAS PRINCIPAL — TELA INTEIRA ROLÁVEL
+    # ======================================================
+    canvas = tk.Canvas(root, highlightthickness=0, bd=0, bg="#ffffff")
     canvas.pack(fill="both", expand=True)
 
-    # guardar referências para destruir depois
     root._tela_inicial_widgets = [canvas]
-    root._render_after = None  # debounce id
-    root._login_win = None     # id da janela no canvas
-    root._reg_win = None
 
-    # === Cache da logo (carregar uma vez) ===
-    root._logo_img = None
-    if CAMINHO_LOGO and os.path.exists(CAMINHO_LOGO):
-        try:
-            tmp = tk.PhotoImage(file=CAMINHO_LOGO)
-            max_w = 250  # <-- seu tamanho desejado da logo (largura máx.)
-            iw = tmp.width()
-            if iw > max_w:
-                fator = max(1, iw // max_w)
-                tmp = tmp.subsample(fator, fator)
-            root._logo_img = tmp
-        except Exception:
-            root._logo_img = None
+    # Frame interno que recebe todo o conteúdo
+    main_frame = tk.Frame(canvas, bg="#ffffff")
+    frame_id = canvas.create_window(0, 0, window=main_frame, anchor="nw")
 
-    # ===== Botões criados UMA VEZ =====
-    def on_click_login():
-        print("[DEBUG] click LOGIN")
-        abrir_modal_login(root)
+    # scroll do mouse
+    def on_mousewheel(evt):
+        canvas.yview_scroll(int(-1 * (evt.delta / 120)), "units")
+    canvas.bind_all("<MouseWheel>", on_mousewheel)
 
-    def on_click_registro():
-        print("[DEBUG] click REGISTRO")
-        abrir_modal_registro(root)
+    # atualiza a scrollregion sempre que o conteúdo mudar
+    def update_scroll(evt=None):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+        canvas.itemconfig(frame_id, width=canvas.winfo_width())
+    main_frame.bind("<Configure>", update_scroll)
 
-    btn_login = ttk.Button(root, text="LOGIN", style="Primary.TButton", command=on_click_login)
-    btn_reg = ttk.Button(root, text="REGISTRO / CADASTRO", style="Outline.TButton", command=on_click_registro)
+    # ======================================================
+    # GRADIENTE + LOGO + TÍTULO
+    # ======================================================
+    bg_canvas = tk.Canvas(main_frame, highlightthickness=0, bd=0)
+    bg_canvas.pack(fill="x")
 
-    # guardamos para destruir depois
-    root._tela_inicial_widgets.extend([btn_login, btn_reg])
+    def render_bg(evt=None):
+        bg_canvas.delete("all")
 
-    # criamos as janelas do canvas (uma vez); posic. real é ajustada no render()
-    root._login_win = canvas.create_window(0, 0, window=btn_login, anchor="center")
-    root._reg_win   = canvas.create_window(0, 0, window=btn_reg,   anchor="center")
+        w = bg_canvas.winfo_width()
+        h = int(root.winfo_height() * 0.70)   # altura perfeita igual imagem 2
+        bg_canvas.config(height=h)
 
-    def render():
-        # Se o canvas já foi destruído (ex.: após login), apenas saia
-        try:
-            if not canvas.winfo_exists():
-                root._render_after = None
-                return
-        except Exception:
-            root._render_after = None
+        if w <= 0:
             return
 
+        # gradiente original
+        if not NO_GRADIENT:
+            desenhar_gradiente(bg_canvas, w, h, BG_TOP, BG_MID, BG_BOTTOM)
+        else:
+            bg_canvas.create_rectangle(0, 0, w, h, fill=BG_MID, outline="")
+
+        cx = w // 2
+
+        # posições iguais à imagem 2
+        y_titulo = int(h * 0.18)
+        y_sub    = int(h * 0.26)
+        y_logo   = int(h * 0.48)
+
+        bg_canvas.create_text(cx, y_titulo, text=TITULO,
+                              font=("Segoe UI Semibold", 20), fill="#113a5e")
+
+        bg_canvas.create_text(cx, y_sub, text=APP_NAME,
+                              font=("Segoe UI", 12), fill="#1f4c77")
+
+        logo = getattr(root, "_logo_img", None)
+        if logo:
+            bg_canvas.create_image(cx, y_logo, image=logo)
+        else:
+            bg_canvas.create_oval(cx-34, y_logo-34, cx+34, y_logo+34,
+                                  outline="#0d3758", width=3)
+
+    bg_canvas.bind("<Configure>", render_bg)
+
+    # ======================================================
+    # CARREGAR LOGO (DEPOIS DO BIND)
+    # ======================================================
+    if CAMINHO_LOGO and os.path.exists(CAMINHO_LOGO):
         try:
-            w, h = root.winfo_width(), root.winfo_height()
+            img = tk.PhotoImage(file=CAMINHO_LOGO)
+            if img.width() > 250:
+                fator = img.width() // 250
+                img = img.subsample(fator)
+            root._logo_img = img
+            render_bg()
+        except:
+            pass
 
-            # ⚠️ Limpa SOMENTE os desenhos (gradiente e UI), NÃO as janelas (botões)
-            try:
-                canvas.delete("grad")
-                canvas.delete("ui")
-            except tk.TclError:
-                return  # canvas pode ter sido destruído no meio
+    # ======================================================
+    # BOTÕES — IGUAIS À IMAGEM 2
+    # ======================================================
+    btn_area = tk.Frame(main_frame, bg="#ffffff")
+    btn_area.pack(pady=(40, 250))
 
-            # Fundo
-            if not NO_GRADIENT:
-                desenhar_gradiente(canvas, w, h, BG_TOP, BG_MID, BG_BOTTOM, steps=80)
-            else:
-                canvas.create_rectangle(0, 0, w, h, fill=BG_MID, outline="", tags=("ui",))
+    ttk.Button(
+        btn_area,
+        text="LOGIN",
+        style="Primary.TButton",
+        command=lambda: abrir_modal_login(root)
+    ).pack(pady=(0, 15))
 
-            # Título / subtítulo
-            cx = w // 2
-            canvas.create_text(cx, 70, text=TITULO,
-                               font=("Segoe UI Semibold", 20), fill="#113a5e", tags=("ui",))
-            canvas.create_text(cx, 108, text=APP_NAME,
-                               font=("Segoe UI", 12), fill="#1f4c77", tags=("ui",))
+    ttk.Button(
+        btn_area,
+        text="REGISTRO / CADASTRO",
+        style="Outline.TButton",
+        command=lambda: abrir_modal_registro(root)
+    ).pack()
 
-            # ======= LOGO =======
-            y_logo = 320  # sua posição vertical
-            if getattr(root, "_logo_img", None):
-                canvas.create_image(cx, y_logo, image=root._logo_img, tags=("ui",))
-            else:
-                canvas.create_oval(cx - 34, y_logo - 34, cx + 34, y_logo + 34,
-                                   outline="#0d3758", width=3, tags=("ui",))
+    # Espaço final para permitir scroll
+    tk.Frame(main_frame, height=200, bg="#ffffff").pack()
 
-            # ======= Botões (reposicionamento) =======
-            if getattr(root, "_login_win", None):
-                canvas.coords(root._login_win, cx, y_logo + 240)  # sua distância para LOGIN
-                canvas.tag_raise(root._login_win)
-            if getattr(root, "_reg_win", None):
-                canvas.coords(root._reg_win, cx, y_logo + 300)    # sua distância para REGISTRO
-                canvas.tag_raise(root._reg_win)
-
-            # Barra inferior
-            canvas.create_rectangle(0, h - 48, w, h, fill="#0b2f4a", width=0, tags=("ui",))
-        finally:
-            # limpa a flag do debounce
-            root._render_after = None
-
-    def schedule_render(_evt=None):
-        # Debounce: renderiza no máx. a cada 90ms (mais leve)
-        if root._render_after:
-            try:
-                root.after_cancel(root._render_after)
-            except Exception:
-                pass
-        root._render_after = root.after(90, render)
-
-    # Primeira renderização + bind com debounce (guardamos o id)
-    schedule_render()
-    root._cfg_bind_id = root.bind("<Configure>", schedule_render)
+    # Garantir cálculo final do scroll
+    root.after(150, update_scroll)
 
 
 # -----------------------------------------------------------------------------
 # Modais
 # -----------------------------------------------------------------------------
 def abrir_modal_login(root: tk.Tk):
-    win = tk.Toplevel(root); win.title("Login - SICONAE")
-    win.transient(root); win.grab_set(); win.resizable(False, False)
+    # --- Modal ---
+    win = tk.Toplevel(root)
+    win.title("Login - SICONAE")
+    win.transient(root)
+    win.grab_set()
+    win.resizable(False, False)
 
-    frm = ttk.Frame(win, padding=16); frm.grid(row=0, column=0, sticky="nsew")
+    # --- Animação leve ---
+    try:
+        win.attributes("-alpha", 0.0)
+        for i in range(1, 11):
+            win.attributes("-alpha", i/10)
+            win.update()
+            win.after(12)
+    except:
+        pass
 
+    frm = ttk.Frame(win, padding=20)
+    frm.grid(row=0, column=0)
+
+    # ---------------- EMAIL ----------------
     ttk.Label(frm, text="E-mail EBSERH", font=("Segoe UI", 10)).grid(row=0, column=0, sticky="w")
-    ent_email = ttk.Entry(frm, width=40); ent_email.grid(row=1, column=0, sticky="ew", pady=(0, 8))
 
+    email_box = tk.Frame(frm, bg="white")
+    email_box.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+
+    ent_email = ttk.Entry(email_box, width=40)
+    ent_email.pack(side="left", fill="x", expand=True)
+
+    # domínio fantasma
+    lbl_dom = tk.Label(email_box, text="@ebserh.gov.br",
+                       fg="#888", bg="white", font=("Segoe UI", 10))
+    lbl_dom.place(x=0, y=0)
+
+    # indicador visual 🟢 / ⭕
+    lbl_ok = tk.Label(email_box, text="⭕", bg="white", fg="red", font=("Segoe UI", 11))
+    lbl_ok.pack(side="right", padx=5)
+
+    def atualizar_dom(e=None):
+        txt = ent_email.get().strip()
+        lbl_dom.place_configure(x=max(0, len(txt) * 7))
+        if txt and "@" not in txt:
+            lbl_ok.config(text="🟢", fg="green")
+        elif txt.endswith("@ebserh.gov.br"):
+            lbl_ok.config(text="🟢", fg="green")
+        else:
+            lbl_ok.config(text="⭕", fg="red")
+
+    ent_email.bind("<KeyRelease>", atualizar_dom)
+
+    # ---------------- SENHA + 👁 ----------------
     ttk.Label(frm, text="Senha", font=("Segoe UI", 10)).grid(row=2, column=0, sticky="w")
-    ent_senha = ttk.Entry(frm, width=40, show="•"); ent_senha.grid(row=3, column=0, sticky="ew", pady=(0, 12))
 
+    pass_box = tk.Frame(frm)
+    pass_box.grid(row=3, column=0, sticky="ew", pady=(0, 10))
+
+    ent_senha = ttk.Entry(pass_box, width=34, show="•")
+    ent_senha.pack(side="left", fill="x", expand=True)
+
+    ver_senha = tk.BooleanVar(value=False)
+
+    def toggle_senha():
+        ent_senha.config(show="" if ver_senha.get() else "•")
+
+    ttk.Checkbutton(pass_box, text="👁", variable=ver_senha,
+                    command=toggle_senha).pack(side="left", padx=6)
+
+    # ---------------- SALVAR SENHA ----------------
+    var_salvar = tk.BooleanVar(value=False)
+    ttk.Checkbutton(frm, text="Salvar senha", variable=var_salvar)\
+        .grid(row=4, column=0, sticky="w", pady=(0, 10))
+
+    # ---------------- BOTÃO LOGIN ----------------
     def do_login(event=None):
+        raw = ent_email.get().strip()
+        email = raw + "@ebserh.gov.br" if "@" not in raw else raw
+        senha = ent_senha.get().strip()
+
         try:
             from auth import usuario_login
             ua = f"SICONAE-Desktop/{os.name}"
             ip = socket.gethostbyname(socket.gethostname())
-            auth = usuario_login(ent_email.get().strip(), ent_senha.get(), ua, ip)
-            try: win.grab_release()
-            except Exception: pass
+            auth = usuario_login(email, senha, ua, ip)
+
+            if var_salvar.get():
+                try:
+                    import utils
+                    utils.salvar_config({"login_email": email, "login_senha": senha})
+                except:
+                    pass
+
             win.destroy()
             montar_sistema(root, auth)
+
         except Exception as e:
             messagebox.showerror("Erro no login", str(e))
 
-    btn = ttk.Button(frm, text="Entrar", style="Primary.TButton", command=do_login)
-    btn.grid(row=4, column=0, sticky="ew")
+    ttk.Button(frm, text="Entrar", style="Primary.TButton", command=do_login)\
+        .grid(row=5, column=0, sticky="ew", pady=(0, 6))
 
-    # ENTER envia o formulário
-    win.bind("<Return>", do_login)
-    ent_email.bind("<Return>", do_login)
-    ent_senha.bind("<Return>", do_login)
+    # ---------------- ESQUECI SENHA ----------------
+    def esqueci():
+        messagebox.showinfo(
+            "Recuperar senha",
+            "Para recuperar sua senha:\n"
+            "- Acesse: https://webmail.ebserh.gov.br\n"
+            "- Clique em 'Esqueci minha senha'\n"
+            "- Ou abra um chamado na TI."
+        )
+
+    ttk.Button(frm, text="Esqueci minha senha", style="Outline.TButton",
+               command=esqueci).grid(row=6, column=0, sticky="ew")
 
     ent_email.focus_set()
-    _center_window(win)  # Centraliza modal
+    win.bind("<Return>", do_login)
+    _center_window(win)
 
 
 def abrir_modal_registro(root: tk.Tk):
-    win = tk.Toplevel(root); win.title("Registro / Cadastro - SICONAE")
-    win.transient(root); win.grab_set(); win.resizable(False, False)
+    win = tk.Toplevel(root)
+    win.title("Registro / Cadastro - SICONAE")
+    win.transient(root)
+    win.grab_set()
+    win.resizable(False, False)
 
-    frm = ttk.Frame(win, padding=16); frm.grid(row=0, column=0, sticky="nsew")
+    # animação
+    try:
+        win.attributes("-alpha", 0.0)
+        for i in range(1, 11):
+            win.attributes("-alpha", i/10)
+            win.update()
+            win.after(12)
+    except:
+        pass
 
-    ttk.Label(frm, text="Nome", font=("Segoe UI", 10)).grid(row=0, column=0, sticky="w")
-    ent_nome = ttk.Entry(frm, width=40); ent_nome.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+    frm = ttk.Frame(win, padding=20)
+    frm.grid(row=0, column=0)
 
-    ttk.Label(frm, text="E-mail EBSERH (@ebserh.gov.br)", font=("Segoe UI", 10)).grid(row=2, column=0, sticky="w")
-    ent_email = ttk.Entry(frm, width=40); ent_email.grid(row=3, column=0, sticky="ew", pady=(0, 8))
+    # ---------------- NOME ----------------
+    ttk.Label(frm, text="Nome completo", font=("Segoe UI", 10)).grid(row=0, column=0, sticky="w")
+    ent_nome = ttk.Entry(frm, width=40)
+    ent_nome.grid(row=1, column=0, sticky="ew", pady=(0, 8))
 
-    ttk.Label(frm, text="Senha (mín. 10 caracteres)", font=("Segoe UI", 10)).grid(row=4, column=0, sticky="w")
-    ent_senha = ttk.Entry(frm, width=40, show="•"); ent_senha.grid(row=5, column=0, sticky="ew", pady=(0, 8))
+    # ---------------- EMAIL + placeholder ----------------
+    ttk.Label(frm, text="E-mail EBSERH", font=("Segoe UI", 10)).grid(row=2, column=0, sticky="w")
 
-    ttk.Label(frm, text="Confirmar Senha", font=("Segoe UI", 10)).grid(row=6, column=0, sticky="w")
-    ent_conf = ttk.Entry(frm, width=40, show="•"); ent_conf.grid(row=7, column=0, sticky="ew", pady=(0, 12))
+    email_box = tk.Frame(frm, bg="white")
+    email_box.grid(row=3, column=0, sticky="ew", pady=(0, 8))
 
+    ent_email = ttk.Entry(email_box, width=40)
+    ent_email.pack(side="left", fill="x", expand=True)
+
+    lbl_dom = tk.Label(email_box, text="@ebserh.gov.br",
+                       fg="#888", bg="white", font=("Segoe UI", 10))
+    lbl_dom.place(x=0, y=0)
+
+    lbl_ok = tk.Label(email_box, text="⭕", bg="white", fg="red")
+    lbl_ok.pack(side="right", padx=5)
+
+    def atualizar_dom(e=None):
+        txt = ent_email.get().strip()
+        lbl_dom.place_configure(x=max(0, len(txt)*7))
+        if txt and "@" not in txt:
+            lbl_ok.config(text="🟢")
+        elif txt.endswith("@ebserh.gov.br"):
+            lbl_ok.config(text="🟢")
+        else:
+            lbl_ok.config(text="⭕")
+
+    ent_email.bind("<KeyRelease>", atualizar_dom)
+
+    # ---------------- SENHA + 👁 + força ----------------
+    ttk.Label(frm, text="Senha (mín. 8 caracteres)", font=("Segoe UI", 10))\
+       .grid(row=4, column=0, sticky="w")
+
+    pass_box = tk.Frame(frm)
+    pass_box.grid(row=5, column=0, sticky="ew")
+
+    ent_senha = ttk.Entry(pass_box, width=34, show="•")
+    ent_senha.pack(side="left", fill="x", expand=True)
+
+    ver_senha = tk.BooleanVar(value=False)
+    def toggle():
+        ent_senha.config(show="" if ver_senha.get() else "•")
+    ttk.Checkbutton(pass_box, text="👁", variable=ver_senha,
+                    command=toggle).pack(side="left", padx=6)
+
+    # barra de força
+    força = tk.Canvas(frm, width=280, height=6, bg="#eee")
+    força.grid(row=6, column=0, pady=(5, 12))
+
+    def medir_forca(e=None):
+        s = ent_senha.get()
+        força.delete("all")
+
+        lvl = 0
+        if len(s) >= 8: lvl += 1
+        if any(c.isdigit() for c in s): lvl += 1
+        if any(c.isupper() for c in s): lvl += 1
+        if any(c in "@#$!&*" for c in s): lvl += 1
+
+        cor = "#ff3b30"
+        if lvl == 2: cor = "#ffcc00"
+        if lvl >= 3: cor = "#4cd964"
+
+        força.create_rectangle(0, 0, lvl * 70, 6, fill=cor, width=0)
+
+    ent_senha.bind("<KeyRelease>", medir_forca)
+
+    # ---------------- CONFIRMAR SENHA ----------------
+    ttk.Label(frm, text="Confirmar senha", font=("Segoe UI", 10)).grid(row=7, column=0, sticky="w")
+
+    conf_box = tk.Frame(frm)
+    conf_box.grid(row=8, column=0, sticky="ew")
+
+    ent_conf = ttk.Entry(conf_box, width=34, show="•")
+    ent_conf.pack(side="left", fill="x", expand=True)
+
+    ver_conf = tk.BooleanVar(value=False)
+    def toggle_conf():
+        ent_conf.config(show="" if ver_conf.get() else "•")
+    ttk.Checkbutton(conf_box, text="👁", variable=ver_conf,
+                    command=toggle_conf).pack(side="left", padx=6)
+
+    # ---------------- BOTÃO REGISTRAR ----------------
     def do_registrar(event=None):
+        nome = ent_nome.get().strip()
+        raw = ent_email.get().strip()
+        email = raw + "@ebserh.gov.br" if "@" not in raw else raw
+        s1 = ent_senha.get().strip()
+        s2 = ent_conf.get().strip()
+
+        if not nome:
+            messagebox.showerror("Erro", "Informe seu nome.")
+            return
+
+        if s1 != s2:
+            messagebox.showerror("Erro", "As senhas não coincidem.")
+            return
+
+        if len(s1) < 8:
+            messagebox.showerror("Erro", "A senha deve ter pelo menos 8 caracteres.")
+            return
+
         try:
             from auth import usuario_registrar
-            s1, s2 = ent_senha.get(), ent_conf.get()
-            if s1 != s2:
-                messagebox.showerror("Erro", "As senhas não coincidem.")
-                return
-            usuario_registrar(ent_email.get().strip(), s1, ent_nome.get().strip() or None)
+            usuario_registrar(email, s1, nome)
             messagebox.showinfo("Sucesso", "Usuário criado. Faça login.")
-            try: win.grab_release()
-            except Exception: pass
             win.destroy()
         except Exception as e:
-            messagebox.showerror("Erro no registro", str(e))
+            messagebox.showerror("Erro", str(e))
 
-    btn = ttk.Button(frm, text="Registrar", style="Primary.TButton", command=do_registrar)
-    btn.grid(row=8, column=0, sticky="ew")
+    ttk.Button(frm, text="Registrar", style="Primary.TButton",
+               command=do_registrar).grid(row=9, column=0, sticky="ew")
 
-    # ENTER envia o formulário
     win.bind("<Return>", do_registrar)
-    ent_nome.bind("<Return>", do_registrar)
-    ent_email.bind("<Return>", do_registrar)
-    ent_senha.bind("<Return>", do_registrar)
-    ent_conf.bind("<Return>", do_registrar)
-
     ent_nome.focus_set()
-    _center_window(win)  # Centraliza modal
+    _center_window(win)
 
 
 # -----------------------------------------------------------------------------
