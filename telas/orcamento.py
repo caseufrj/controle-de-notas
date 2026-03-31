@@ -212,7 +212,7 @@ class TelaOrcamento(tk.Frame):
         heads_rasc = ("Id", "Assunto", "Cód AGHU", "Nome Item", "Fornecedor", "Resumo da mensagem")
         widths_rasc = (60, 200, 90, 250, 180, 300)
         
-        self.tv_rasc = ttk.Treeview(aba_rasc, columns=cols_rasc, show="headings", height=5)
+        self.tv_rasc = ttk.Treeview(aba_rasc, columns=cols_rasc, show="headings", height=6)
         for c, h, w in zip(cols_rasc, heads_rasc, widths_rasc):
             self.tv_rasc.heading(c, text=h)
             self.tv_rasc.column(c, width=w, anchor="w")
@@ -428,31 +428,63 @@ class TelaOrcamento(tk.Frame):
         self._autosave_job = self.after(1000, self._autosave_now)
 
     def _autosave_now(self):
-        conteudo = self.txt_msg.get("1.0", "end").strip()
-        if not conteudo:
-            return
+        import json
     
         titulo = self.e_titulo_msg.get().strip()
+        conteudo = self.txt_msg.get("1.0", "end").strip()
     
-        # Se ainda não existe um rascunho associado
+        # Criar título automático se não houver
+        if not titulo:
+            titulo = f"Rascunho {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
+    
+        # Dados extras do rascunho (para salvar completo)
+        d = {
+            "tipo": "rascunho",
+            "titulo": titulo,
+            "conteudo": conteudo,
+            "fornecedor_id": self._fornecedor_id_atual(),
+            "cod_aghu": self.e_cod.get().strip(),
+            "nome_item": self.e_nome.get().strip(),
+            "fornecedor_nome": self.cb_fornec.get(),
+            "vl_unit": self.e_vu.get().strip(),
+            "numero_empenho": self.e_emp.get().strip(),
+            "anexos": json.dumps(self._anexos_extra)
+        }
+    
+        # Criar rascunho se ainda não existir
         if not self._autosave_msg_id and not self._msg_editando_id:
-            # cria um rascunho automático
-            titulo_auto = titulo or f"Rascunho {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
             try:
-                novo_id = banco.mensagem_inserir({
-                    "tipo": "rascunho",
-                    "titulo": titulo_auto,
-                    "conteudo": conteudo,
-                    "fornecedor_id": self._fornecedor_id_atual()
-                })
+                novo_id = banco.mensagem_inserir(d)
                 self._autosave_msg_id = novo_id
                 self._msg_editando_id = novo_id
     
                 self.e_titulo_msg.delete(0, "end")
-                self.e_titulo_msg.insert(0, titulo_auto)
+                self.e_titulo_msg.insert(0, titulo)
+    
             except Exception as e:
                 print("Erro ao criar rascunho automático:", e)
                 return
+    
+        # Atualizar rascunho existente
+        else:
+            try:
+                banco.mensagem_atualizar(
+                    self._autosave_msg_id,
+                    titulo,
+                    conteudo,
+                    cod_aghu=d["cod_aghu"],
+                    nome_item=d["nome_item"],
+                    fornecedor_nome=d["fornecedor_nome"],
+                    vl_unit=d["vl_unit"],
+                    numero_empenho=d["numero_empenho"],
+                    anexos=d["anexos"],
+                )
+            except Exception as e:
+                print("Erro ao atualizar rascunho automático:", e)
+    
+        # Feedback
+        self._lbl_autosave.config(text="Rascunho salvo automaticamente")
+        self.after(2000, lambda: self._lbl_autosave.config(text=""))
     
         # Se já existe um rascunho → atualizar
         else:
@@ -731,54 +763,91 @@ class TelaOrcamento(tk.Frame):
     def _carregar_msgs(self):
         forn_id = self._fornecedor_id_atual()
         busca = self.e_msg_busca.get().strip() if hasattr(self, "e_msg_busca") else ""
+    
+        # limpar modelos e rascunhos
         if hasattr(self, "tv_modelos"):
             for i in self.tv_modelos.get_children():
                 self.tv_modelos.delete(i)
+    
         if hasattr(self, "tv_rasc"):
             for i in self.tv_rasc.get_children():
                 self.tv_rasc.delete(i)
+    
         if hasattr(self, "cb_modelo"):
             self.cb_modelo.set("")
             self.cb_modelo["values"] = []
-            
+    
+        # função auxiliar interna
         def _safe_listar(tipo: str, fornecedor_id):
             try:
                 base = banco.mensagens_listar(tipo=tipo, fornecedor_id=fornecedor_id, busca=busca) or []
             except:
                 base = []
+    
             if fornecedor_id is not None:
                 try:
                     glb = banco.mensagens_listar(tipo=tipo, fornecedor_id=None, busca=busca) or []
                 except:
                     glb = []
+    
                 usados = set(m.get("id") for m in base)
                 for g in glb:
                     if g.get("id") not in usados:
                         base.append(g)
+    
             try:
                 base.sort(key=lambda m: (m.get("criado_em") or "", m.get("id") or 0), reverse=True)
             except:
                 pass
+    
             return base
+    
+        # ===============================================
+        #   MODELOS
+        # ===============================================
         modelos = _safe_listar("modelo", forn_id)
         self._modelos_cache = modelos[:]
+    
         if hasattr(self, "cb_modelo"):
             self.cb_modelo["values"] = [m.get("titulo", "") for m in modelos]
+    
         for m in modelos:
             escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
-            self.tv_modelos.insert("", "end", values=(m.get("id", ""), m.get("titulo", ""), escopo, m.get("criado_em", "")))
+            self.tv_modelos.insert(
+                "",
+                "end",
+                values=(
+                    m.get("id", ""),
+                    m.get("titulo", ""),
+                    escopo,
+                    m.get("criado_em", "")
+                )
+            )
+    
+        # ===============================================
+        #   RASCUNHOS — versão corrigida
+        # ===============================================
         rasc = _safe_listar("rascunho", forn_id)
+    
         for m in rasc:
-            escopo = "Global" if m.get("fornecedor_id") in (None, "") else f"Forn {m['fornecedor_id']}"
-            conteudo = m.get("conteudo", "") or ""
+    
+            # resumo da mensagem (conteúdo)
+            conteudo = m.get("conteudo") or ""
             resumo = (conteudo[:60] + "...") if len(conteudo) > 60 else conteudo
-            
-            self.tv_rasc.insert("", "end", values=(
-                m.get("id", ""),
-                m.get("titulo", ""),
-                escopo,
-                resumo
-            ))
+    
+            # inserir na grid SOMENTE o que deve aparecer
+            self.tv_rasc.insert(
+                "",
+                "end",
+                values=(
+                    m.get("id", ""),                 # ID
+                    m.get("titulo", ""),             # ASSUNTO
+                    m.get("cod_aghu", ""),           # CÓD AGHU
+                    m.get("nome_item", ""),          # NOME DO ITEM
+                    m.get("fornecedor_nome", ""),    # FORNECEDOR
+                    resumo                           # RESUMO
+                )
+            )
 
     def _editar_msg(self):
         aba_atual = self.nb_msg.index(self.nb_msg.select())
