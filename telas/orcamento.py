@@ -208,7 +208,7 @@ class TelaOrcamento(tk.Frame):
         aba_rasc = tk.Frame(self.nb_msg)
         self.nb_msg.add(aba_rasc, text="Rascunhos")
         
-        cols_rasc = ("id", "titulo", "fornecedor", "resumo")
+        cols_rasc  = ("id", "assunto", "cod_aghu", "nome_item", "fornecedor", "resumo")
         heads_rasc = ("Id", "Assunto", "Cód AGHU", "Nome Item", "Fornecedor", "Resumo da mensagem")
         widths_rasc = (90, 250, 80, 180, 250)
         
