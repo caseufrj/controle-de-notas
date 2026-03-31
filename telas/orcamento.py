@@ -909,10 +909,10 @@ class TelaOrcamento(tk.Frame):
                 return
     
         if tipo == "rascunho":
+            # Rascunho pode ser salvo SEM mensagem
             if not conteudo:
-                messagebox.showwarning("Validação", "Conteúdo não pode ser vazio.")
-                return
-    
+                conteudo = ""   # permite rascunho vazio
+
             # título automático se vazio
             if not titulo:
                 titulo = f"Rascunho {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
