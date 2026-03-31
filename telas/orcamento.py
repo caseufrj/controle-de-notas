@@ -156,21 +156,36 @@ class TelaOrcamento(tk.Frame):
         lf_msg = ttk.LabelFrame(form, text="Mensagens (Modelos e Rascunhos)")
         lf_msg.pack(fill="x", padx=6, pady=5)
         
-        # 🔥 BARRA ÚNICA (Editar + Buscar)
+        # ===========================================================
+        #  BARRA ÚNICA DE BOTÕES DO ORÇAMENTO
+        # ===========================================================
         bar_top = tk.Frame(lf_msg)
         bar_top.pack(fill="x", padx=6, pady=4)
         
-        # ESQUERDA (Editar)
-        ttk.Button(bar_top, text="Editar", command=self._editar_msg).pack(side="left")
-        ttk.Button(bar_top, text="Salvar alterações", command=self._salvar_alteracoes_msg).pack(side="left", padx=6)
+        # -------------------------
+        #  ESQUERDA — AÇÕES
+        # -------------------------
+        ttk.Button(bar_top, text="Editar", command=self._editar_msg).pack(side="left", padx=3)
+        ttk.Button(bar_top, text="Salvar alterações", command=self._salvar_alteracoes_msg).pack(side="left", padx=3)
         
-        # 👉 ESPAÇADOR (empurra pra direita)
+        ttk.Button(bar_top, text="Usar", command=lambda: self._usar_msg("auto")).pack(side="left", padx=3)
+        ttk.Button(bar_top, text="Excluir", command=lambda: self._excluir_msg("auto")).pack(side="left", padx=3)
+        ttk.Button(bar_top, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=3)
+        
+        ttk.Button(bar_top, text="Enviar por e-mail", command=self._enviar_email).pack(side="left", padx=3)
+        ttk.Button(bar_top, text="Exportar Excel", command=self._exportar_excel).pack(side="left", padx=3)
+        
+        # -------------------------
+        #  ESPAÇO (EMPURRA DIREITA)
+        # -------------------------
         tk.Frame(bar_top).pack(side="left", expand=True)
         
-        # DIREITA (Buscar)
-        tk.Label(bar_top, text="Buscar:").pack(side="left")
+        # -------------------------
+        #  DIREITA — BUSCA
+        # -------------------------
+        tk.Label(bar_top, text="Buscar:").pack(side="left", padx=(0,4))
         self.e_msg_busca = ttk.Entry(bar_top, width=30)
-        self.e_msg_busca.pack(side="left", padx=6)
+        self.e_msg_busca.pack(side="left", padx=4)
         ttk.Button(bar_top, text="Filtrar", command=self._carregar_msgs).pack(side="left")
         
         # NOTEBOOK MODELOS / RASCUNHOS
