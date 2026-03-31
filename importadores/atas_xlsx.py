@@ -234,7 +234,21 @@ def importar_atas_xlsx(caminho: str) -> Dict[str, Any]:
 
                 ata_num = _norm(row[cols["ata_numero"]])
                 vig_fim = _parse_data(row.get(cols.get("vigencia_fim","")))
-                status = _norm(row.get(cols.get("status","")))
+                # -------------------------------------------
+                # NORMALIZAÇÃO DO STATUS (CORREÇÃO DO ERRO)
+                # -------------------------------------------
+                _status_raw = _norm(row.get(cols.get("status",""))).lower()
+                _status_raw = _status_raw.replace("\n", "").replace("\r", "").replace("\t", "").strip()
+                
+                if _status_raw in ("vigente", "em vigencia", "em vigência"):
+                    status = "Em vigência"
+                elif _status_raw in ("encerrada", "encerrado", "não", "nao", ""):
+                    status = "Encerrada"
+                elif _status_raw.startswith("renov"):
+                    status = "Renovada"
+                else:
+                    status = "Em vigência"
+                    
                 obs = _norm(row.get(cols.get("observacao","")))
 
                 cod = _norm(row[cols["cod_aghu"]])
