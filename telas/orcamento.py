@@ -444,7 +444,7 @@ class TelaOrcamento(tk.Frame):
             "fornecedor_id": self._fornecedor_id_atual(),
             "cod_aghu": self.e_cod.get().strip(),
             "nome_item": self.e_nome.get().strip(),
-            "fornecedor_nome": self.cb_fornec.get(),
+            "fornecedor_nome": self.cb_fornec.get() if self.var_msg_forn.get() else "",
             "vl_unit": self.e_vu.get().strip(),
             "numero_empenho": self.e_emp.get().strip(),
             "anexos": json.dumps(self._anexos_extra)
@@ -731,21 +731,55 @@ class TelaOrcamento(tk.Frame):
         if not sel:
             messagebox.showwarning("Atenção", "Selecione uma mensagem.")
             return
+    
         vals = tv.item(sel[0], "values")
         try:
             mid = int(vals[0])
         except:
             return
+    
         msg = banco.mensagem_obter(mid)
         if not msg:
             return
+    
+        # guardar id
         self._msg_editando_id = mid
         self._autosave_msg_id = mid if msg.get("tipo") == "rascunho" else None
+    
+        # preencher campos da direita
         self.e_titulo_msg.delete(0, "end")
         self.e_titulo_msg.insert(0, msg.get("titulo", ""))
-        conteudo = msg.get("conteudo") or ""
+    
         self.txt_msg.delete("1.0", "end")
-        self.txt_msg.insert("1.0", conteudo)
+        self.txt_msg.insert("1.0", msg.get("conteudo", ""))
+    
+        # preencher CAMPOS DO ORÇAMENTO 🔥
+        self.e_cod.delete(0, "end")
+        self.e_cod.insert(0, msg.get("cod_aghu", ""))
+    
+        self.e_nome.delete(0, "end")
+        self.e_nome.insert(0, msg.get("nome_item", ""))
+    
+        self.e_vu.delete(0, "end")
+        self.e_vu.insert(0, msg.get("vl_unit", ""))
+    
+        self.e_emp.delete(0, "end")
+        self.e_emp.insert(0, msg.get("numero_empenho", ""))
+    
+        # fornecedor (nome)
+        if msg.get("fornecedor_nome"):
+            self.cb_fornec.set(msg.get("fornecedor_nome"))
+    
+        # anexos
+        import json
+        anexos = msg.get("anexos")
+        try:
+            self._anexos_extra = json.loads(anexos) if anexos else []
+        except:
+            self._anexos_extra = []
+    
+        self._atualizar_lista_anexos()
+    
         self.txt_msg.focus_set()
 
     def _carregar_msgs(self):
@@ -842,18 +876,12 @@ class TelaOrcamento(tk.Frame):
     
         # 0 = Modelos
         # 1 = Rascunhos
-    
         if aba_atual == 0:
             tv = self.tv_modelos
             tipo = "modelo"
-    
-        elif aba_atual == 1:
+        else:
             tv = self.tv_rasc
             tipo = "rascunho"
-    
-        else:
-            messagebox.showwarning("Atenção", "Aba inválida.")
-            return
     
         sel = tv.selection()
         if not sel:
@@ -869,34 +897,50 @@ class TelaOrcamento(tk.Frame):
             return
     
         msg = banco.mensagem_obter(mid)
-    
         if not msg:
             messagebox.showerror("Erro", "Mensagem não encontrada.")
             return
     
-        # 🔥 agora correto
         self._msg_editando_id = mid
         self._autosave_msg_id = mid if tipo == "rascunho" else None
     
+        # título
         self.e_titulo_msg.delete(0, "end")
         self.e_titulo_msg.insert(0, msg.get("titulo", ""))
     
+        # conteúdo
         self.txt_msg.delete("1.0", "end")
         self.txt_msg.insert("1.0", msg.get("conteudo", ""))
     
-        # anexos
+        # --- CAMPOS DO ORÇAMENTO ---
+        self.e_cod.delete(0, "end")
+        self.e_cod.insert(0, msg.get("cod_aghu", ""))
+    
+        self.e_nome.delete(0, "end")
+        self.e_nome.insert(0, msg.get("nome_item", ""))
+    
+        self.e_vu.delete(0, "end")
+        self.e_vu.insert(0, msg.get("vl_unit", ""))
+    
+        self.e_emp.delete(0, "end")
+        self.e_emp.insert(0, msg.get("numero_empenho", ""))
+    
+        # --- FORNECEDOR ---
+        if msg.get("fornecedor_nome"):
+            self.cb_fornec.set(msg.get("fornecedor_nome"))
+            self.var_msg_forn.set(True)   # 🔥 CORREÇÃO IMPORTANTE
+        else:
+            self.var_msg_forn.set(False)
+    
+        # --- ANEXOS ---
         import json
         anexos = msg.get("anexos")
-        if anexos:
-            try:
-                self._anexos_extra = json.loads(anexos)
-            except:
-                self._anexos_extra = []
-        else:
+        try:
+            self._anexos_extra = json.loads(anexos) if anexos else []
+        except:
             self._anexos_extra = []
     
         self._atualizar_lista_anexos()
-    
         self.txt_msg.focus_set()
 
     def _salvar_alteracoes_msg(self):
@@ -983,7 +1027,12 @@ class TelaOrcamento(tk.Frame):
                     self._msg_editando_id,
                     titulo,
                     conteudo,
-                    anexos=json.dumps(self._anexos_extra)  # 🔥 NOVO
+                    cod_aghu=self.e_cod.get().strip(),
+                    nome_item=self.e_nome.get().strip(),
+                    fornecedor_nome=self.cb_fornec.get() if self.var_msg_forn.get() else "",
+                    vl_unit=self.e_vu.get().strip(),
+                    numero_empenho=self.e_emp.get().strip(),
+                    anexos=json.dumps(self._anexos_extra)
                 )
     
             # ================= INSERIR =================
@@ -992,9 +1041,21 @@ class TelaOrcamento(tk.Frame):
                     "tipo": tipo,
                     "titulo": titulo,
                     "conteudo": conteudo,
-                    "fornecedor_id": fornecedor_id,
-                    "anexos": json.dumps(self._anexos_extra)  # 🔥 NOVO
+            
+                    # respeitar o checkbox
+                    "fornecedor_id": self._fornecedor_id_atual() if self.var_msg_forn.get() else None,
+            
+                    # salvar todos os campos
+                    "cod_aghu": self.e_cod.get().strip(),
+                    "nome_item": self.e_nome.get().strip(),
+                    "fornecedor_nome": self.cb_fornec.get() if self.var_msg_forn.get() else "",
+                    "vl_unit": self.e_vu.get().strip(),
+                    "numero_empenho": self.e_emp.get().strip(),
+                    "anexos": json.dumps(self._anexos_extra)
                 })
+            
+                self._msg_editando_id = novo_id
+                self._autosave_msg_id = novo_id
     
                 # 🔥 importante pro autosave não criar outro
                 self._msg_editando_id = novo_id
