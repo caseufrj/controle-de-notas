@@ -1060,6 +1060,8 @@ def mensagem_obter(id_msg: int) -> Optional[Dict[str, Any]]:
             criado_em,
             cod_aghu,
             nome_item,
+            qtde,
+            observacao,
             fornecedor_nome,
             vl_unit,
             numero_empenho,
