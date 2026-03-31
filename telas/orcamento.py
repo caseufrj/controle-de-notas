@@ -924,6 +924,14 @@ class TelaOrcamento(tk.Frame):
     
         self.e_emp.delete(0, "end")
         self.e_emp.insert(0, msg.get("numero_empenho", ""))
+
+        # carregar qtde
+        self.e_qt.delete(0, "end")
+        self.e_qt.insert(0, msg.get("qtde", ""))
+        
+        # carregar observação
+        self.e_obs.delete(0, "end")
+        self.e_obs.insert(0, msg.get("observacao", ""))
     
         # --- FORNECEDOR ---
         if msg.get("fornecedor_nome"):
@@ -1032,6 +1040,8 @@ class TelaOrcamento(tk.Frame):
                     fornecedor_nome=self.cb_fornec.get() if self.var_msg_forn.get() else "",
                     vl_unit=self.e_vu.get().strip(),
                     numero_empenho=self.e_emp.get().strip(),
+                    qtde=self.e_qt.get().strip(),
+                    observacao=self.e_obs.get().strip(),
                     anexos=json.dumps(self._anexos_extra)
                 )
     
@@ -1051,6 +1061,8 @@ class TelaOrcamento(tk.Frame):
                     "fornecedor_nome": self.cb_fornec.get() if self.var_msg_forn.get() else "",
                     "vl_unit": self.e_vu.get().strip(),
                     "numero_empenho": self.e_emp.get().strip(),
+                    "qtde": self.e_qt.get().strip(),
+                    "observacao": self.e_obs.get().strip(),
                     "anexos": json.dumps(self._anexos_extra)
                 })
             
