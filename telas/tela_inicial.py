@@ -155,8 +155,7 @@ def desmontar_tela_inicial(root: tk.Tk):
 def montar_tela_inicial(root: tk.Tk):
     print("[DEBUG] tela_inicial: montar_tela_inicial()")
     root.protocol("WM_DELETE_WINDOW", root.destroy)
-
-    root.configure(bg="#ffffff")
+    root.configure(bg="#ffffff")  # EVITA erro "unknown color name"
 
     # inicializa banco
     try:
@@ -177,16 +176,16 @@ def montar_tela_inicial(root: tk.Tk):
 
     estilizar(root)
 
-    # ================================
-    # 1) FUNDO (GRADIENTE)
-    # ================================
+    # ======================================================
+    # 1) CANVAS DO FUNDO (GRADIENTE + TÍTULO + LOGO)
+    # ======================================================
     canvas_bg = tk.Canvas(root, highlightthickness=0, bd=0)
     canvas_bg.pack(fill="both", expand=True)
 
     root._tela_inicial_widgets = [canvas_bg]
     root._render_after = None
 
-    # carregar logo
+    # Carregar logo
     root._logo_img = None
     if CAMINHO_LOGO and os.path.exists(CAMINHO_LOGO):
         try:
@@ -198,56 +197,33 @@ def montar_tela_inicial(root: tk.Tk):
         except:
             pass
 
-    # ================================
-    # 2) SCROLL INVISÍVEL
-    # ================================
-    BG_BASE = BG_MID
+    # ======================================================
+    # 2) FRAME ROLÁVEL (NÃO USA CANVAS → FUNDO FICA VISÍVEL)
+    # ======================================================
+    scroll_frame = tk.Frame(root, bg="")  
+    scroll_frame.place(relx=0, rely=0, relwidth=1, relheight=1)
 
-    scroll_canvas = tk.Canvas(
-        root,
-        highlightthickness=0,
-        bd=0,
-        relief="flat",
-        bg=BG_BASE
-    )
-    scroll_canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
+    scroll_y = 0  # deslocamento da rolagem
 
-    scroll_frame = tk.Frame(scroll_canvas, bg=BG_BASE)
-    win_id = scroll_canvas.create_window((0, 0), window=scroll_frame, anchor="n")
-
-    # ===== ESPAÇAMENTO DINÂMICO (ALINHA COM LOGO) =====
-    spacer = tk.Frame(scroll_frame, bg=BG_BASE)
-    spacer.pack(fill="x")
-
-    def atualizar_espaco(event=None):
-        h = scroll_canvas.winfo_height()
-        topo = int(h * 0.52)  # 🔥 AJUSTE FINO AQUI (0.50–0.55 ideal)
-        spacer.configure(height=topo)
-
-    scroll_canvas.bind("<Configure>", atualizar_espaco)
-
-    # ================================
-    # SCROLL COM MOUSE (invisível)
-    # ================================
     def on_mousewheel(evt):
-        scroll_canvas.yview_scroll(int(-1 * (evt.delta / 120)), "units")
+        nonlocal scroll_y
+        scroll_y += int(-1 * (evt.delta / 120) * 20)
+        scroll_y = max(0, scroll_y)  # impede subir demais
+        scroll_frame.place_configure(y=scroll_y)
 
-    scroll_canvas.bind_all("<MouseWheel>", on_mousewheel)
+    root.bind_all("<MouseWheel>", on_mousewheel)
 
-    def on_configure(evt):
-        scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
-        scroll_canvas.itemconfig(win_id, width=scroll_canvas.winfo_width())
-
-    scroll_frame.bind("<Configure>", on_configure)
-
-    # ================================
-    # 3) BOTÕES
-    # ================================
+    # ======================================================
+    # 3) BOTÕES (FICAM NO FRAME QUE ROLA)
+    # ======================================================
     def on_click_login():
         abrir_modal_login(root)
 
     def on_click_registro():
         abrir_modal_registro(root)
+
+    # Espaço inicial para alinhar com a logo (ajuste fino aqui)
+    tk.Frame(scroll_frame, height=420, bg="").pack()
 
     ttk.Button(
         scroll_frame,
@@ -263,11 +239,11 @@ def montar_tela_inicial(root: tk.Tk):
         command=on_click_registro
     ).pack(pady=(4, 40))
 
-    root._tela_inicial_widgets.extend([scroll_canvas, scroll_frame])
+    root._tela_inicial_widgets.append(scroll_frame)
 
-    # ================================
-    # 4) RENDER DO FUNDO (RESPONSIVO)
-    # ================================
+    # ======================================================
+    # 4) RENDER DO FUNDO FIXO (TÍTULO + LOGO RESPONSIVOS)
+    # ======================================================
     def render_bg():
         if not canvas_bg.winfo_exists():
             return
@@ -284,14 +260,17 @@ def montar_tela_inicial(root: tk.Tk):
         if not NO_GRADIENT:
             desenhar_gradiente(canvas_bg, w, h, BG_TOP, BG_MID, BG_BOTTOM)
         else:
-            canvas_bg.create_rectangle(0, 0, w, h, fill=BG_MID, outline="", tags="grad")
+            canvas_bg.create_rectangle(
+                0, 0, w, h,
+                fill=BG_MID, outline="", tags="grad"
+            )
 
         cx = w // 2
 
-        # posições RESPONSIVAS 🔥
+        # posições responsivas
         y_titulo = int(h * 0.12)
-        y_sub = int(h * 0.17)
-        y_logo = int(h * 0.38)
+        y_sub    = int(h * 0.17)
+        y_logo   = int(h * 0.38)
 
         # textos
         canvas_bg.create_text(
@@ -301,7 +280,6 @@ def montar_tela_inicial(root: tk.Tk):
             fill="#113a5e",
             tags="ui"
         )
-
         canvas_bg.create_text(
             cx, y_sub,
             text=APP_NAME,
@@ -317,26 +295,22 @@ def montar_tela_inicial(root: tk.Tk):
             canvas_bg.create_oval(
                 cx - 34, y_logo - 34,
                 cx + 34, y_logo + 34,
-                outline="#0d3758",
-                width=3,
+                outline="#0d3758", width=3,
                 tags="ui"
             )
 
         # barra inferior
         canvas_bg.create_rectangle(
             0, h - 48, w, h,
-            fill="#0b2f4a",
-            width=0,
+            fill="#0b2f4a", width=0,
             tags="ui"
         )
 
-    # debounce (evita travar ao redimensionar)
+    # debounce
     def debounce(evt=None):
         if root._render_after:
-            try:
-                root.after_cancel(root._render_after)
-            except:
-                pass
+            try: root.after_cancel(root._render_after)
+            except: pass
         root._render_after = root.after(60, render_bg)
 
     canvas_bg.bind("<Configure>", debounce)
