@@ -152,7 +152,6 @@ def desmontar_tela_inicial(root: tk.Tk):
     except Exception:
         pass
 
-
 def montar_tela_inicial(root: tk.Tk):
     print("[DEBUG] tela_inicial: montar_tela_inicial()")
     root.protocol("WM_DELETE_WINDOW", root.destroy)
@@ -176,16 +175,16 @@ def montar_tela_inicial(root: tk.Tk):
 
     estilizar(root)
 
-    # ------------ CANVAS FIXO DO FUNDO (GRADIENTE, TÍTULO, LOGO) ------------
+    # ================================
+    # 1) CANVAS FIXO DO FUNDO (GRADIENTE)
+    # ================================
     canvas_bg = tk.Canvas(root, highlightthickness=0, bd=0)
     canvas_bg.pack(fill="both", expand=True)
 
     root._tela_inicial_widgets = [canvas_bg]
     root._render_after = None
-    root._login_win = None
-    root._reg_win = None
 
-    # ---- carregar a logo uma única vez ----
+    # carregar logo
     root._logo_img = None
     if CAMINHO_LOGO and os.path.exists(CAMINHO_LOGO):
         try:
@@ -197,43 +196,57 @@ def montar_tela_inicial(root: tk.Tk):
         except:
             pass
 
-    # ------------ FRAME ROLÁVEL SOBRE O CANVAS (OPÇÃO C) ------------
-    scroll_canvas = tk.Canvas(root, highlightthickness=0, bd=0, bg="", relief="flat")
+    # ================================
+    # 2) FRAME ROLÁVEL SOBRE O FUNDO
+    # ================================
+    scroll_canvas = tk.Canvas(
+        root,
+        highlightthickness=0,
+        bd=0,
+        relief="flat",
+        background="",  # usa fundo transparente herdado
+    )
     scroll_canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
 
     scroll_frame = tk.Frame(scroll_canvas, bg="", padx=0, pady=0)
     win_id = scroll_canvas.create_window((0, 0), window=scroll_frame, anchor="n")
 
+    # rolagem do mouse
     def on_mousewheel(evt):
         scroll_canvas.yview_scroll(int(-1 * (evt.delta / 120)), "units")
 
     scroll_canvas.bind_all("<MouseWheel>", on_mousewheel)
 
+    # atualizar scrollregion
     def on_configure(evt):
         scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
         scroll_canvas.itemconfig(win_id, width=scroll_canvas.winfo_width())
 
     scroll_frame.bind("<Configure>", on_configure)
 
-    # ------------ BOTÕES (ROLAM) ------------
+    # ================================
+    # 3) BOTÕES (ÁREA ROLÁVEL)
+    # ================================
     def on_click_login():
         abrir_modal_login(root)
 
     def on_click_registro():
         abrir_modal_registro(root)
 
-    # espaço inicial para alinhar com layout fixo
-    tk.Frame(scroll_frame, height=420, bg="").pack()
+    # espaço para alinhar abaixo da logo
+    tk.Frame(scroll_frame, height=460, bg="").pack()
 
-    btn_login = ttk.Button(scroll_frame, text="LOGIN", style="Primary.TButton", command=on_click_login)
-    btn_login.pack(pady=(10, 10))
+    ttk.Button(scroll_frame, text="LOGIN", style="Primary.TButton",
+               command=on_click_login).pack(pady=(10, 8))
 
-    btn_reg = ttk.Button(scroll_frame, text="REGISTRO / CADASTRO", style="Outline.TButton", command=on_click_registro)
-    btn_reg.pack(pady=(10, 20))
+    ttk.Button(scroll_frame, text="REGISTRO / CADASTRO", style="Outline.TButton",
+               command=on_click_registro).pack(pady=(4, 40))
 
     root._tela_inicial_widgets.extend([scroll_canvas, scroll_frame])
 
-    # ------------ FUNÇÃO DE REDESENHO DO FUNDO FIXO ------------
+    # ================================
+    # 4) FUNDO FIXO (LOGO, TÍTULO, GRADIENTE)
+    # ================================
     def render_bg():
         if not canvas_bg.winfo_exists():
             return
@@ -246,44 +259,46 @@ def montar_tela_inicial(root: tk.Tk):
 
         w = canvas_bg.winfo_width()
         h = canvas_bg.winfo_height()
-
         if w <= 0 or h <= 0:
             return
 
         # gradiente
         if not NO_GRADIENT:
-            desenhar_gradiente(canvas_bg, w, h, BG_TOP, BG_MID, BG_BOTTOM, steps=80)
+            desenhar_gradiente(canvas_bg, w, h, BG_TOP, BG_MID, BG_BOTTOM)
         else:
             canvas_bg.create_rectangle(0, 0, w, h, fill=BG_MID, outline="", tags="grad")
 
         cx = w // 2
 
-        # título
+        # texto fixo
         canvas_bg.create_text(cx, 70, text=TITULO,
-                              font=("Segoe UI Semibold", 20), fill="#113a5e", tags=("ui",))
+                              font=("Segoe UI Semibold", 20),
+                              fill="#113a5e", tags="ui")
         canvas_bg.create_text(cx, 108, text=APP_NAME,
-                              font=("Segoe UI", 12), fill="#1f4c77", tags=("ui",))
+                              font=("Segoe UI", 12),
+                              fill="#1f4c77", tags="ui")
 
         # logo fixa
         y_logo = 320
         if root._logo_img:
-            canvas_bg.create_image(cx, y_logo, image=root._logo_img, tags=("ui",))
+            canvas_bg.create_image(cx, y_logo, image=root._logo_img, tags="ui")
         else:
-            canvas_bg.create_oval(cx-34, y_logo-34, cx+34, y_logo+34,
-                                  outline="#0d3758", width=3, tags=("ui",))
+            canvas_bg.create_oval(cx - 34, y_logo - 34,
+                                  cx + 34, y_logo + 34,
+                                  outline="#0d3758", width=3, tags="ui")
 
         # barra inferior
-        canvas_bg.create_rectangle(0, h-48, w, h, fill="#0b2f4a", width=0, tags=("ui",))
+        canvas_bg.create_rectangle(0, h - 48, w, h,
+                                   fill="#0b2f4a", width=0, tags="ui")
 
-    def debounce_render(evt=None):
+    # debounce
+    def debounce(evt=None):
         if root._render_after:
-            try:
-                root.after_cancel(root._render_after)
-            except:
-                pass
-        root._render_after = root.after(50, render_bg)
+            try: root.after_cancel(root._render_after)
+            except: pass
+        root._render_after = root.after(60, render_bg)
 
-    canvas_bg.bind("<Configure>", debounce_render)
+    canvas_bg.bind("<Configure>", debounce)
     root.after(100, render_bg)
 
 
