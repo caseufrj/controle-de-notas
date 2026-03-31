@@ -5,6 +5,7 @@ from datetime import datetime
 import os
 import banco
 import utils
+import json
 
 class TelaOrcamento(tk.Frame):
     def __init__(self, master):
@@ -953,6 +954,8 @@ class TelaOrcamento(tk.Frame):
         self.txt_msg.focus_set()
 
     def _salvar_alteracoes_msg(self):
+        import json   # 🔥 OBRIGATÓRIO AQUI
+    
         if not self._msg_editando_id:
             messagebox.showwarning("Edição", "Nenhuma mensagem carregada para edição.")
             return
@@ -961,19 +964,15 @@ class TelaOrcamento(tk.Frame):
         conteudo = self.txt_msg.get("1.0", "end").strip()
     
         if not conteudo:
-            messagebox.showwarning("Validação", "Conteúdo não pode ser vazio.")
-            return
+            conteudo = ""
     
-        # Obter info do banco para descobrir se é modelo ou rascunho
         msg_atual = banco.mensagem_obter(self._msg_editando_id)
         tipo_msg = msg_atual.get("tipo", "rascunho")
     
-        # MODELO → exige título
         if tipo_msg == "modelo" and not titulo:
             messagebox.showwarning("Validação", "Título é obrigatório para modelos.")
             return
     
-        # RASCUNHO → título não obrigatório
         if tipo_msg == "rascunho" and not titulo:
             titulo = f"Rascunho {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
     
