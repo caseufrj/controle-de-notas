@@ -1096,30 +1096,35 @@ def mensagens_listar(tipo: Optional[str] = None,
 
 
 # ========== ATUALIZAR ==========
-def mensagem_atualizar(id_: int, d: Dict[str, Any]) -> None:
-    conn = conectar(); cur = conn.cursor()
+def mensagem_atualizar(id_, titulo, conteudo, cod_aghu=None, nome_item=None,
+                       fornecedor_nome=None, vl_unit=None, numero_empenho=None,
+                       anexos=None):
+    conn = conectar()
+    cur = conn.cursor()
+
     cur.execute("""
         UPDATE mensagens_padrao SET
-            titulo=?,
-            conteudo=?,
-            cod_aghu=?,
-            nome_item=?,
-            fornecedor_nome=?,
-            vl_unit=?,
-            numero_empenho=?,
-            anexos=?
-        WHERE id=?
+            titulo = ?,
+            conteudo = ?,
+            cod_aghu = ?,
+            nome_item = ?,
+            fornecedor_nome = ?,
+            vl_unit = ?,
+            numero_empenho = ?,
+            anexos = ?
+        WHERE id = ?
     """, (
-        d.get("titulo"),
-        d.get("conteudo"),
-        d.get("cod_aghu"),
-        d.get("nome_item"),
-        d.get("fornecedor_nome"),
-        d.get("vl_unit"),
-        d.get("numero_empenho"),
-        d.get("anexos"),
+        titulo,
+        conteudo,
+        cod_aghu,
+        nome_item,
+        fornecedor_nome,
+        vl_unit,
+        numero_empenho,
+        anexos,
         id_
     ))
+
     conn.commit()
     conn.close()
 
