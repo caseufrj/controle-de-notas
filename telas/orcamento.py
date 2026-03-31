@@ -469,15 +469,17 @@ class TelaOrcamento(tk.Frame):
         else:
             try:
                 banco.mensagem_atualizar(
-                    self._autosave_msg_id,
+                    self._msg_editando_id,
                     titulo,
                     conteudo,
-                    cod_aghu=d["cod_aghu"],
-                    nome_item=d["nome_item"],
-                    fornecedor_nome=d["fornecedor_nome"],
-                    vl_unit=d["vl_unit"],
-                    numero_empenho=d["numero_empenho"],
-                    anexos=d["anexos"]
+                    cod_aghu=self.e_cod.get().strip(),
+                    nome_item=self.e_nome.get().strip(),
+                    fornecedor_nome=self.cb_fornec.get() if self.var_msg_forn.get() else "",
+                    vl_unit=self.e_vu.get().strip(),
+                    numero_empenho=self.e_emp.get().strip(),
+                    qtde=self.e_qt.get().strip(),
+                    observacao=self.e_obs.get().strip(),
+                    anexos=json.dumps(self._anexos_extra)
                 )
             except Exception as e:
                 print("Erro ao atualizar rascunho automático:", e)
@@ -977,7 +979,19 @@ class TelaOrcamento(tk.Frame):
             titulo = f"Rascunho {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
     
         try:
-            banco.mensagem_atualizar(self._msg_editando_id, titulo, conteudo)
+            banco.mensagem_atualizar(
+                self._msg_editando_id,
+                titulo,
+                conteudo,
+                cod_aghu=self.e_cod.get().strip(),
+                nome_item=self.e_nome.get().strip(),
+                fornecedor_nome=self.cb_fornec.get() if self.var_msg_forn.get() else "",
+                vl_unit=self.e_vu.get().strip(),
+                numero_empenho=self.e_emp.get().strip(),
+                qtde=self.e_qt.get().strip(),
+                observacao=self.e_obs.get().strip(),
+                anexos=json.dumps(self._anexos_extra)
+            )
             self._carregar_msgs()
             messagebox.showinfo("OK", "Mensagem atualizada com sucesso.")
         except Exception as e:
