@@ -1010,7 +1010,7 @@ def orcamentos_total(
 # ===========================================================
 
 # ========== INSERIR ==========
-def mensagem_inserir(d: Dict[str, Any]) -> int:
+def mensagem_inserir(d):
     campos = (
         "fornecedor_id", "titulo", "conteudo", "tipo",
         "cod_aghu", "nome_item", "fornecedor_nome",
@@ -1032,8 +1032,7 @@ def mensagem_inserir(d: Dict[str, Any]) -> int:
 
     conn = conectar(); cur = conn.cursor()
     cur.execute(
-        f"INSERT INTO mensagens_padrao ({','.join(campos)}) "
-        f"VALUES ({','.join(['?']*len(campos))})",
+        f"INSERT INTO mensagens_padrao ({','.join(campos)}) VALUES ({','.join(['?']*len(campos))})",
         vals
     )
     conn.commit()
@@ -1096,23 +1095,24 @@ def mensagens_listar(tipo: Optional[str] = None,
 
 
 # ========== ATUALIZAR ==========
-def mensagem_atualizar(id_, titulo, conteudo, cod_aghu=None, nome_item=None,
-                       fornecedor_nome=None, vl_unit=None, numero_empenho=None,
-                       anexos=None):
-    conn = conectar()
-    cur = conn.cursor()
+def mensagem_atualizar(id_, titulo, conteudo,
+                       cod_aghu=None, nome_item=None,
+                       fornecedor_nome=None, vl_unit=None,
+                       numero_empenho=None, anexos=None):
+
+    conn = conectar(); cur = conn.cursor()
 
     cur.execute("""
         UPDATE mensagens_padrao SET
-            titulo = ?,
-            conteudo = ?,
-            cod_aghu = ?,
-            nome_item = ?,
-            fornecedor_nome = ?,
-            vl_unit = ?,
-            numero_empenho = ?,
-            anexos = ?
-        WHERE id = ?
+            titulo=?,
+            conteudo=?,
+            cod_aghu=?,
+            nome_item=?,
+            fornecedor_nome=?,
+            vl_unit=?,
+            numero_empenho=?,
+            anexos=?
+        WHERE id=?
     """, (
         titulo,
         conteudo,
