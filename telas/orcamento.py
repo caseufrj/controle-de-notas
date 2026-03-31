@@ -180,7 +180,7 @@ class TelaOrcamento(tk.Frame):
         # -------------------------------------------------------------
         # ABA 1 — MODELOS
         # -------------------------------------------------------------
-        aba_modelos = tk.Frame(nb)
+        aba_modelos = tk.Frame(self.nb_msg)
         self.nb_msg.add(aba_modelos, text="Modelos")
         
         cols_m = ("id", "titulo", "fornecedor_id", "criado_em")
@@ -205,7 +205,7 @@ class TelaOrcamento(tk.Frame):
         # -------------------------------------------------------------
         # ABA 2 — RASCUNHO
         # -------------------------------------------------------------
-        aba_rasc = tk.Frame(nb)
+        aba_rasc = tk.Frame(self.nb_msg)
         self.nb_msg.add(aba_rasc, text="Rascunhos")
         
         cols_rasc = ("id", "titulo", "fornecedor", "resumo")
