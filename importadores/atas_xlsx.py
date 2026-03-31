@@ -1,16 +1,16 @@
 # ======================================================================
 #  IMPORTADOR DE ATAS — VERSÃO 2026 FINAL
-#  100% COMPATÍVEL COM SUA PLANILHA (Pasta1.xlsx)
-#  Importa:
-#     ✔ 859 fornecedores
-#     ✔ todas as ATAs vigentes
-#     ✔ todos os itens (4043+)
+#  COMPATÍVEL COM SUA PLANILHA (Planilha1 (2))
+#  Importa automaticamente:
+#     ✔ Fornecedores (nome, CNPJ, e-mail, telefone)
+#     ✔ ATAs
+#     ✔ Itens
+#     ✔ Status normalizado
 # ======================================================================
 
 from __future__ import annotations
-import os, re, hashlib
-from decimal import Decimal
-from typing import Dict, Any, Optional, Tuple
+import os, re
+from typing import Dict, Any, Optional
 from datetime import datetime
 
 import pandas as pd
@@ -19,12 +19,12 @@ import sqlite3
 import banco
 
 # ======================================================================
-#  MAPEAMENTO DEFINITIVO
+#  MAPEAMENTO DAS COLUNAS
 # ======================================================================
 MAPEAMENTO_COLUNAS = {
     "fornecedor_nome": ["fornecedor"],
     "fornecedor_cnpj": ["cnpj"],
-    "ata_numero": ["ata", "número da ata", "numero da ata"],     # <-- CORREÇÃO CRÍTICA
+    "ata_numero": ["ata", "número da ata", "numero da ata"],
     "vigencia_fim": ["vigência", "vigencia"],
     "status": ["status", "status vigencia", "status vigência"],
     "cod_aghu": ["item", "cod aghu", "codigo aghu"],
@@ -36,13 +36,11 @@ MAPEAMENTO_COLUNAS = {
 
 STATUS_DEFAULT = "Em vigência"
 
+
 # ======================================================================
-#  UTILITÁRIOS
+#  CARREGAR CONTATOS (E-MAIL + TELEFONE)
 # ======================================================================
-# ============================================================
-# CARREGA MAPA DE E-MAILS A PARTIR DA ABA "Planilha1 (2)"
-# ============================================================
-def carregar_emails_planilha(caminho_arquivo: str) -> dict:
+def carregar_contatos_planilha(caminho_arquivo: str) -> dict:
     try:
         df_em = pd.read_excel(
             caminho_arquivo,
@@ -52,32 +50,46 @@ def carregar_emails_planilha(caminho_arquivo: str) -> dict:
     except Exception:
         return {}
 
-    # Normalizar cabeçalhos
     df_em.columns = df_em.columns.str.strip().str.upper()
 
-    map_email = {}
+    contatos = {}
 
     for _, row in df_em.iterrows():
         cnpj = re.sub(r"\D", "", str(row.get("CNPJ", "")))
         if not cnpj:
             continue
 
+        # --- E-MAILS ---
         emails = []
         for col in ["EMAIL", "EMAIL CORRETO", "OBS ENVIO"]:
             if col in df_em.columns:
                 v = str(row.get(col, "")).strip()
                 if v and v.lower() != "nan":
                     emails.append(v)
+        email_final = ";".join(emails)
 
-        map_email[cnpj] = ";".join(emails)
+        # --- TELEFONE ---
+        fone_raw = str(row.get("TELEFONE", "")).strip()
+        fone_limpo = re.sub(r"[^0-9;/() +\-]", "", fone_raw)
 
-    return map_email
+        contatos[cnpj] = {
+            "email": email_final,
+            "telefone": fone_limpo
+        }
 
+    return contatos
+
+
+# ======================================================================
+#  utilitários
+# ======================================================================
 def _norm(s: Any) -> str:
     return str(s or "").strip()
 
+
 def _cnpj_digits(s: Any) -> str:
     return re.sub(r"\D", "", str(s or ""))
+
 
 def _parse_data(x: Any) -> Optional[str]:
     if pd.isna(x):
@@ -88,13 +100,15 @@ def _parse_data(x: Any) -> Optional[str]:
     except:
         return None
 
+
 def _parse_float(x: Any) -> float:
     if x is None or x == "":
         return 0.0
     return float(str(x).replace(".", "").replace(",", ".") or 0)
 
+
 # ======================================================================
-#  RESOLVE CABEÇALHOS DA PLANILHA
+#  Resolver mapeamento
 # ======================================================================
 def _resolver_mapeamento(df: pd.DataFrame) -> Dict[str, str]:
     cols_lower = {c.lower().strip(): c for c in df.columns}
@@ -110,12 +124,21 @@ def _resolver_mapeamento(df: pd.DataFrame) -> Dict[str, str]:
         if found:
             out[canon] = found
 
-    obrig = ["fornecedor_nome", "ata_numero", "cod_aghu", "nome_item", "qtde_total", "vl_unit"]
+    obrig = [
+        "fornecedor_nome",
+        "ata_numero",
+        "cod_aghu",
+        "nome_item",
+        "qtde_total",
+        "vl_unit"
+    ]
     falt = [c for c in obrig if c not in out]
+
     if falt:
         raise ValueError(f"Colunas obrigatórias ausentes: {falt}")
 
     return out
+
 
 # ======================================================================
 #  UPSERTS
@@ -124,7 +147,7 @@ def _fornecedor_upsert(cur: sqlite3.Cursor, nome: str, cnpj: str) -> int:
     nome = _norm(nome)
     cnpj = _cnpj_digits(cnpj)
 
-    # Tenta achar por CNPJ
+    # por CNPJ
     if cnpj:
         cur.execute("SELECT id FROM fornecedores WHERE cnpj=? LIMIT 1", (cnpj,))
         r = cur.fetchone()
@@ -132,7 +155,7 @@ def _fornecedor_upsert(cur: sqlite3.Cursor, nome: str, cnpj: str) -> int:
             cur.execute("UPDATE fornecedores SET nome=? WHERE id=?", (nome, r["id"]))
             return r["id"]
 
-    # Tenta achar por nome
+    # por nome
     cur.execute("SELECT id FROM fornecedores WHERE nome=? LIMIT 1", (nome,))
     r = cur.fetchone()
     if r:
@@ -140,16 +163,22 @@ def _fornecedor_upsert(cur: sqlite3.Cursor, nome: str, cnpj: str) -> int:
             cur.execute("UPDATE fornecedores SET cnpj=? WHERE id=?", (cnpj, r["id"]))
         return r["id"]
 
-    # Criar novo
-    cur.execute("INSERT INTO fornecedores (nome, cnpj) VALUES (?,?)", (nome, cnpj or None))
+    # cria novo
+    cur.execute(
+        "INSERT INTO fornecedores (nome, cnpj) VALUES (?,?)",
+        (nome, cnpj or None)
+    )
     return cur.lastrowid
+
 
 def _ata_upsert(cur, fornecedor_id, numero, vig_fim, status, obs):
     numero = _norm(numero)
     status = _norm(status) or STATUS_DEFAULT
 
-    cur.execute("SELECT id FROM atas WHERE fornecedor_id=? AND numero=? LIMIT 1",
-                (fornecedor_id, numero))
+    cur.execute(
+        "SELECT id FROM atas WHERE fornecedor_id=? AND numero=? LIMIT 1",
+        (fornecedor_id, numero)
+    )
     r = cur.fetchone()
 
     if r:
@@ -170,10 +199,14 @@ def _ata_upsert(cur, fornecedor_id, numero, vig_fim, status, obs):
 
     return cur.lastrowid
 
+
 def _item_upsert(cur, ata_id, cod, nome, qt, vu, vt, obs):
     cod = _norm(cod)
-    cur.execute("SELECT id FROM atas_itens WHERE ata_id=? AND cod_aghu=? LIMIT 1",
-                (ata_id, cod))
+
+    cur.execute(
+        "SELECT id FROM atas_itens WHERE ata_id=? AND cod_aghu=? LIMIT 1",
+        (ata_id, cod)
+    )
     r = cur.fetchone()
 
     if r:
@@ -200,8 +233,9 @@ def _item_upsert(cur, ata_id, cod, nome, qt, vu, vt, obs):
     ))
     return True
 
+
 # ======================================================================
-#  IMPORTAÇÃO COMPLETA E INCREMENTAL REAL
+#  IMPORTADOR FINAL
 # ======================================================================
 def importar_atas_xlsx(caminho: str) -> Dict[str, Any]:
 
@@ -209,8 +243,9 @@ def importar_atas_xlsx(caminho: str) -> Dict[str, Any]:
         return {"ok": False, "msg": "Arquivo não encontrado"}
 
     df = pd.read_excel(caminho, engine="openpyxl")
-    # ------ carregar mapa de e-mails ------
-    map_emails = carregar_emails_planilha(caminho)
+    
+    # Carregar e-mail + telefone
+    contatos = carregar_contatos_planilha(caminho)
 
     if df.empty:
         return {"ok": False, "msg": "Planilha vazia"}
@@ -234,12 +269,11 @@ def importar_atas_xlsx(caminho: str) -> Dict[str, Any]:
 
                 ata_num = _norm(row[cols["ata_numero"]])
                 vig_fim = _parse_data(row.get(cols.get("vigencia_fim","")))
-                # -------------------------------------------
-                # NORMALIZAÇÃO DO STATUS (CORREÇÃO DO ERRO)
-                # -------------------------------------------
+
+                # Normalizar STATUS
                 _status_raw = _norm(row.get(cols.get("status",""))).lower()
-                _status_raw = _status_raw.replace("\n", "").replace("\r", "").replace("\t", "").strip()
-                
+                _status_raw = _status_raw.replace("\n","").replace("\r","").replace("\t","").strip()
+
                 if _status_raw in ("vigente", "em vigencia", "em vigência"):
                     status = "Em vigência"
                 elif _status_raw in ("encerrada", "encerrado", "não", "nao", ""):
@@ -248,7 +282,7 @@ def importar_atas_xlsx(caminho: str) -> Dict[str, Any]:
                     status = "Renovada"
                 else:
                     status = "Em vigência"
-                    
+
                 obs = _norm(row.get(cols.get("observacao","")))
 
                 cod = _norm(row[cols["cod_aghu"]])
@@ -257,35 +291,47 @@ def importar_atas_xlsx(caminho: str) -> Dict[str, Any]:
                 vu = _parse_float(row[cols["vl_unit"]])
                 vt = qt * vu
 
-                # Fornecedor
+                # ============================================================
+                #  FORNECEDOR (EMAIL + TELEFONE)
+                # ============================================================
                 key_f = (nome_f, cnpj_f)
+
                 if key_f in cache_f:
                     fid = cache_f[key_f]
                 else:
-                    # ========================
-                    # FORNECEDOR COM E-MAIL
-                    # ========================
-                    email_planilha = map_emails.get(cnpj_f, "").strip()
-                    
-                    # tentar upsert normal
+                    email_planilha = contatos.get(cnpj_f, {}).get("email", "").strip()
+                    telefone_planilha = contatos.get(cnpj_f, {}).get("telefone", "").strip()
+
+                    # UPSERT fornecedor (garante ID)
                     fid = _fornecedor_upsert(cur, nome_f, cnpj_f)
-                    
-                    # atualizar e-mail se ainda não existir no banco
+
+                    # atualizar email se necessário
                     cur.execute("SELECT email FROM fornecedores WHERE id=?", (fid,))
                     rmail = cur.fetchone()
-                    
                     email_atual = (rmail["email"] or "").strip() if rmail else ""
-                    
-                    # se o banco não tinha e-mail e a planilha tem, atualizar
+
                     if not email_atual and email_planilha:
                         cur.execute(
                             "UPDATE fornecedores SET email=? WHERE id=?",
                             (email_planilha, fid)
                         )
-                    
+
+                    # atualizar telefone se necessário
+                    cur.execute("SELECT telefone FROM fornecedores WHERE id=?", (fid,))
+                    rtel = cur.fetchone()
+                    tel_atual = (rtel["telefone"] or "").strip() if rtel else ""
+
+                    if not tel_atual and telefone_planilha:
+                        cur.execute(
+                            "UPDATE fornecedores SET telefone=? WHERE id=?",
+                            (telefone_planilha, fid)
+                        )
+
                     cache_f[key_f] = fid
 
-                # ATA
+                # ============================================================
+                #  ATA
+                # ============================================================
                 key_a = (fid, ata_num)
                 if key_a in cache_a:
                     aid = cache_a[key_a]
@@ -293,7 +339,9 @@ def importar_atas_xlsx(caminho: str) -> Dict[str, Any]:
                     aid = _ata_upsert(cur, fid, ata_num, vig_fim, status, obs)
                     cache_a[key_a] = aid
 
-                # ITEM
+                # ============================================================
+                #  ITEM
+                # ============================================================
                 criou = _item_upsert(cur, aid, cod, nome, qt, vu, vt, obs)
                 if criou:
                     stats["itens_criados"] += 1
