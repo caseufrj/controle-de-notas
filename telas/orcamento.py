@@ -210,7 +210,7 @@ class TelaOrcamento(tk.Frame):
         
         cols_rasc  = ("id", "assunto", "cod_aghu", "nome_item", "fornecedor", "resumo")
         heads_rasc = ("Id", "Assunto", "Cód AGHU", "Nome Item", "Fornecedor", "Resumo da mensagem")
-        widths_rasc = (90, 250, 80, 180, 250)
+        widths_rasc = (60, 200, 90, 250, 180, 300)
         
         self.tv_rasc = ttk.Treeview(aba_rasc, columns=cols_rasc, show="headings", height=5)
         for c, h, w in zip(cols_rasc, heads_rasc, widths_rasc):
