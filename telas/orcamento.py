@@ -207,16 +207,7 @@ class TelaOrcamento(tk.Frame):
         
         bar_m = tk.Frame(aba_modelos)
         bar_m.pack(fill="x", padx=4, pady=(0,4))
-        
-        ttk.Button(bar_m, text="Usar", command=lambda: self._usar_msg("modelo")).pack(side="left")
-        ttk.Button(bar_m, text="Excluir", command=lambda: self._excluir_msg("modelo")).pack(side="left", padx=6)
-        ttk.Button(bar_m, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=6)
-        
-        tk.Frame(bar_m).pack(side="left", expand=True)
-        
-        ttk.Button(bar_m, text="Exportar para Excel", command=self._exportar_excel).pack(side="right", padx=6)
-        ttk.Button(bar_m, text="Enviar por e-mail", command=self._enviar_email).pack(side="right", padx=6)
-        
+                        
         # -------------------------------------------------------------
         # ABA 2 — RASCUNHO
         # -------------------------------------------------------------
@@ -236,16 +227,7 @@ class TelaOrcamento(tk.Frame):
         
         bar_r = tk.Frame(aba_rasc)
         bar_r.pack(fill="x", padx=4, pady=(0, 4))
-        
-        ttk.Button(bar_r, text="Usar", command=lambda: self._usar_msg("rascunho")).pack(side="left")
-        ttk.Button(bar_r, text="Excluir", command=lambda: self._excluir_msg("rascunho")).pack(side="left", padx=6)
-        ttk.Button(bar_r, text="Atualizar", command=self._carregar_msgs).pack(side="left", padx=6)
-        
-        tk.Frame(bar_r).pack(side="left", expand=True)
-        
-        ttk.Button(bar_r, text="Exportar para Excel", command=self._exportar_excel).pack(side="right", padx=6)
-        ttk.Button(bar_r, text="Enviar por e-mail", command=self._enviar_email).pack(side="right", padx=6)
-
+                
         # ========== NOTEBOOK HISTÓRICO + MENSAGENS ENVIADAS ==========
         notebook_hist = ttk.Notebook(self)
         notebook_hist.pack(fill="both", expand=True, padx=12, pady=5)
