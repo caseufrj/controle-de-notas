@@ -1111,21 +1111,25 @@ def mensagens_listar(tipo: Optional[str] = None,
 def mensagem_atualizar(id_, titulo, conteudo,
                        cod_aghu=None, nome_item=None,
                        fornecedor_nome=None, vl_unit=None,
-                       numero_empenho=None, anexos=None):
+                       numero_empenho=None, qtde=None, observacao=None,
+                       anexos=None):
 
-    conn = conectar(); cur = conn.cursor()
+    conn = conectar()
+    cur = conn.cursor()
 
     cur.execute("""
         UPDATE mensagens_padrao SET
-            titulo=?,
-            conteudo=?,
-            cod_aghu=?,
-            nome_item=?,
-            fornecedor_nome=?,
-            vl_unit=?,
-            numero_empenho=?,
-            anexos=?
-        WHERE id=?
+            titulo = COALESCE(?, titulo),
+            conteudo = COALESCE(?, conteudo),
+            cod_aghu = COALESCE(?, cod_aghu),
+            nome_item = COALESCE(?, nome_item),
+            fornecedor_nome = COALESCE(?, fornecedor_nome),
+            vl_unit = COALESCE(?, vl_unit),
+            numero_empenho = COALESCE(?, numero_empenho),
+            qtde = COALESCE(?, qtde),
+            observacao = COALESCE(?, observacao),
+            anexos = COALESCE(?, anexos)
+        WHERE id = ?
     """, (
         titulo,
         conteudo,
@@ -1134,6 +1138,8 @@ def mensagem_atualizar(id_, titulo, conteudo,
         fornecedor_nome,
         vl_unit,
         numero_empenho,
+        qtde,
+        observacao,
         anexos,
         id_
     ))
