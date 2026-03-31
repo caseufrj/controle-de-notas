@@ -211,8 +211,17 @@ def montar_tela_inicial(root: tk.Tk):
             
             w, h = canvas.winfo_width(), canvas.winfo_height()
             cx = w // 2
+
             
-            # TÍTULO / SUBTÍTULO
+            # ======= GRADIENTE (agora cobrindo tudo) =======
+            altura_total = max(h, y_logo + 420)
+            if not NO_GRADIENT:
+                desenhar_gradiente(canvas, w, altura_total, BG_TOP, BG_MID, BG_BOTTOM)
+            else:
+                canvas.create_rectangle(0, 0, w, altura_total, fill=BG_MID,
+                                        outline="", tags=("ui",))
+            
+            # ======= TÍTULO / SUBTÍTULO ========
             canvas.create_text(cx, 70, text=TITULO,
                                font=("Segoe UI Semibold", 20), fill="#113a5e", tags=("ui",))
             canvas.create_text(cx, 108, text=APP_NAME,
@@ -226,13 +235,6 @@ def montar_tela_inicial(root: tk.Tk):
                 canvas.create_oval(cx-34, y_logo-34, cx+34, y_logo+34,
                                    outline="#0d3758", width=3, tags=("ui",))
             
-            # ======= GRADIENTE (agora cobrindo tudo) =======
-            altura_total = max(h, y_logo + 420)
-            if not NO_GRADIENT:
-                desenhar_gradiente(canvas, w, altura_total, BG_TOP, BG_MID, BG_BOTTOM)
-            else:
-                canvas.create_rectangle(0, 0, w, altura_total, fill=BG_MID,
-                                        outline="", tags=("ui",))
             
             # ======= BOTÕES =======
             if root._login_win:
