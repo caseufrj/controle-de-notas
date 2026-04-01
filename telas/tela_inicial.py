@@ -189,19 +189,13 @@ def montar_tela_inicial(root: tk.Tk):
     # =========================================================
     # CANVAS INTERNO (SEU LAYOUT)
     # =========================================================
-    layout = tk.Canvas(frame, height=LAYOUT_ALTURA, highlightthickness=0, bd=0)
-    layout.pack(fill="both", expand=True)
-
-    # CANVAS INTERNO (SEU LAYOUT)
+    # CANVAS INTERNO (SEU LAYOUT) - SOMENTE UMA VEZ
     layout = tk.Canvas(frame, height=LAYOUT_ALTURA, highlightthickness=0, bd=0)
     layout.pack(fill="both", expand=True)
     
-    # 🔥 CORREÇÃO DO CINZA: layout acompanha largura do canvas
+    # 🔥 CORREÇÃO DO CINZA: layout SEMPRE ocupa a largura inteira
     def ajustar_largura(evt=None):
-        try:
-            layout.config(width=canvas.winfo_width())
-        except:
-            pass
+        layout.config(width=canvas.winfo_width())
     
     canvas.bind("<Configure>", ajustar_largura)
 
@@ -251,7 +245,7 @@ def montar_tela_inicial(root: tk.Tk):
 
         # fundo
         if not NO_GRADIENT:
-            desenhar_gradiente(layout, w, h, BG_TOP, BG_MID, BG_BOTTOM)
+            desenhar_gradiente(canvas, w, h, BG_TOP, BG_MID, BG_BOTTOM)
         else:
             layout.create_rectangle(0, 0, w, h, fill=BG_MID, outline="")
 
@@ -467,7 +461,7 @@ def abrir_modal_registro(root: tk.Tk):
 
     ent_email.bind("<KeyRelease>", validar_email)
 
-    # ------------------ SENHA + REGRAS ------------------
+    # ------------------ SENHA + REGRAS DINÂMICAS ------------------
     ttk.Label(frm, text="Senha", font=("Segoe UI", 10)).grid(row=4, column=0, sticky="w")
 
     pass_box = tk.Frame(frm)
@@ -477,11 +471,63 @@ def abrir_modal_registro(root: tk.Tk):
     ent_senha.pack(side="left", fill="x", expand=True)
 
     ver_senha = tk.BooleanVar(value=False)
+    
     def toggle_senha():
         ent_senha.config(show="" if ver_senha.get() else "•")
 
     ttk.Checkbutton(pass_box, text="👁", variable=ver_senha,
                     command=toggle_senha).pack(side="left", padx=6)
+
+    # ----------- Regras estilo GOV.BR (cada linha muda individualmente) -----------
+    regras_frame = tk.Frame(frm)
+    regras_frame.grid(row=6, column=0, sticky="w", pady=(2, 12))
+
+    lbl_regra1 = tk.Label(regras_frame, text="✖ mínimo 8 caracteres", fg="#d9534f", font=("Segoe UI", 8))
+    lbl_regra2 = tk.Label(regras_frame, text="✖ letra minúscula",      fg="#d9534f", font=("Segoe UI", 8))
+    lbl_regra3 = tk.Label(regras_frame, text="✖ letra maiúscula",      fg="#d9534f", font=("Segoe UI", 8))
+    lbl_regra4 = tk.Label(regras_frame, text="✖ número",               fg="#d9534f", font=("Segoe UI", 8))
+    lbl_regra5 = tk.Label(regras_frame, text="✖ símbolo (ex: @, !, %)", fg="#d9534f", font=("Segoe UI", 8))
+
+    lbl_regra1.pack(anchor="w")
+    lbl_regra2.pack(anchor="w")
+    lbl_regra3.pack(anchor="w")
+    lbl_regra4.pack(anchor="w")
+    lbl_regra5.pack(anchor="w")
+
+    def validar_regras(evt=None):
+        s = ent_senha.get()
+
+        # Regra 1: tamanho
+        if len(s) >= 8:
+            lbl_regra1.config(text="✔ mínimo 8 caracteres", fg="green")
+        else:
+            lbl_regra1.config(text="✖ mínimo 8 caracteres", fg="#d9534f")
+
+        # Regra 2: minúscula
+        if any(c.islower() for c in s):
+            lbl_regra2.config(text="✔ letra minúscula", fg="green")
+        else:
+            lbl_regra2.config(text="✖ letra minúscula", fg="#d9534f")
+
+        # Regra 3: maiúscula
+        if any(c.isupper() for c in s):
+            lbl_regra3.config(text="✔ letra maiúscula", fg="green")
+        else:
+            lbl_regra3.config(text="✖ letra maiúscula", fg="#d9534f")
+
+        # Regra 4: número
+        if any(c.isdigit() for c in s):
+            lbl_regra4.config(text="✔ número", fg="green")
+        else:
+            lbl_regra4.config(text="✖ número", fg="#d9534f")
+
+        # Regra 5: símbolo
+        if any(c in "@#$!%*?&" for c in s):
+            lbl_regra5.config(text="✔ símbolo (ex: @, !, %)", fg="green")
+        else:
+            lbl_regra5.config(text="✖ símbolo (ex: @, !, %)", fg="#d9534f")
+
+    ent_senha.bind("<KeyRelease>", validar_regras)
 
     # ---- Regras estilo GOV.BR ----
     regras = tk.Label(
