@@ -64,15 +64,15 @@ class SistemaApp:
         tk.Frame(self.menu, height=1, bg="#22313f").pack(fill="x", pady=6)
         self.btn_sair = btn("Sair", self.sair, bg="#8e2b2b")
 
-        # Primeira tela ao entrar
+        # Primeira tela
         self.abrir_dashboard()
 
         # Fechar no X = encerrar COMPLETAMENTE o app
         self.root.protocol("WM_DELETE_WINDOW", self._encerrar_app_total)
+        # Alt+F4 (Windows) também deve fechar completamente
         self.root.bind_all("<Alt-F4>", lambda e: self._encerrar_app_total())
 
-    # -------- util --------------------------------------------------------------------------------------------------
-
+    # -------- util --------
     def desmontar(self):
         """Remove todos os widgets do sistema da janela."""
         try:
@@ -90,6 +90,8 @@ class SistemaApp:
     def _abrir_tela(self, classe_tela, nome_log: str = "tela"):
         """
         Troca a tela atual pela classe informada.
+        Antes de limpar, se a tela antiga tiver _on_close(), chamamos para ela
+        cancelar timers/binds/Toplevels próprios.
         """
         # Hook de fechamento da tela antiga
         for w in list(self.container.winfo_children()):
@@ -97,13 +99,16 @@ class SistemaApp:
                 if hasattr(w, "_on_close"):
                     w._on_close()
             except Exception:
+                # não deixe a troca de tela quebrar por erro no hook
                 pass
 
+        # Limpa e cria a nova
         self.limpar_container()
         try:
             tela = classe_tela(self.container)
             tela.pack(fill="both", expand=True)
         except Exception as e:
+            # Log amigável + MessageBox
             log_path = os.path.join(os.path.expanduser("~"), "controle_notas_erro.log")
             try:
                 with open(log_path, "a", encoding="utf-8") as f:
@@ -119,8 +124,7 @@ class SistemaApp:
                 f"Um log foi salvo em:\n{log_path}"
             )
 
-    # -------- telas -------------------------------------------------------------------------------------------------
-
+    # -------- telas --------
     def abrir_dashboard(self):
         from telas.dashboard import Dashboard
         self._abrir_tela(Dashboard, "Dashboard")
@@ -130,38 +134,8 @@ class SistemaApp:
         self._abrir_tela(TelaFornecedores, "Fornecedores")
 
     def abrir_atas_empenhos(self):
-        """
-        AGORA substituímos a tela única anterior por um NOTEBOOK com duas abas:
-        - Tela ATA
-        - Tela EMPENHO
-        """
-        self.limpar_container()
-
-        notebook = ttk.Notebook(self.container)
-        notebook.pack(fill="both", expand=True)
-
-        # Abas
-        aba_ata = tk.Frame(notebook, bg="white")
-        aba_emp = tk.Frame(notebook, bg="white")
-
-        notebook.add(aba_ata, text="ATA")
-        notebook.add(aba_emp, text="EMPENHO")
-
-        PADRAO_LARGURA = 1100
-        PADRAO_ALTURA = 650
-
-        # Força o mesmo tamanho nas duas abas
-        for aba in (aba_ata, aba_emp):
-            aba.config(width=PADRAO_LARGURA, height=PADRAO_ALTURA)
-            aba.pack_propagate(False)
-
-        # Conteúdo ATA
-        from telas.atas import TelaAta
-        TelaAta(aba_ata).pack(fill="both", expand=True)
-
-        # Conteúdo EMPENHO
-        from telas.empenhos import TelaEmpenho
-        TelaEmpenho(aba_emp).pack(fill="both", expand=True)
+        from telas.atas_empenhos import TelaAtasEmpenhos
+        self._abrir_tela(TelaAtasEmpenhos, "Ata/Empenho")
 
     def abrir_notas(self):
         from telas.notas import TelaNotas
@@ -175,12 +149,10 @@ class SistemaApp:
         from telas.configuracoes import TelaConfiguracoes
         self._abrir_tela(TelaConfiguracoes, "Configurações")
 
-    # -------- sair / logout -----------------------------------------------------------------------------------------
-
+    # -------- sair / logout --------
     def sair(self):
         if not messagebox.askyesno("Sair", "Deseja realmente sair e encerrar a sessão?"):
             return
-
         try:
             token = (self.auth or {}).get("token")
             if token:
@@ -202,6 +174,7 @@ class SistemaApp:
     def _encerrar_app_total(self):
         """Fecha todo o aplicativo ao clicar no X."""
         try:
+            # tente encerrar sessão se existir token (não bloqueia se falhar)
             try:
                 token = (self.auth or {}).get("token")
                 if token:
@@ -209,8 +182,9 @@ class SistemaApp:
             except Exception:
                 pass
         finally:
+            # sequência robusta de shutdown
             try:
-                self.root.quit()
+                self.root.quit()  # encerra mainloop (se ativo)
             except Exception:
                 pass
             try:
@@ -218,9 +192,10 @@ class SistemaApp:
             except Exception:
                 pass
             try:
-                self.root.destroy()
+                self.root.destroy()  # destrói a janela raiz
             except Exception:
                 pass
+            # fallback: garante fim do processo
             try:
                 sys.exit(0)
             except Exception:
