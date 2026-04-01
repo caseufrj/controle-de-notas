@@ -8,6 +8,8 @@ import base64
 import os
 from cryptography.fernet import Fernet
 
+root.login_salvo = carregar_login_local()
+
 # Caminho do arquivo onde email e senha serão salvos
 CONFIG_LOGIN_ARQ = os.path.join(os.path.expanduser("~"), "siconae_login.json")
 
@@ -314,7 +316,7 @@ def montar_tela_inicial(root: tk.Tk):
 
     # BOTÕES
     btn_login = ttk.Button(root, text="LOGIN", style="Primary.TButton",
-                           command=lambda: abrir_modal_login(root))
+                           command=lambda: abrir_modal_login(root, root.login_salvo))
 
     btn_reg = ttk.Button(root, text="REGISTRO / CADASTRO",
                          style="Outline.TButton",
@@ -384,7 +386,7 @@ def montar_tela_inicial(root: tk.Tk):
 # -----------------------------------------------------------------------------
 # Modais
 # -----------------------------------------------------------------------------
-def abrir_modal_login(root: tk.Tk):
+def abrir_modal_login(root: tk.Tk, login_salvo=None):
     # --- Modal ---
     win = tk.Toplevel(root)
     win.title("Login - SICONAE")
@@ -406,7 +408,7 @@ def abrir_modal_login(root: tk.Tk):
     frm.grid(row=0, column=0)
 
     # ---------- carregar email/senha salvos ----------
-    cfg = carregar_login_local()
+    cfg = login_salvo or {"email": "", "senha": ""}
     email_salvo = cfg.get("email", "")
     senha_salva = cfg.get("senha", "")
 
