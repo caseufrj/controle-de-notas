@@ -201,55 +201,72 @@ def montar_tela_inicial(root: tk.Tk):
         except:
             root._render_after = None
             return
-
+    
         try:
             w, h = root.winfo_width(), root.winfo_height()
-
-            # Fundo — primeiro limpa
-            canvas.delete("grad")
-            canvas.delete("ui")
-            
-            w, h = canvas.winfo_width(), canvas.winfo_height()
+    
+            # 🔥 1. Limpa somente os elementos desenhados (não remove botões)
+            try:
+                canvas.delete("grad")
+                canvas.delete("ui")
+            except:
+                return
+    
             cx = w // 2
-
-            
-            # ======= GRADIENTE (agora cobrindo tudo) =======
-            altura_total = max(h, y_logo + 420)
+    
+            # 🔥 2. POSIÇÕES FIXAS DO LAYOUT (igual IMAGEM 2)
+            y_titulo = 70
+            y_sub    = 108
+            y_logo   = 320
+            y_btn_login  = y_logo + 240
+            y_btn_reg    = y_logo + 300
+            y_footer     = y_logo + 360   # rodapé SEMPRE abaixo dos botões
+    
+            # 🔥 3. Altura que o gradiente deve cobrir
+            altura_total = max(h, y_footer + 50)  # +50 para não aparecer cinza
+    
+            # 🔥 4. FUNDO GRADIENTE (agora antes do texto!)
             if not NO_GRADIENT:
-                desenhar_gradiente(canvas, w, altura_total, BG_TOP, BG_MID, BG_BOTTOM)
+                desenhar_gradiente(canvas, w, altura_total,
+                                   BG_TOP, BG_MID, BG_BOTTOM)
             else:
-                canvas.create_rectangle(0, 0, w, altura_total, fill=BG_MID,
-                                        outline="", tags=("ui",))
-            
-            # ======= TÍTULO / SUBTÍTULO ========
-            canvas.create_text(cx, 70, text=TITULO,
-                               font=("Segoe UI Semibold", 20), fill="#113a5e", tags=("ui",))
-            canvas.create_text(cx, 108, text=APP_NAME,
-                               font=("Segoe UI", 12), fill="#1f4c77", tags=("ui",))
-            
-            # ======= LOGO =======
-            y_logo = 320
-            if getattr(root, "_logo_img", None):
+                canvas.create_rectangle(0, 0, w, altura_total,
+                                        fill=BG_MID, outline="", tags=("grad",))
+    
+            # 🔥 5. TÍTULOS
+            canvas.create_text(cx, y_titulo, text=TITULO,
+                               font=("Segoe UI Semibold", 20),
+                               fill="#113a5e", tags=("ui",))
+    
+            canvas.create_text(cx, y_sub, text=APP_NAME,
+                               font=("Segoe UI", 12),
+                               fill="#1f4c77", tags=("ui",))
+    
+            # 🔥 6. LOGO
+            if root._logo_img:
                 canvas.create_image(cx, y_logo, image=root._logo_img, tags=("ui",))
             else:
-                canvas.create_oval(cx-34, y_logo-34, cx+34, y_logo+34,
+                canvas.create_oval(cx-34, y_logo-34,
+                                   cx+34, y_logo+34,
                                    outline="#0d3758", width=3, tags=("ui",))
-            
-            
-            # ======= BOTÕES =======
+    
+            # 🔥 7. POSICIONAR BOTÕES
             if root._login_win:
-                canvas.coords(root._login_win, cx, y_logo + 240)
+                canvas.coords(root._login_win, cx, y_btn_login)
+                canvas.tag_raise(root._login_win)
+    
             if root._reg_win:
-                canvas.coords(root._reg_win, cx, y_logo + 300)
-            
-            # ======= RODAPÉ ROLÁVEL =======
-            footer_y = y_logo + 360
-            canvas.coords(root._footer_win, 0, footer_y)
-            canvas.itemconfig(root._footer_win, width=w)
-            
-            # Scroll atualizado
+                canvas.coords(root._reg_win, cx, y_btn_reg)
+                canvas.tag_raise(root._reg_win)
+    
+            # 🔥 8. POSICIONAR RODAPÉ ROLÁVEL
+            if root._footer_win:
+                canvas.coords(root._footer_win, 0, y_footer)
+                canvas.itemconfig(root._footer_win, width=w)
+    
+            # 🔥 9. Atualiza área de rolagem
             canvas.configure(scrollregion=canvas.bbox("all"))
-
+    
         finally:
             root._render_after = None
 
