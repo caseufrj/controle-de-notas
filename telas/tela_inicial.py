@@ -192,6 +192,19 @@ def montar_tela_inicial(root: tk.Tk):
     layout = tk.Canvas(frame, height=LAYOUT_ALTURA, highlightthickness=0, bd=0)
     layout.pack(fill="both", expand=True)
 
+    # CANVAS INTERNO (SEU LAYOUT)
+    layout = tk.Canvas(frame, height=LAYOUT_ALTURA, highlightthickness=0, bd=0)
+    layout.pack(fill="both", expand=True)
+    
+    # 🔥 CORREÇÃO DO CINZA: layout acompanha largura do canvas
+    def ajustar_largura(evt=None):
+        try:
+            layout.config(width=canvas.winfo_width())
+        except:
+            pass
+    
+    canvas.bind("<Configure>", ajustar_largura)
+
     # =========================================================
     # LOGO
     # =========================================================
