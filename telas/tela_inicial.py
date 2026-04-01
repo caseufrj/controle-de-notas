@@ -53,6 +53,26 @@ def salvar_login(email: str, senha: str):
         pass
 
 
+def carregar_login_local():
+    """Lê o email e senha criptografada e retorna descriptografado."""
+    try:
+        if not os.path.exists(CONFIG_LOGIN_ARQ):
+            return {"email": "", "senha": ""}
+
+        with open(CONFIG_LOGIN_ARQ, "r", encoding="utf-8") as arq:
+            dados = json.load(arq)
+
+        key = _get_or_create_key()
+        f = Fernet(key)
+        senha = f.decrypt(dados["senha"].encode()).decode()
+
+        return {"email": dados.get("email",""), "senha": senha}
+
+    except Exception:
+        return {"email": "", "senha": ""}
+
+
+
 def ler_login():
     """
     Lê o login salvo (se existir).
