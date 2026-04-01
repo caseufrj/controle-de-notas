@@ -3,6 +3,77 @@ import os, sys, socket, traceback
 import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Dict, Any
+import json
+import base64
+import os
+from cryptography.fernet import Fernet
+
+# Caminho do arquivo onde email e senha serão salvos
+CONFIG_LOGIN_ARQ = os.path.join(os.path.expanduser("~"), "siconae_login.json")
+
+# Caminho onde a chave será salva
+CONFIG_KEY_ARQ = os.path.join(os.path.expanduser("~"), "siconae_key.key")
+
+
+def _get_or_create_key():
+    """
+    Cria ou lê a chave usada para criptografar a senha.
+    Essa chave é salva SOMENTE no PC do usuário.
+    """
+    if os.path.exists(CONFIG_KEY_ARQ):
+        with open(CONFIG_KEY_ARQ, "rb") as f:
+            return f.read()
+
+    # gerar chave nova
+    key = Fernet.generate_key()
+    with open(CONFIG_KEY_ARQ, "wb") as f:
+        f.write(key)
+    return key
+
+
+def salvar_login(email: str, senha: str):
+    """
+    Salva login localmente, senha CRIPTOGRAFADA com Fernet.
+    """
+    try:
+        key = _get_or_create_key()
+        f = Fernet(key)
+
+        senha_enc = f.encrypt(senha.encode()).decode()
+
+        dados = {
+            "email": email,
+            "senha": senha_enc
+        }
+
+        with open(CONFIG_LOGIN_ARQ, "w", encoding="utf-8") as f2:
+            json.dump(dados, f2)
+
+    except Exception:
+        pass
+
+
+def ler_login():
+    """
+    Lê o login salvo (se existir).
+    Descriptografa a senha.
+    """
+    try:
+        if not os.path.exists(CONFIG_LOGIN_ARQ):
+            return {"email": "", "senha": ""}
+
+        with open(CONFIG_LOGIN_ARQ, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+
+        key = _get_or_create_key()
+        f_key = Fernet(key)
+
+        senha_dec = f_key.decrypt(dados["senha"].encode()).decode()
+
+        return {"email": dados.get("email", ""), "senha": senha_dec}
+
+    except Exception:
+        return {"email": "", "senha": ""}
 
 APP_NAME = "SICONAE"
 TITULO = "Sistema de Controle de Atas e Empenhos"
@@ -314,6 +385,11 @@ def abrir_modal_login(root: tk.Tk):
     frm = ttk.Frame(win, padding=20)
     frm.grid(row=0, column=0)
 
+    # ---------- carregar email/senha salvos ----------
+    cfg = carregar_login_local()
+    email_salvo = cfg.get("email", "")
+    senha_salva = cfg.get("senha", "")
+
     # ---------------- EMAIL ----------------
     ttk.Label(frm, text="E-mail EBSERH", font=("Segoe UI", 10)).grid(row=0, column=0, sticky="w")
 
@@ -322,23 +398,20 @@ def abrir_modal_login(root: tk.Tk):
     
     ent_email = ttk.Entry(email_box, width=40)
     ent_email.pack(side="left", fill="x", expand=True)
+
+    # preenche email salvo (sem @)
+    if email_salvo:
+        if email_salvo.endswith("@ebserh.gov.br"):
+            ent_email.insert(0, email_salvo.replace("@ebserh.gov.br", ""))
+        else:
+            ent_email.insert(0, email_salvo)
     
-    # indicador visual (apenas o círculo)
+    # indicador visual
     lbl_ok = tk.Label(email_box, text="⭕", bg="white", fg="red", font=("Segoe UI", 11))
     lbl_ok.pack(side="right", padx=5)
     
     def validar_email(e=None):
         txt = ent_email.get().strip()
-    
-        # valida SOMENTE que o prefixo existe
-        if txt == "":
-            lbl_ok.config(text="⭕", fg="red")
-            return
-    
-        # sempre considera que o domínio é @ebserh.gov.br
-        email_final = txt + "@ebserh.gov.br"
-    
-        # validação simples: precisa ter algo antes do @
         if len(txt) >= 3:
             lbl_ok.config(text="🟢", fg="green")
         else:
@@ -355,6 +428,10 @@ def abrir_modal_login(root: tk.Tk):
     ent_senha = ttk.Entry(pass_box, width=34, show="•")
     ent_senha.pack(side="left", fill="x", expand=True)
 
+    # preencher senha salva
+    if senha_salva:
+        ent_senha.insert(0, senha_salva)
+
     ver_senha = tk.BooleanVar(value=False)
 
     def toggle_senha():
@@ -364,9 +441,34 @@ def abrir_modal_login(root: tk.Tk):
                     command=toggle_senha).pack(side="left", padx=6)
 
     # ---------------- SALVAR SENHA ----------------
-    var_salvar = tk.BooleanVar(value=False)
+    var_salvar = tk.BooleanVar(value=bool(email_salvo and senha_salva))
     ttk.Checkbutton(frm, text="Salvar senha", variable=var_salvar)\
         .grid(row=4, column=0, sticky="w", pady=(0, 10))
+
+    # ---------------- BOTÃO LOGIN ----------------
+    def do_login(event=None):
+        raw = ent_email.get().strip()
+        email = raw + "@ebserh.gov.br" if "@" not in raw else raw
+        senha = ent_senha.get().strip()
+
+        try:
+            from auth import usuario_login
+            ua = f"SICONAE-Desktop/{os.name}"
+            ip = socket.gethostbyname(socket.gethostname())
+            auth = usuario_login(email, senha, ua, ip)
+
+            # 👍 salvar SEM travar
+            if var_salvar.get():
+                salvar_login_local(email, senha)
+
+            win.destroy()
+            montar_sistema(root, auth)
+
+        except Exception as e:
+            messagebox.showerror("Erro no login", str(e))
+
+    ttk.Button(frm, text="Entrar", style="Primary.TButton", command=do_login)\
+        .grid(row=5, column=0, sticky="ew", pady=(0, 6))
 
     # ---------------- BOTÃO LOGIN ----------------
     def do_login(event=None):
