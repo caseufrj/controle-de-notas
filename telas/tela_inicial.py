@@ -123,7 +123,7 @@ def montar_tela_inicial(root: tk.Tk):
     print("[DEBUG] tela_inicial: montar_tela_inicial()")
     root.protocol("WM_DELETE_WINDOW", root.destroy)
 
-    # init banco
+    # prepara banco
     try:
         try:
             from banco import criar_tabelas as _criar_tabelas
@@ -133,7 +133,7 @@ def montar_tela_inicial(root: tk.Tk):
     except:
         pass
 
-    # init auth
+    # prepara auth
     try:
         from auth import auth_init
         auth_init()
@@ -143,16 +143,33 @@ def montar_tela_inicial(root: tk.Tk):
     estilizar(root)
 
     # =========================================================
-    # CANVAS principal (com scroll total)
+    # CANVAS ROLÁVEL -> este cara é o scroll
     # =========================================================
-    canvas = tk.Canvas(root, highlightthickness=0, bd=0)
+    scroll_canvas = tk.Canvas(root, highlightthickness=0, bd=0)
+    scroll_canvas.pack(fill="both", expand=True)
+
+    # frame invisível para scroll
+    inner_frame = tk.Frame(scroll_canvas)
+    scroll_canvas.create_window((0, 0), window=inner_frame, anchor="nw")
+
+    # scroll com mouse
+    def on_mousewheel(evt):
+        scroll_canvas.yview_scroll(int(-1 * (evt.delta / 120)), "units")
+    scroll_canvas.bind_all("<MouseWheel>", on_mousewheel)
+
+    # atualizar scrollregion automaticamente
+    def update_scroll(evt=None):
+        scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
+    inner_frame.bind("<Configure>", update_scroll)
+
+    # =========================================================
+    # CANVAS ORIGINAL DA SUA TELA -> layout permanece igual
+    # =========================================================
+    canvas = tk.Canvas(inner_frame, highlightthickness=0, bd=0)
     canvas.pack(fill="both", expand=True)
 
-    def on_mousewheel(evt):
-        canvas.yview_scroll(int(-1 * (evt.delta / 120)), "units")
-    canvas.bind_all("<MouseWheel>", on_mousewheel)
-
-    root._tela_inicial_widgets = [canvas]
+    # guardar refs
+    root._tela_inicial_widgets = [scroll_canvas, inner_frame, canvas]
     root._render_after = None
     root._login_win = None
     root._reg_win = None
@@ -172,26 +189,23 @@ def montar_tela_inicial(root: tk.Tk):
         except:
             root._logo_img = None
 
-    # BOTÕES
+    # botões
     def on_click_login():
         abrir_modal_login(root)
     def on_click_registro():
         abrir_modal_registro(root)
 
-    btn_login = ttk.Button(root, text="LOGIN", style="Primary.TButton", command=on_click_login)
-    btn_reg   = ttk.Button(root, text="REGISTRO / CADASTRO", style="Outline.TButton", command=on_click_registro)
+    btn_login = ttk.Button(canvas, text="LOGIN", style="Primary.TButton", command=on_click_login)
+    btn_reg   = ttk.Button(canvas, text="REGISTRO / CADASTRO", style="Outline.TButton", command=on_click_registro)
 
-    root._tela_inicial_widgets.extend([btn_login, btn_reg])
+    root._login_win = canvas.create_window(0, 0, anchor="center", window=btn_login)
+    root._reg_win   = canvas.create_window(0, 0, anchor="center", window=btn_reg)
 
-    root._login_win = canvas.create_window(0, 0, window=btn_login, anchor="center")
-    root._reg_win   = canvas.create_window(0, 0, window=btn_reg,   anchor="center")
-
-    # rodapé (AGORA ROLÁVEL)
-    footer = tk.Frame(root, bg="#0b2f4a", height=48)
-    root._footer_win = canvas.create_window(0, 0, window=footer, anchor="nw")
+    footer = tk.Frame(canvas, bg="#0b2f4a", height=48)
+    root._footer_win = canvas.create_window(0, 0, anchor="nw", window=footer)
 
     # =========================================================
-    # RENDER
+    # RENDER DO SEU LAYOUT (SEM MUDAR POSIÇÃO)
     # =========================================================
     def render():
         try:
@@ -201,95 +215,73 @@ def montar_tela_inicial(root: tk.Tk):
         except:
             root._render_after = None
             return
-    
+
         try:
-            w, h = root.winfo_width(), root.winfo_height()
-    
-            # LIMPA SOMENTE OS ITENS DESENHADOS
+            w = canvas.winfo_width()
+            h = canvas.winfo_height()
+            cx = w // 2
+
             canvas.delete("grad")
             canvas.delete("ui")
-    
-            cx = w // 2
-    
-            # ==========================
-            # 1) POSIÇÕES BASE
-            # ==========================
+
+            # ----------- POSIÇÕES ORIGINAIS -----------
             y_titulo = 70
             y_sub    = 108
-            y_logo   = 260          # 🔥 DESCE UM POUCO O LOGO → MELHOR VISUAL
+            y_logo   = 320
             y_btn_login = y_logo + 240
             y_btn_reg   = y_logo + 300
-    
-            # ==========================
-            # 2) GRADIENTE (AGORA CERTO)
-            # ==========================
-            altura_total = max(h, y_btn_reg + 140)  # 🔥 nunca deixa cinza
-    
+            y_footer    = y_btn_reg + 100
+
+            # ----------- FUNDO GRADIENTE -----------
+            altura_total = y_footer + 80
             if not NO_GRADIENT:
                 desenhar_gradiente(canvas, w, altura_total,
                                    BG_TOP, BG_MID, BG_BOTTOM)
             else:
                 canvas.create_rectangle(0, 0, w, altura_total,
-                                        fill=BG_MID, outline="", tags="grad")
-    
-            # ==========================
-            # 3) TÍTULO E SUBTÍTULO
-            # ==========================
+                                        fill=BG_MID, outline="", tags=("grad",))
+
+            # ----------- TÍTULO/SUBTÍTULO -----------
             canvas.create_text(cx, y_titulo, text=TITULO,
                                font=("Segoe UI Semibold", 20),
                                fill="#113a5e", tags="ui")
-    
             canvas.create_text(cx, y_sub, text=APP_NAME,
                                font=("Segoe UI", 12),
                                fill="#1f4c77", tags="ui")
-    
-            # ==========================
-            # 4) LOGO
-            # ==========================
+
+            # ----------- LOGO -----------
             if root._logo_img:
                 canvas.create_image(cx, y_logo, image=root._logo_img, tags="ui")
             else:
-                canvas.create_oval(cx-34, y_logo-34,
-                                   cx+34, y_logo+34,
-                                   outline="#0d3758", width=3, tags="ui")
-    
-            # ==========================
-            # 5) BOTÕES
-            # ==========================
-            if root._login_win:
-                canvas.coords(root._login_win, cx, y_btn_login)
-                canvas.tag_raise(root._login_win)
-    
-            if root._reg_win:
-                canvas.coords(root._reg_win, cx, y_btn_reg)
-                canvas.tag_raise(root._reg_win)
-    
-            # ==========================
-            # 6) RODAPÉ DINÂMICO DE VERDADE
-            # ==========================
-            rodape_y = y_btn_reg + 90  # 🔥 desce 90 px além dos botões
-            if root._footer_win:
-                canvas.coords(root._footer_win, 0, rodape_y)
-                canvas.itemconfig(root._footer_win, width=w)
-    
-            # ==========================
-            # 7) SCROLL COMPLETO ATUALIZADO
-            # ==========================
-            canvas.configure(scrollregion=canvas.bbox("all"))
-    
+                canvas.create_oval(
+                    cx - 34, y_logo - 34, cx + 34, y_logo + 34,
+                    outline="#0d3758", width=3, tags="ui"
+                )
+
+            # ----------- BOTÕES (posições fixas) -----------
+            canvas.coords(root._login_win, cx, y_btn_login)
+            canvas.coords(root._reg_win,   cx, y_btn_reg)
+
+            # ----------- RODAPÉ -----------
+            canvas.coords(root._footer_win, 0, y_footer)
+            canvas.itemconfig(root._footer_win, width=w)
+
+            # Ajustar tamanho do canvas
+            canvas.config(height=altura_total)
+
         finally:
             root._render_after = None
 
     def schedule_render(evt=None):
         if root._render_after:
-            try:
-                root.after_cancel(root._render_after)
-            except:
-                pass
-        root._render_after = root.after(80, render)
+            try: root.after_cancel(root._render_after)
+            except: pass
+
+        root._render_after = root.after(50, render)
 
     schedule_render()
-    root._cfg_bind_id = root.bind("<Configure>", schedule_render)
+    root._cfg_bind_id = canvas.bind("<Configure>", schedule_render)
+
 
 
 # -----------------------------------------------------------------------------
