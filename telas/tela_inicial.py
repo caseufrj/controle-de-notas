@@ -186,6 +186,7 @@ def montar_tela_inicial(root: tk.Tk):
             return
         canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
+    canvas.bind_all("<Enter>", lambda e: canvas.focus_set())
     canvas.bind("<MouseWheel>", on_mousewheel)
 
     def update_scroll(event=None):
