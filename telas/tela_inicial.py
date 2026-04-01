@@ -119,6 +119,38 @@ def estilizar(root: tk.Tk):
 # -----------------------------------------------------------------------------
 # Montagem/Desmontagem da Tela Inicial
 # -----------------------------------------------------------------------------
+def desmontar_tela_inicial(root: tk.Tk):
+    # cancela render pendente (debounce)
+    if hasattr(root, "_render_after") and root._render_after:
+        try:
+            root.after_cancel(root._render_after)
+        except Exception:
+            pass
+        root._render_after = None
+
+    # destrói widgets gerenciados por nós
+    if hasattr(root, "_tela_inicial_widgets"):
+        for w in root._tela_inicial_widgets:
+            try:
+                w.destroy()
+            except Exception:
+                pass
+        root._tela_inicial_widgets = []
+
+    # limpa ids de janela do Canvas (se houver)
+    for attr in ("_login_win", "_reg_win"):
+        if hasattr(root, attr):
+            setattr(root, attr, None)
+
+    # remove o bind do <Configure> (evita chamadas tardias ao render)
+    try:
+        if getattr(root, "_cfg_bind_id", None) is not None:
+            root.unbind("<Configure>", root._cfg_bind_id)
+            root._cfg_bind_id = None
+        else:
+            root.unbind("<Configure>")
+    except Exception:
+        pass
 LAYOUT_ALTURA = 900  # 🔥 altura fixa da sua tela base
 
 def montar_tela_inicial(root: tk.Tk):
