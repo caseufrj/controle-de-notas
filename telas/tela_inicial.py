@@ -238,7 +238,7 @@ def montar_tela_inicial(root: tk.Tk):
     layout.bind("<Configure>", lambda e: render())
 
     root._tela_inicial_widgets.extend([frame, layout])
-
+"""
     def schedule_render(evt=None):
         if root._render_after:
             try:
@@ -249,7 +249,7 @@ def montar_tela_inicial(root: tk.Tk):
 
     schedule_render()
     root._cfg_bind_id = canvas.bind("<Configure>", schedule_render)
-    
+    """
 # -----------------------------------------------------------------------------
 # Modais
 # -----------------------------------------------------------------------------
