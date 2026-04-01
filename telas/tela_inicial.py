@@ -8,8 +8,6 @@ import base64
 import os
 from cryptography.fernet import Fernet
 
-root.login_salvo = carregar_login_local()
-
 # Caminho do arquivo onde email e senha serão salvos
 CONFIG_LOGIN_ARQ = os.path.join(os.path.expanduser("~"), "siconae_login.json")
 
@@ -254,6 +252,7 @@ def desmontar_tela_inicial(root: tk.Tk):
 LAYOUT_ALTURA = 900  # altura fixa do layout
 
 def montar_tela_inicial(root: tk.Tk):
+    root.login_salvo = carregar_login_local()
     print("[DEBUG] tela_inicial: montar_tela_inicial()")
     root.protocol("WM_DELETE_WINDOW", root.destroy)
     root.configure(bg="#ffffff")
