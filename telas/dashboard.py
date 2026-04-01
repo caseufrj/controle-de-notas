@@ -19,7 +19,6 @@ except Exception:
 class Dashboard(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bg="white")
-        #banco.criar_tabelas()
 
         # ------- Topo: seleção de fornecedor + período + ações -------
         topo = tk.Frame(self, bg="white")
@@ -48,16 +47,28 @@ class Dashboard(tk.Frame):
         ttk.Checkbutton(topo, text="Autoatualizar (10s)", variable=self._auto,
                         command=self._tick_auto).pack(side="left", padx=(8, 0))
 
-        # ------- Split principal -------
-        split = tk.Frame(self, bg="white")
-        split.pack(fill="both", expand=True, padx=16, pady=(0, 12))
+        # ================================================================
+        #      ⭐ NOVO: PAINEL DE ABAS (ATA / EMPENHO)
+        # ================================================================
+        notebook = ttk.Notebook(self)
+        notebook.pack(fill="both", expand=True, padx=16, pady=(0, 12))
 
-        # ---- Saldos ATA (quantidade) ----
-        lf_ata = ttk.LabelFrame(split, text="Saldo de ATA (quantidade)")
-        lf_ata.pack(side="left", fill="both", expand=True, padx=(0, 8))
+        # --- aba ATA ---
+        aba_ata = tk.Frame(notebook, bg="white")
+        notebook.add(aba_ata, text="SALDO DE ATA")
+
+        # --- aba EMPENHO ---
+        aba_emp = tk.Frame(notebook, bg="white")
+        notebook.add(aba_emp, text="SALDO DE EMPENHOS")
+
+        # ================================================================
+        #      CONTEÚDO DA ABA ATA
+        # ================================================================
+        lf_ata = ttk.LabelFrame(aba_ata, text="Saldo de ATA (quantidade)")
+        lf_ata.pack(fill="both", expand=True, padx=4, pady=4)
 
         cols_ata = ("pregao", "cod_aghu", "nome_item", "qtde_total", "qtde_usada", "qtde_saldo")
-        self.tv_ata = ttk.Treeview(lf_ata, columns=cols_ata, show="headings", height=14)
+        self.tv_ata = ttk.Treeview(lf_ata, columns=cols_ata, show="headings")
         cab = {
             "pregao": "ATA",
             "cod_aghu": "Cód. AGHU",
@@ -66,20 +77,23 @@ class Dashboard(tk.Frame):
             "qtde_usada": "Qtde usada",
             "qtde_saldo": "Qtde saldo",
         }
-        widths = {"pregao": 120, "cod_aghu": 100, "nome_item": 260, "qtde_total": 100, "qtde_usada": 100, "qtde_saldo": 100}
+        widths = {"pregao": 120, "cod_aghu": 100, "nome_item": 380, "qtde_total": 100, "qtde_usada": 100, "qtde_saldo": 100}
         for c in cols_ata:
             self.tv_ata.heading(c, text=cab.get(c, c))
             anchor = "w" if c in ("pregao", "cod_aghu", "nome_item") else "e"
             self.tv_ata.column(c, width=widths.get(c, 120), anchor=anchor, stretch=(c == "nome_item"))
+
         self.tv_ata.pack(fill="both", expand=True)
         self.tv_ata.bind("<Double-1>", self._abrir_analise_ata_por_duplo_clique)
 
-        # ---- Saldos Empenho (valor) ----
-        lf_emp = ttk.LabelFrame(split, text="Saldo de Empenhos (valor)")
-        lf_emp.pack(side="left", fill="both", expand=True, padx=(8, 0))
+        # ================================================================
+        #      CONTEÚDO DA ABA EMPENHO
+        # ================================================================
+        lf_emp = ttk.LabelFrame(aba_emp, text="Saldo de Empenhos (valor)")
+        lf_emp.pack(fill="both", expand=True, padx=4, pady=4)
 
         cols_emp = ("empenho_id", "cod_aghu", "nome_item", "vl_total", "valor_consumido", "valor_saldo")
-        self.tv_emp = ttk.Treeview(lf_emp, columns=cols_emp, show="headings", height=14)
+        self.tv_emp = ttk.Treeview(lf_emp, columns=cols_emp, show="headings")
         cab_emp = {
             "empenho_id": "ID",
             "cod_aghu": "Cód. AGHU",
@@ -88,16 +102,18 @@ class Dashboard(tk.Frame):
             "valor_consumido": "Consumido",
             "valor_saldo": "Saldo",
         }
-        widths_emp = {"empenho_id": 1, "cod_aghu": 100, "nome_item": 260, "vl_total": 110, "valor_consumido": 110, "valor_saldo": 110}
+        widths_emp = {"empenho_id": 1, "cod_aghu": 100, "nome_item": 380, "vl_total": 110, "valor_consumido": 110, "valor_saldo": 110}
+
         for c in cols_emp:
             self.tv_emp.heading(c, text=cab_emp.get(c, c))
             anchor = "w" if c in ("cod_aghu", "nome_item") else "e"
             self.tv_emp.column(c, width=widths_emp.get(c, 100), anchor=anchor, stretch=(c == "nome_item"))
+
         self.tv_emp.column("empenho_id", width=1, stretch=False, anchor="center")
         self.tv_emp.pack(fill="both", expand=True)
         self.tv_emp.bind("<Double-1>", self._abrir_analise_empenho_por_duplo_clique)
 
-        # Dados iniciais
+        # ---- Dados iniciais
         self._carregar_fornecedores()
 
     # ----------------- Autoatualizar -----------------
