@@ -205,52 +205,57 @@ def montar_tela_inicial(root: tk.Tk):
         try:
             w, h = root.winfo_width(), root.winfo_height()
     
-            # 🔥 1. Limpa somente os elementos desenhados (não remove botões)
-            try:
-                canvas.delete("grad")
-                canvas.delete("ui")
-            except:
-                return
+            # LIMPA SOMENTE OS ITENS DESENHADOS
+            canvas.delete("grad")
+            canvas.delete("ui")
     
             cx = w // 2
     
-            # 🔥 2. POSIÇÕES FIXAS DO LAYOUT (igual IMAGEM 2)
+            # ==========================
+            # 1) POSIÇÕES BASE
+            # ==========================
             y_titulo = 70
             y_sub    = 108
-            y_logo   = 320
-            y_btn_login  = y_logo + 240
-            y_btn_reg    = y_logo + 300
-            y_footer     = y_logo + 360   # rodapé SEMPRE abaixo dos botões
+            y_logo   = 260          # 🔥 DESCE UM POUCO O LOGO → MELHOR VISUAL
+            y_btn_login = y_logo + 240
+            y_btn_reg   = y_logo + 300
     
-            # 🔥 3. Altura que o gradiente deve cobrir
-            altura_total = max(h, y_footer + 50)  # +50 para não aparecer cinza
+            # ==========================
+            # 2) GRADIENTE (AGORA CERTO)
+            # ==========================
+            altura_total = max(h, y_btn_reg + 140)  # 🔥 nunca deixa cinza
     
-            # 🔥 4. FUNDO GRADIENTE (agora antes do texto!)
             if not NO_GRADIENT:
                 desenhar_gradiente(canvas, w, altura_total,
                                    BG_TOP, BG_MID, BG_BOTTOM)
             else:
                 canvas.create_rectangle(0, 0, w, altura_total,
-                                        fill=BG_MID, outline="", tags=("grad",))
+                                        fill=BG_MID, outline="", tags="grad")
     
-            # 🔥 5. TÍTULOS
+            # ==========================
+            # 3) TÍTULO E SUBTÍTULO
+            # ==========================
             canvas.create_text(cx, y_titulo, text=TITULO,
                                font=("Segoe UI Semibold", 20),
-                               fill="#113a5e", tags=("ui",))
+                               fill="#113a5e", tags="ui")
     
             canvas.create_text(cx, y_sub, text=APP_NAME,
                                font=("Segoe UI", 12),
-                               fill="#1f4c77", tags=("ui",))
+                               fill="#1f4c77", tags="ui")
     
-            # 🔥 6. LOGO
+            # ==========================
+            # 4) LOGO
+            # ==========================
             if root._logo_img:
-                canvas.create_image(cx, y_logo, image=root._logo_img, tags=("ui",))
+                canvas.create_image(cx, y_logo, image=root._logo_img, tags="ui")
             else:
                 canvas.create_oval(cx-34, y_logo-34,
                                    cx+34, y_logo+34,
-                                   outline="#0d3758", width=3, tags=("ui",))
+                                   outline="#0d3758", width=3, tags="ui")
     
-            # 🔥 7. POSICIONAR BOTÕES
+            # ==========================
+            # 5) BOTÕES
+            # ==========================
             if root._login_win:
                 canvas.coords(root._login_win, cx, y_btn_login)
                 canvas.tag_raise(root._login_win)
@@ -259,12 +264,17 @@ def montar_tela_inicial(root: tk.Tk):
                 canvas.coords(root._reg_win, cx, y_btn_reg)
                 canvas.tag_raise(root._reg_win)
     
-            # 🔥 8. POSICIONAR RODAPÉ ROLÁVEL
+            # ==========================
+            # 6) RODAPÉ DINÂMICO DE VERDADE
+            # ==========================
+            rodape_y = y_btn_reg + 90  # 🔥 desce 90 px além dos botões
             if root._footer_win:
-                canvas.coords(root._footer_win, 0, y_footer)
+                canvas.coords(root._footer_win, 0, rodape_y)
                 canvas.itemconfig(root._footer_win, width=w)
     
-            # 🔥 9. Atualiza área de rolagem
+            # ==========================
+            # 7) SCROLL COMPLETO ATUALIZADO
+            # ==========================
             canvas.configure(scrollregion=canvas.bbox("all"))
     
         finally:
