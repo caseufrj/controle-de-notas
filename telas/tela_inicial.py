@@ -128,6 +128,12 @@ def desmontar_tela_inicial(root: tk.Tk):
             pass
         root._render_after = None
 
+    # 🔥 remover scroll global antes de destruir widgets
+    try:
+        root.unbind_all("<MouseWheel>")
+    except Exception:
+        pass
+
     # destrói widgets gerenciados por nós
     if hasattr(root, "_tela_inicial_widgets"):
         for w in root._tela_inicial_widgets:
@@ -176,9 +182,11 @@ def montar_tela_inicial(root: tk.Tk):
     # SCROLL INVISÍVEL
     # =========================================================
     def on_mousewheel(event):
+        if not canvas.winfo_exists():
+            return
         canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-    canvas.bind_all("<MouseWheel>", on_mousewheel)
+    canvas.bind("<MouseWheel>", on_mousewheel)
 
     def update_scroll(event=None):
         canvas.configure(scrollregion=canvas.bbox("all"))
