@@ -119,151 +119,125 @@ def estilizar(root: tk.Tk):
 # -----------------------------------------------------------------------------
 # Montagem/Desmontagem da Tela Inicial
 # -----------------------------------------------------------------------------
+LAYOUT_ALTURA = 900  # 🔥 altura fixa da sua tela base
+
 def montar_tela_inicial(root: tk.Tk):
     print("[DEBUG] tela_inicial: montar_tela_inicial()")
     root.protocol("WM_DELETE_WINDOW", root.destroy)
-
-    # prepara banco
-    try:
-        try:
-            from banco import criar_tabelas as _criar_tabelas
-        except ImportError:
-            from bd import criar_tabelas as _criar_tabelas
-        _criar_tabelas()
-    except:
-        pass
-
-    # prepara auth
-    try:
-        from auth import auth_init
-        auth_init()
-    except:
-        pass
+    root.configure(bg="#ffffff")
 
     estilizar(root)
 
-    # =====================================================
-    # 1) CANVAS EXTERNO — É ELE QUE ROLA
-    # =====================================================
-    scroll_canvas = tk.Canvas(root, highlightthickness=0, bd=0, bg="#ffffff")
-    scroll_canvas.pack(fill="both", expand=True)
-
-    # frame interno para permitir rolagem da tela inteira
-    inner = tk.Frame(scroll_canvas, bg="#ffffff")
-    scroll_canvas.create_window((0, 0), window=inner, anchor="nw")
-
-    # SCROLL DO MOUSE
-    def on_mousewheel(evt):
-        scroll_canvas.yview_scroll(int(-1 * (evt.delta / 120)), "units")
-    scroll_canvas.bind_all("<MouseWheel>", on_mousewheel)
-
-    # ajustar scroll automaticamente
-    def update_scroll(evt=None):
-        scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
-    inner.bind("<Configure>", update_scroll)
-
-    # =====================================================
-    # 2) CANVAS ORIGINAL — SEU LAYOUT ANTIGO INTACTO
-    # =====================================================
-    canvas = tk.Canvas(inner, highlightthickness=0, bd=0)
+    # =========================================================
+    # CANVAS SCROLL PRINCIPAL
+    # =========================================================
+    canvas = tk.Canvas(root, highlightthickness=0, bd=0)
     canvas.pack(fill="both", expand=True)
 
-    # guardar refs
-    root._tela_inicial_widgets = [scroll_canvas, inner, canvas]
-    root._render_after = None
-    root._login_win = None
-    root._reg_win = None
+    root._tela_inicial_widgets = [canvas]
 
-    # carrega logo
+    # Frame com ALTURA FIXA (ESSA É A CHAVE)
+    frame = tk.Frame(canvas, height=LAYOUT_ALTURA, bg="")
+    window_id = canvas.create_window((0, 0), window=frame, anchor="nw")
+
+    # =========================================================
+    # SCROLL INVISÍVEL
+    # =========================================================
+    def on_mousewheel(event):
+        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    canvas.bind_all("<MouseWheel>", on_mousewheel)
+
+    def update_scroll(event=None):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+        canvas.itemconfig(window_id, width=canvas.winfo_width())
+
+    frame.bind("<Configure>", update_scroll)
+
+    # =========================================================
+    # CANVAS INTERNO (SEU LAYOUT)
+    # =========================================================
+    layout = tk.Canvas(frame, height=LAYOUT_ALTURA, highlightthickness=0, bd=0)
+    layout.pack(fill="both", expand=True)
+
+    # =========================================================
+    # LOGO
+    # =========================================================
     root._logo_img = None
     if CAMINHO_LOGO and os.path.exists(CAMINHO_LOGO):
         try:
-            tmp = tk.PhotoImage(file=CAMINHO_LOGO)
-            if tmp.width() > 250:
-                fator = tmp.width() // 250
-                tmp = tmp.subsample(fator)
-            root._logo_img = tmp
+            img = tk.PhotoImage(file=CAMINHO_LOGO)
+            if img.width() > 250:
+                fator = img.width() // 250
+                img = img.subsample(fator, fator)
+            root._logo_img = img
         except:
             pass
 
-    # botões
-    def on_click_login():
-        abrir_modal_login(root)
+    # =========================================================
+    # BOTÕES
+    # =========================================================
+    btn_login = ttk.Button(root, text="LOGIN", style="Primary.TButton",
+                           command=lambda: abrir_modal_login(root))
 
-    def on_click_registro():
-        abrir_modal_registro(root)
+    btn_reg = ttk.Button(root, text="REGISTRO / CADASTRO",
+                         style="Outline.TButton",
+                         command=lambda: abrir_modal_registro(root))
 
-    btn_login = ttk.Button(canvas, text="LOGIN", style="Primary.TButton", command=on_click_login)
-    btn_reg   = ttk.Button(canvas, text="REGISTRO / CADASTRO", style="Outline.TButton", command=on_click_registro)
+    login_win = layout.create_window(0, 0, window=btn_login, anchor="center")
+    reg_win   = layout.create_window(0, 0, window=btn_reg,   anchor="center")
 
-    root._login_win = canvas.create_window(0, 0, anchor="center", window=btn_login)
-    root._reg_win   = canvas.create_window(0, 0, anchor="center", window=btn_reg)
-
-    # rodapé
-    footer = tk.Frame(canvas, bg="#0b2f4a", height=48)
-    root._footer_win = canvas.create_window(0, 0, anchor="nw", window=footer)
-
-    # =====================================================
-    # 3) RENDER — SEU LAYOUT ORIGINAL, POSIÇÕES FIXAS
-    # =====================================================
+    # =========================================================
+    # RENDER (AGORA FIXO)
+    # =========================================================
     def render():
-        try:
-            w = canvas.winfo_width()
-            h = canvas.winfo_height()
-            cx = w // 2
+        layout.delete("grad")
+        layout.delete("ui")
 
-            canvas.delete("grad")
-            canvas.delete("ui")
+        w = layout.winfo_width()
+        h = LAYOUT_ALTURA  # 🔥 FIXO (ESSENCIAL)
 
-            # POSIÇÕES DO LAYOUT ORIGINAL
-            y_titulo = 70
-            y_sub    = 108
-            y_logo   = 320
-            y_btn_login = y_logo + 240
-            y_btn_reg   = y_logo + 300
-            y_footer    = y_btn_reg + 100   # sempre abaixo dos botões
+        cx = w // 2
 
-            altura_total = y_footer + 80
+        # posições FIXAS (como você queria)
+        y_titulo = 70
+        y_sub    = 108
+        y_logo   = 320
 
-            # FUNDO GRADIENTE COMPLETO
-            if not NO_GRADIENT:
-                desenhar_gradiente(canvas, w, altura_total, BG_TOP, BG_MID, BG_BOTTOM)
-            else:
-                canvas.create_rectangle(0, 0, w, altura_total, fill=BG_MID,
-                                        outline="", tags="grad")
+        # fundo
+        if not NO_GRADIENT:
+            desenhar_gradiente(layout, w, h, BG_TOP, BG_MID, BG_BOTTOM)
+        else:
+            layout.create_rectangle(0, 0, w, h, fill=BG_MID, outline="")
 
-            # TÍTULO
-            canvas.create_text(cx, y_titulo, text=TITULO,
-                               font=("Segoe UI Semibold", 20),
-                               fill="#113a5e", tags="ui")
+        # textos
+        layout.create_text(cx, y_titulo, text=TITULO,
+                           font=("Segoe UI Semibold", 20),
+                           fill="#113a5e", tags="ui")
 
-            # SUBTÍTULO
-            canvas.create_text(cx, y_sub, text=APP_NAME,
-                               font=("Segoe UI", 12),
-                               fill="#1f4c77", tags="ui")
+        layout.create_text(cx, y_sub, text=APP_NAME,
+                           font=("Segoe UI", 12),
+                           fill="#1f4c77", tags="ui")
 
-            # LOGO
-            if root._logo_img:
-                canvas.create_image(cx, y_logo, image=root._logo_img, tags="ui")
-            else:
-                canvas.create_oval(cx-34, y_logo-34, cx+34, y_logo+34,
-                                   outline="#0d3758", width=3, tags="ui")
+        # logo
+        if root._logo_img:
+            layout.create_image(cx, y_logo, image=root._logo_img, tags="ui")
+        else:
+            layout.create_oval(cx-34, y_logo-34,
+                               cx+34, y_logo+34,
+                               outline="#0d3758", width=3, tags="ui")
 
-            # BOTÕES
-            canvas.coords(root._login_win, cx, y_btn_login)
-            canvas.tag_raise(root._login_win)
+        # botões (posição FIXA)
+        layout.coords(login_win, cx, y_logo + 240)
+        layout.coords(reg_win, cx, y_logo + 300)
 
-            canvas.coords(root._reg_win, cx, y_btn_reg)
-            canvas.tag_raise(root._reg_win)
+        # rodapé FIXO no layout
+        layout.create_rectangle(0, h - 48, w, h,
+                                fill="#0b2f4a", width=0, tags="ui")
 
-            # RODAPÉ
-            canvas.coords(root._footer_win, 0, y_footer)
-            canvas.itemconfig(root._footer_win, width=w)
+    layout.bind("<Configure>", lambda e: render())
 
-            canvas.config(height=altura_total)
-
-        finally:
-            root._render_after = None
+    root._tela_inicial_widgets.extend([frame, layout])
 
     def schedule_render(evt=None):
         if root._render_after:
