@@ -426,7 +426,7 @@ def abrir_modal_registro(root: tk.Tk):
     win.grab_set()
     win.resizable(False, False)
 
-    # animação
+    # animação leve
     try:
         win.attributes("-alpha", 0.0)
         for i in range(1, 11):
@@ -439,12 +439,12 @@ def abrir_modal_registro(root: tk.Tk):
     frm = ttk.Frame(win, padding=20)
     frm.grid(row=0, column=0)
 
-    # ---------------- NOME ----------------
+    # ------------------ NOME ------------------
     ttk.Label(frm, text="Nome completo", font=("Segoe UI", 10)).grid(row=0, column=0, sticky="w")
     ent_nome = ttk.Entry(frm, width=40)
     ent_nome.grid(row=1, column=0, sticky="ew", pady=(0, 8))
 
-    # ---------------- EMAIL + placeholder ----------------
+    # ------------------ E-MAIL (DIGITAR COMPLETO) ------------------
     ttk.Label(frm, text="E-mail EBSERH", font=("Segoe UI", 10)).grid(row=2, column=0, sticky="w")
 
     email_box = tk.Frame(frm, bg="white")
@@ -453,28 +453,22 @@ def abrir_modal_registro(root: tk.Tk):
     ent_email = ttk.Entry(email_box, width=40)
     ent_email.pack(side="left", fill="x", expand=True)
 
-    lbl_dom = tk.Label(email_box, text="@ebserh.gov.br",
-                       fg="#888", bg="white", font=("Segoe UI", 10))
-    lbl_dom.place(x=0, y=0)
+    lbl_ok = tk.Label(email_box, text="⭕", bg="white", fg="red", font=("Segoe UI", 11))
+    lbl_ok.pack(side="right", padx=6)
 
-    lbl_ok = tk.Label(email_box, text="⭕", bg="white", fg="red")
-    lbl_ok.pack(side="right", padx=5)
+    def validar_email(evt=None):
+        email = ent_email.get().strip().lower()
 
-    def atualizar_dom(e=None):
-        txt = ent_email.get().strip()
-        lbl_dom.place_configure(x=max(0, len(txt)*7))
-        if txt and "@" not in txt:
-            lbl_ok.config(text="🟢")
-        elif txt.endswith("@ebserh.gov.br"):
-            lbl_ok.config(text="🟢")
+        # exige email COMPLETO
+        if "@" in email and email.endswith(".gov.br"):
+            lbl_ok.config(text="🟢", fg="green")
         else:
-            lbl_ok.config(text="⭕")
+            lbl_ok.config(text="⭕", fg="red")
 
-    ent_email.bind("<KeyRelease>", atualizar_dom)
+    ent_email.bind("<KeyRelease>", validar_email)
 
-    # ---------------- SENHA + 👁 + força ----------------
-    ttk.Label(frm, text="Senha (mín. 8 caracteres)", font=("Segoe UI", 10))\
-       .grid(row=4, column=0, sticky="w")
+    # ------------------ SENHA + REGRAS ------------------
+    ttk.Label(frm, text="Senha", font=("Segoe UI", 10)).grid(row=4, column=0, sticky="w")
 
     pass_box = tk.Frame(frm)
     pass_box.grid(row=5, column=0, sticky="ew")
@@ -483,34 +477,48 @@ def abrir_modal_registro(root: tk.Tk):
     ent_senha.pack(side="left", fill="x", expand=True)
 
     ver_senha = tk.BooleanVar(value=False)
-    def toggle():
+    def toggle_senha():
         ent_senha.config(show="" if ver_senha.get() else "•")
+
     ttk.Checkbutton(pass_box, text="👁", variable=ver_senha,
-                    command=toggle).pack(side="left", padx=6)
+                    command=toggle_senha).pack(side="left", padx=6)
 
-    # barra de força
-    força = tk.Canvas(frm, width=280, height=6, bg="#eee")
-    força.grid(row=6, column=0, pady=(5, 12))
+    # ---- Regras estilo GOV.BR ----
+    regras = tk.Label(
+        frm,
+        text=(
+            "Sua senha deve conter:\n"
+            "• 8 ou mais caracteres\n"
+            "• letra minúscula\n"
+            "• letra maiúscula\n"
+            "• número\n"
+            "• símbolo (ex: @, #, !, %)"
+        ),
+        fg="#444",
+        font=("Segoe UI", 8),
+        justify="left"
+    )
+    regras.grid(row=6, column=0, sticky="w", pady=(2, 12))
 
-    def medir_forca(e=None):
+    # validação dinâmica GOV.BR
+    def validar_senha(evt=None):
         s = ent_senha.get()
-        força.delete("all")
 
-        lvl = 0
-        if len(s) >= 8: lvl += 1
-        if any(c.isdigit() for c in s): lvl += 1
-        if any(c.isupper() for c in s): lvl += 1
-        if any(c in "@#$!&*" for c in s): lvl += 1
+        ok = True
+        if len(s) < 8: ok = False
+        if not any(c.islower()  for c in s): ok = False
+        if not any(c.isupper()  for c in s): ok = False
+        if not any(c.isdigit()  for c in s): ok = False
+        if not any(c in "@#$!%*?&" for c in s): ok = False
 
-        cor = "#ff3b30"
-        if lvl == 2: cor = "#ffcc00"
-        if lvl >= 3: cor = "#4cd964"
+        if ok:
+            regras.config(fg="green")
+        else:
+            regras.config(fg="#d9534f")  # vermelho suave
 
-        força.create_rectangle(0, 0, lvl * 70, 6, fill=cor, width=0)
+    ent_senha.bind("<KeyRelease>", validar_senha)
 
-    ent_senha.bind("<KeyRelease>", medir_forca)
-
-    # ---------------- CONFIRMAR SENHA ----------------
+    # ------------------ CONFIRMAR SENHA ------------------
     ttk.Label(frm, text="Confirmar senha", font=("Segoe UI", 10)).grid(row=7, column=0, sticky="w")
 
     conf_box = tk.Frame(frm)
@@ -522,14 +530,14 @@ def abrir_modal_registro(root: tk.Tk):
     ver_conf = tk.BooleanVar(value=False)
     def toggle_conf():
         ent_conf.config(show="" if ver_conf.get() else "•")
+
     ttk.Checkbutton(conf_box, text="👁", variable=ver_conf,
                     command=toggle_conf).pack(side="left", padx=6)
 
-    # ---------------- BOTÃO REGISTRAR ----------------
+    # ------------------ REGISTRAR ------------------
     def do_registrar(event=None):
         nome = ent_nome.get().strip()
-        raw = ent_email.get().strip()
-        email = raw + "@ebserh.gov.br" if "@" not in raw else raw
+        email = ent_email.get().strip()
         s1 = ent_senha.get().strip()
         s2 = ent_conf.get().strip()
 
@@ -537,12 +545,21 @@ def abrir_modal_registro(root: tk.Tk):
             messagebox.showerror("Erro", "Informe seu nome.")
             return
 
+        if "@" not in email:
+            messagebox.showerror("Erro", "Digite o e‑mail completo.")
+            return
+
         if s1 != s2:
             messagebox.showerror("Erro", "As senhas não coincidem.")
             return
 
-        if len(s1) < 8:
-            messagebox.showerror("Erro", "A senha deve ter pelo menos 8 caracteres.")
+        # checar regras
+        if (len(s1) < 8 or
+            not any(c.islower() for c in s1) or
+            not any(c.isupper() for c in s1) or
+            not any(c.isdigit() for c in s1) or
+            not any(c in "@#$!%*?&" for c in s1)):
+            messagebox.showerror("Erro", "A senha não atende aos requisitos.")
             return
 
         try:
@@ -554,7 +571,8 @@ def abrir_modal_registro(root: tk.Tk):
             messagebox.showerror("Erro", str(e))
 
     ttk.Button(frm, text="Registrar", style="Primary.TButton",
-               command=do_registrar).grid(row=9, column=0, sticky="ew")
+               command=do_registrar)\
+        .grid(row=9, column=0, sticky="ew")
 
     win.bind("<Return>", do_registrar)
     ent_nome.focus_set()
