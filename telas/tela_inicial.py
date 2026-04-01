@@ -157,7 +157,8 @@ def desmontar_tela_inicial(root: tk.Tk):
             root.unbind("<Configure>")
     except Exception:
         pass
-LAYOUT_ALTURA = 900  # 🔥 altura fixa da sua tela base
+        
+LAYOUT_ALTURA = 900  # altura fixa do layout
 
 def montar_tela_inicial(root: tk.Tk):
     print("[DEBUG] tela_inicial: montar_tela_inicial()")
@@ -169,62 +170,58 @@ def montar_tela_inicial(root: tk.Tk):
     # =========================================================
     # CANVAS SCROLL PRINCIPAL
     # =========================================================
-    canvas = tk.Canvas(root, highlightthickness=0, bd=0)
-    canvas.pack(fill="both", expand=True)
+    scroll_canvas = tk.Canvas(root, highlightthickness=0, bd=0, bg="#ffffff")
+    scroll_canvas.pack(fill="both", expand=True)
 
-    root._tela_inicial_widgets = [canvas]
+    root._tela_inicial_widgets = [scroll_canvas]
 
-    # Frame com ALTURA FIXA (ESSA É A CHAVE)
-    frame = tk.Frame(canvas, height=LAYOUT_ALTURA, bg="")
-    window_id = canvas.create_window((0, 0), window=frame, anchor="nw")
-
-    # =========================================================
-    # SCROLL INVISÍVEL
-    # =========================================================
-    def on_mousewheel(event):
-        if not canvas.winfo_exists():
-            return
-        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-    canvas.bind_all("<Enter>", lambda e: canvas.focus_set())
-    canvas.bind("<MouseWheel>", on_mousewheel)
-
-    def update_scroll(event=None):
-        canvas.configure(scrollregion=canvas.bbox("all"))
-        canvas.itemconfig(window_id, width=canvas.winfo_width())
-
-    frame.bind("<Configure>", update_scroll)
+    # frame que conterá o layout fixo
+    frame = tk.Frame(scroll_canvas, bg="#ffffff")
+    frame_id = scroll_canvas.create_window(0, 0, anchor="nw", window=frame)
 
     # =========================================================
-    # CANVAS INTERNO (SEU LAYOUT)
+    # FORÇAR LARGURA DO FRAME PARA A MESMA DO CANVAS
     # =========================================================
-    # CANVAS INTERNO (SEU LAYOUT) - SOMENTE UMA VEZ
-    layout = tk.Canvas(frame, height=LAYOUT_ALTURA, highlightthickness=0, bd=0)
-    layout.pack(fill="both", expand=True)
-    
-    # 🔥 CORREÇÃO DO CINZA: layout SEMPRE ocupa a largura inteira
     def ajustar_largura(evt=None):
-        layout.config(width=canvas.winfo_width())
-    
-    canvas.bind("<Configure>", ajustar_largura)
+        scroll_canvas.itemconfig(frame_id, width=scroll_canvas.winfo_width())
+
+    scroll_canvas.bind("<Configure>", ajustar_largura)
 
     # =========================================================
-    # LOGO
+    # SCROLL COM MOUSE (LOCAL, SEM ERRO EM OUTRAS TELAS)
+    # =========================================================
+    def on_mousewheel(evt):
+        # só funciona se o canvas existir
+        if not scroll_canvas.winfo_exists():
+            return
+        scroll_canvas.yview_scroll(int(-1 * (evt.delta / 120)), "units")
+
+    # 🔥 focar automaticamente ao entrar com mouse
+    scroll_canvas.bind("<Enter>", lambda e: scroll_canvas.focus_set())
+
+    scroll_canvas.bind("<MouseWheel>", on_mousewheel)
+
+    # =========================================================
+    # LAYOUT INTERNO
+    # =========================================================
+    layout = tk.Canvas(frame, height=LAYOUT_ALTURA,
+                       highlightthickness=0, bd=0, bg="#ffffff")
+    layout.pack(fill="both", expand=True)
+
+    # =========================================================
+    # CARREGAR LOGO
     # =========================================================
     root._logo_img = None
     if CAMINHO_LOGO and os.path.exists(CAMINHO_LOGO):
         try:
             img = tk.PhotoImage(file=CAMINHO_LOGO)
             if img.width() > 250:
-                fator = img.width() // 250
-                img = img.subsample(fator, fator)
+                img = img.subsample(img.width() // 250)
             root._logo_img = img
         except:
             pass
 
-    # =========================================================
     # BOTÕES
-    # =========================================================
     btn_login = ttk.Button(root, text="LOGIN", style="Primary.TButton",
                            command=lambda: abrir_modal_login(root))
 
@@ -232,60 +229,55 @@ def montar_tela_inicial(root: tk.Tk):
                          style="Outline.TButton",
                          command=lambda: abrir_modal_registro(root))
 
-    login_win = layout.create_window(0, 0, window=btn_login, anchor="center")
-    reg_win   = layout.create_window(0, 0, window=btn_reg,   anchor="center")
+    win_login = layout.create_window(0, 0, anchor="center", window=btn_login)
+    win_reg   = layout.create_window(0, 0, anchor="center", window=btn_reg)
 
     # =========================================================
-    # RENDER (AGORA FIXO)
+    # RENDER MAIN (CENTRALIZADO)
     # =========================================================
     def render():
         layout.delete("grad")
         layout.delete("ui")
 
         w = layout.winfo_width()
-        h = LAYOUT_ALTURA  # 🔥 FIXO (ESSENCIAL)
-
+        h = LAYOUT_ALTURA
         cx = w // 2
-
-        # posições FIXAS (como você queria)
-        y_titulo = 70
-        y_sub    = 108
-        y_logo   = 320
 
         # fundo
         if not NO_GRADIENT:
-            desenhar_gradiente(canvas, w, h, BG_TOP, BG_MID, BG_BOTTOM)
+            desenhar_gradiente(layout, w, h, BG_TOP, BG_MID, BG_BOTTOM)
         else:
             layout.create_rectangle(0, 0, w, h, fill=BG_MID, outline="")
 
         # textos
-        layout.create_text(cx, y_titulo, text=TITULO,
+        layout.create_text(cx, 70, text=TITULO,
                            font=("Segoe UI Semibold", 20),
                            fill="#113a5e", tags="ui")
-
-        layout.create_text(cx, y_sub, text=APP_NAME,
+        layout.create_text(cx, 108, text=APP_NAME,
                            font=("Segoe UI", 12),
                            fill="#1f4c77", tags="ui")
 
         # logo
+        y_logo = 320
         if root._logo_img:
             layout.create_image(cx, y_logo, image=root._logo_img, tags="ui")
-        else:
-            layout.create_oval(cx-34, y_logo-34,
-                               cx+34, y_logo+34,
-                               outline="#0d3758", width=3, tags="ui")
 
-        # botões (posição FIXA)
-        layout.coords(login_win, cx, y_logo + 240)
-        layout.coords(reg_win, cx, y_logo + 300)
+        # botões
+        layout.coords(win_login, cx, y_logo + 240)
+        layout.coords(win_reg, cx, y_logo + 300)
 
-        # rodapé FIXO no layout
+        # rodapé azul
         layout.create_rectangle(0, h - 48, w, h,
                                 fill="#0b2f4a", width=0, tags="ui")
 
+        # scroll region
+        scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
+
     layout.bind("<Configure>", lambda e: render())
 
+    # salvar widgets
     root._tela_inicial_widgets.extend([frame, layout])
+
 """
     def schedule_render(evt=None):
         if root._render_after:
