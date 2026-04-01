@@ -279,30 +279,32 @@ def abrir_modal_login(root: tk.Tk):
 
     email_box = tk.Frame(frm, bg="white")
     email_box.grid(row=1, column=0, sticky="ew", pady=(0, 10))
-
+    
     ent_email = ttk.Entry(email_box, width=40)
     ent_email.pack(side="left", fill="x", expand=True)
-
-    # domínio fantasma
-    lbl_dom = tk.Label(email_box, text="@ebserh.gov.br",
-                       fg="#888", bg="white", font=("Segoe UI", 10))
-    lbl_dom.place(x=0, y=0)
-
-    # indicador visual 🟢 / ⭕
+    
+    # indicador visual (apenas o círculo)
     lbl_ok = tk.Label(email_box, text="⭕", bg="white", fg="red", font=("Segoe UI", 11))
     lbl_ok.pack(side="right", padx=5)
-
-    def atualizar_dom(e=None):
+    
+    def validar_email(e=None):
         txt = ent_email.get().strip()
-        lbl_dom.place_configure(x=max(0, len(txt) * 7))
-        if txt and "@" not in txt:
-            lbl_ok.config(text="🟢", fg="green")
-        elif txt.endswith("@ebserh.gov.br"):
+    
+        # valida SOMENTE que o prefixo existe
+        if txt == "":
+            lbl_ok.config(text="⭕", fg="red")
+            return
+    
+        # sempre considera que o domínio é @ebserh.gov.br
+        email_final = txt + "@ebserh.gov.br"
+    
+        # validação simples: precisa ter algo antes do @
+        if len(txt) >= 3:
             lbl_ok.config(text="🟢", fg="green")
         else:
             lbl_ok.config(text="⭕", fg="red")
-
-    ent_email.bind("<KeyRelease>", atualizar_dom)
+    
+    ent_email.bind("<KeyRelease>", validar_email)
 
     # ---------------- SENHA + 👁 ----------------
     ttk.Label(frm, text="Senha", font=("Segoe UI", 10)).grid(row=2, column=0, sticky="w")
