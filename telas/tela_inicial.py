@@ -72,29 +72,6 @@ def carregar_login_local():
         return {"email": "", "senha": ""}
 
 
-
-def ler_login():
-    """
-    Lê o login salvo (se existir).
-    Descriptografa a senha.
-    """
-    try:
-        if not os.path.exists(CONFIG_LOGIN_ARQ):
-            return {"email": "", "senha": ""}
-
-        with open(CONFIG_LOGIN_ARQ, "r", encoding="utf-8") as f:
-            dados = json.load(f)
-
-        key = _get_or_create_key()
-        f_key = Fernet(key)
-
-        senha_dec = f_key.decrypt(dados["senha"].encode()).decode()
-
-        return {"email": dados.get("email", ""), "senha": senha_dec}
-
-    except Exception:
-        return {"email": "", "senha": ""}
-
 APP_NAME = "SICONAE"
 TITULO = "Sistema de Controle de Atas e Empenhos"
 
@@ -471,53 +448,33 @@ def abrir_modal_login(root: tk.Tk, login_salvo=None):
         raw = ent_email.get().strip()
         email = raw + "@ebserh.gov.br" if "@" not in raw else raw
         senha = ent_senha.get().strip()
-
+    
         try:
             from auth import usuario_login
             ua = f"SICONAE-Desktop/{os.name}"
             ip = socket.gethostbyname(socket.gethostname())
             auth = usuario_login(email, senha, ua, ip)
-
-            # 👍 salvar SEM travar
+    
             if var_salvar.get():
-                salvar_login_local(email, senha)
-
+                salvar_login(email, senha)
+                # 🔥 manter em memória para próxima abertura
+                root.login_salvo = {"email": email, "senha": senha}
+    
             win.destroy()
             montar_sistema(root, auth)
-
+    
         except Exception as e:
             messagebox.showerror("Erro no login", str(e))
+    
+    ttk.Button(
+        frm,
+        text="Entrar",
+        style="Primary.TButton",
+        command=do_login
+    ).grid(row=5, column=0, sticky="ew", pady=(0, 6))
+    
+    win.bind("<Return>", do_login)
 
-    ttk.Button(frm, text="Entrar", style="Primary.TButton", command=do_login)\
-        .grid(row=5, column=0, sticky="ew", pady=(0, 6))
-
-    # ---------------- BOTÃO LOGIN ----------------
-    def do_login(event=None):
-        raw = ent_email.get().strip()
-        email = raw + "@ebserh.gov.br" if "@" not in raw else raw
-        senha = ent_senha.get().strip()
-
-        try:
-            from auth import usuario_login
-            ua = f"SICONAE-Desktop/{os.name}"
-            ip = socket.gethostbyname(socket.gethostname())
-            auth = usuario_login(email, senha, ua, ip)
-
-            if var_salvar.get():
-                try:
-                    import utils
-                    utils.salvar_config({"login_email": email, "login_senha": senha})
-                except:
-                    pass
-
-            win.destroy()
-            montar_sistema(root, auth)
-
-        except Exception as e:
-            messagebox.showerror("Erro no login", str(e))
-
-    ttk.Button(frm, text="Entrar", style="Primary.TButton", command=do_login)\
-        .grid(row=5, column=0, sticky="ew", pady=(0, 6))
 
     # ---------------- ESQUECI SENHA ----------------
     def esqueci():
