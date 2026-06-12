@@ -18,22 +18,41 @@ print("Existe?", os.path.exists(CAMINHO_BANCO))
 #  Conexão SQLite (sempre com FK ON)
 # -------------------------------------------------------
 def conectar() -> sqlite3.Connection:
-    try:
-        base_dir = os.path.dirname(CAMINHO_BANCO)
-        if base_dir and not base_dir.startswith("\\\\") and not os.path.exists(base_dir):
-            os.makedirs(base_dir, exist_ok=True)
-    except Exception:
-        pass
+    import os
+    import sqlite3
+    import time
 
-    conn = sqlite3.connect(CAMINHO_BANCO)
-    conn.row_factory = sqlite3.Row
+    caminho = CAMINHO_BANCO
+    pasta = os.path.dirname(caminho)
 
-    try:
-        conn.execute("PRAGMA foreign_keys = ON;")
-    except Exception:
-        pass
+    for tentativa in range(5):
+        try:
+            print(f"[Tentativa {tentativa+1}] acessando rede...")
 
-    return conn
+            # 🔥 força ativação da rede
+            arquivos = os.listdir(pasta)
+
+            print("Conteúdo da pasta:", arquivos[:3])  # debug leve
+
+            if not os.path.exists(caminho):
+                raise Exception("Arquivo não encontrado na rede")
+
+            conn = sqlite3.connect(caminho, timeout=30)
+            conn.row_factory = sqlite3.Row
+
+            conn.execute("PRAGMA foreign_keys = ON;")
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA synchronous=NORMAL;")
+
+            print("✅ Conectado com sucesso")
+            return conn
+
+        except Exception as e:
+            print(f"❌ Falha: {e}")
+            time.sleep(2)
+
+    # ❌ erro final
+    raise Exception(f"❌ Não foi possível acessar o banco de dados:\n{caminho}")
 
 
 # -------------------------------------------------------
