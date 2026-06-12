@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional, Tuple
 # =========================
 #  Caminho do banco
 # =========================
-CAMINHO_BANCO = r"\\hc-arquivos.hc.ufpr.br\HC-GERAL\GERAD\DILIH\SESUP\Todos-SESUP\OPME\BD_Notas\notas_novo.db"
+CAMINHO_BANCO = r"\\hcpr-files\HC-GERAL\GERAD\DILIH\SESUP\Todos-SESUP\OPME\BD_Notas\notas_novo.db"
 
 print("Existe?", os.path.exists(CAMINHO_BANCO))
 
